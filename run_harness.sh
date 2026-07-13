@@ -11,6 +11,25 @@
 PORT=18080
 HARNESS_LOG="harness.log"
 PYTHON_BIN="./.venv/bin/python"
+PIP_BIN="./.venv/bin/pip"
+
+if [ ! -d ".venv" ]; then
+    echo "🔧 Creating local virtual environment..."
+    python3 -m venv .venv
+fi
+
+if [ ! -x "$PYTHON_BIN" ]; then
+    echo "❌ Error: Python interpreter not found at $PYTHON_BIN"
+    exit 1
+fi
+
+echo "🔧 Ensuring Python dependencies are installed..."
+if [ ! -x "$PIP_BIN" ]; then
+    echo "❌ Error: pip not found at $PIP_BIN"
+    exit 1
+fi
+
+$PIP_BIN install -q -r requirements.txt
 
 echo "🚀 [Step 1/5] Checking for port conflicts on port $PORT..."
 
