@@ -226,7 +226,8 @@ async def route_harness(request: Request):
         final_payload["store"] = False
 
         # WAF 403 Forbidden을 회피하기 위해 /responses API용 payload 변환 수행
-        if not MOCK_MODE or "responses" in incoming_path:
+        # 단, 이미 responses 규격(input 존재)으로 온 요청은 변환을 생략함
+        if (not MOCK_MODE or "responses" in incoming_path) and ("messages" in final_payload) and ("input" not in final_payload):
             chatgpt_input = []
             instructions = ""
             for msg in final_payload.get("messages", []):
