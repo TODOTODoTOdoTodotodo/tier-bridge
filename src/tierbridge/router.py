@@ -114,16 +114,21 @@ class Router:
         print(f"➔ [DECISION] 추정된 등급: {verdict}")
 
         # 3-Tier 매핑 정책 적용
-        # LOW: MINI, LUNA:LOW
-        # MID: LUNA:MEDIUM, TERRA:MEDIUM
-        # HIGH: TERRA:HIGH, TERRA:EXTRA_HIGH, TERRA:MAX
-        if "MINI" in verdict or "LUNA:LOW" in verdict:
-            # Low Tier -> gpt-4o-mini, low effort
-            return "LOW", "gpt-4o-mini", "low"
-        elif "LUNA:MEDIUM" in verdict or "TERRA:MEDIUM" in verdict:
-            # Mid Tier -> gpt-4o-mini-high (gpt-4o-mini with medium effort)
-            return "MID", "gpt-4o-mini", "medium"
+        # 설계서의 Model & Reasoning Effort Mapping Rules 준수
+        if "MINI" in verdict:
+            return "MINI", "gpt-5.4-mini", "low"
+        elif "LUNA:LOW" in verdict:
+            return "LUNA:LOW", "gpt-5.6-luna", "low"
+        elif "LUNA:MEDIUM" in verdict:
+            return "LUNA:MEDIUM", "gpt-5.6-luna", "medium"
+        elif "TERRA:MEDIUM" in verdict:
+            return "TERRA:MEDIUM", "gpt-5.6-terra", "medium"
+        elif "TERRA:HIGH" in verdict:
+            return "TERRA:HIGH", "gpt-5.6-terra", "high"
+        elif "TERRA:EXTRA_HIGH" in verdict:
+            return "TERRA:EXTRA_HIGH", "gpt-5.6-terra", "extra_high"
+        elif "TERRA:MAX" in verdict:
+            return "TERRA:MAX", "gpt-5.6-terra", "max"
         else:
-            # High Tier -> gpt-4o (or gpt-5.6-terra) with high effort
-            # 기존 mock_mode와 엔터프라이즈 모드를 호환하기 위해, 타겟 모델 식별자를 결정합니다.
-            return "HIGH", "gpt-5.6-terra", "high"
+            # Fallback (설계서: gpt-5.6-terra, max)
+            return verdict, "gpt-5.6-terra", "max"

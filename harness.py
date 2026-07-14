@@ -181,6 +181,11 @@ async def route_harness(request: Request):
     target_adapter = AdapterFactory.get_adapter(target_vendor)
     target_headers = AuthManager.resolve_auth_headers(orig_headers, source_vendor, target_vendor)
 
+    # 인증 헤더 유실 방지: 원격 혹은 대상 헤더에 authorization이 없는 경우 수집한 토큰 주입
+    if not any(k.lower() == "authorization" for k in target_headers) and enterprise_token:
+        print(f"[Info] Injecting harvested enterprise token: {enterprise_token[:30]}...")
+        target_headers["Authorization"] = enterprise_token
+
     # 만약 타겟이 엔터프라이즈 ChatGPT API(OpenAI 규격)인 경우 필요한 보조 헤더 추가
     if target_vendor == "openai":
         target_headers["Content-Type"] = "application/json"
@@ -197,7 +202,7 @@ async def route_harness(request: Request):
     
     final_payload = target_adapter.from_unified_request(unified_req)
     
-    # ChatGPT Enterprise API 특화 파라미터 적용 (reasoning.effort 포맷)
+    # ChatGPT Enterprise API 특화 파라미터 적용 (reasoning.effort 포맷 및 /responses 규격 변환)
     if target_vendor == "openai":
         if "reasoning_effort" in final_payload:
             del final_payload["reasoning_effort"]
@@ -208,8 +213,35 @@ async def route_harness(request: Request):
                 del final_payload["reasoning"]
         final_payload["store"] = False
 
+        # 만약 MOCK_MODE가 아니거나, 혹은 들어온 경로에 responses가 포함되어 있는 경우 (결국 원격 /responses API를 쏘는 경우)
+        if not MOCK_MODE or "responses" in incoming_path:
+            chatgpt_input = []
+            instructions = ""
+            for msg in final_payload.get("messages", []):
+                if msg["role"] == "system":
+                    instructions = msg["content"]
+                else:
+                    chatgpt_input.append({
+                        "type": "message",
+                        "role": msg["role"],
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": msg["content"]
+                            }
+                        ]
+                    })
+            final_payload["input"] = chatgpt_input
+            if instructions:
+                final_payload["instructions"] = instructions
+            
+            # 불필요한 파라미터 삭제 (stream은 True로 강제 설정하여 ChatGPT 백엔드 요구 규격 만족)
+            for k in ["messages", "temperature", "max_tokens"]:
+                if k in final_payload:
+                    del final_payload[k]
+            final_payload["stream"] = True
+
     # 9. 동적 타겟 업스트림 경로 수립
-    suffix = "/backend-api/codex/responses" if "responses" in incoming_path else "/backend-api/codex/chat/completions"
     if MOCK_MODE:
         mock_suffix = "/v1/responses" if "responses" in incoming_path else "/v1/chat/completions"
         upstream_url = f"http://localhost:18080/mock/enterprise{mock_suffix}"
@@ -217,7 +249,7 @@ async def route_harness(request: Request):
         from urllib.parse import urlparse
         parsed_url = urlparse(ENTERPRISE_API_URL)
         base_domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        upstream_url = f"{base_domain}{suffix}"
+        upstream_url = f"{base_domain}/backend-api/codex/responses"
 
     # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
     if unified_req.stream:
