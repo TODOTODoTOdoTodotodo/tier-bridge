@@ -247,7 +247,9 @@ async def route_harness(request: Request):
             final_payload["input"] = chatgpt_input
             if instructions:
                 final_payload["instructions"] = instructions
-            
+
+        # /responses API로 향하는 요청의 규격 정화 (변환 여부와 상관없이 항상 적용)
+        if not MOCK_MODE or "responses" in incoming_path:
             # 불필요한 파라미터 삭제 및 필수 stream 주입
             for k in ["messages", "temperature", "max_tokens"]:
                 if k in final_payload:
