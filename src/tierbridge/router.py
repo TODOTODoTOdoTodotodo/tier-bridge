@@ -10,9 +10,9 @@ class Router:
     @classmethod
     def get_client(cls) -> httpx.AsyncClient:
         if cls._client is None:
-            # 25초 타임아웃과 연결 풀 설정으로 재사용 최적화
+            # 신속한 대처(Fail-fast)를 위해 타임아웃을 8.0초로 타이트하게 조율
             cls._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(25.0, connect=10.0),
+                timeout=httpx.Timeout(8.0, connect=5.0),
                 limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
             )
         return cls._client
