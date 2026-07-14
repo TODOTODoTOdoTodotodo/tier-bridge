@@ -5,6 +5,17 @@ from typing import Tuple
 from tierbridge.models import UnifiedRequest
 
 class Router:
+    _client = None
+
+    @classmethod
+    def get_client(cls) -> httpx.AsyncClient:
+        if cls._client is None:
+            # 25초 타임아웃과 연결 풀 설정으로 재사용 최적화
+            cls._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(25.0, connect=10.0),
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+        return cls._client
     @staticmethod
     def extract_user_prompt(unified_request: UnifiedRequest) -> str:
         """가장 최근의 사용자 질의를 추출합니다."""
@@ -44,6 +55,7 @@ class Router:
             "model": "gpt-5.4-mini",
             "store": False,
             "stream": True,
+            "reasoning": {"effort": "low"},
             "instructions": (
                 "너는 비용 절감용 라우터다. 유저 요청을 가장 낮은 적절한 등급으로 분류해라.\n"
                 "반드시 아래 규칙을 지켜라.\n"
@@ -79,8 +91,8 @@ class Router:
 
         verdict_text = "MINI"  # 기본 폴백값
         try:
-            async with httpx.AsyncClient() as client:
-                async with client.stream("POST", enterprise_api_url, headers=headers, json=payload, timeout=8.0) as response:
+            client = cls.get_client()
+            async with client.stream("POST", enterprise_api_url, headers=headers, json=payload) as response:
                     if response.status_code == 200:
                         async for line in response.aiter_lines():
                             if line.startswith("data: "):
@@ -107,7 +119,7 @@ class Router:
                     else:
                         print(f"[Warning] Classifier HTTP status {response.status_code}. Fallback to MINI.")
         except Exception as e:
-            print(f"[Warning] Classifier connection error: {e}. Fallback to MINI.")
+            print(f"[Warning] Classifier connection error: {e} ({type(e).__name__}). Fallback to MINI.")
 
         # 공백 제거 및 대문자 변환
         verdict = verdict_text.strip().upper()

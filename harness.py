@@ -206,8 +206,11 @@ async def route_harness(request: Request):
     if target_vendor == "openai":
         if "reasoning_effort" in final_payload:
             del final_payload["reasoning_effort"]
-        if effort and effort != "low":
-            final_payload["reasoning"] = {"effort": effort}
+        
+        # ChatGPT Enterprise API는 'extra_high' 대신 'xhigh'를 사용함
+        mapped_effort = "xhigh" if effort == "extra_high" else effort
+        if mapped_effort and mapped_effort != "low":
+            final_payload["reasoning"] = {"effort": mapped_effort}
         else:
             if "reasoning" in final_payload:
                 del final_payload["reasoning"]
