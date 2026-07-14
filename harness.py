@@ -5,40 +5,36 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from dotenv import load_dotenv
 
-# Load configuration from .env if present
+# TierBridge 패키지 임포트
+from tierbridge.models import UnifiedRequest
+from tierbridge.adapters.factory import AdapterFactory
+from tierbridge.stream_transpiler import StreamTranspiler
+from tierbridge.router import Router
+from tierbridge.auth_manager import AuthManager
+from tierbridge.usage_tracker import UsageTracker
+
 load_dotenv()
 
 app = FastAPI(title="TierBridge")
 
-# [Session Usage Tracker]
-# Accumulates token consumption across all proxied requests in this server session.
-usage_tracker = {
-    "total_requests": 0,
-    "total_input_tokens": 0,
-    "total_output_tokens": 0,
-    "history": []  # Per-request breakdown: model, effort, tokens
-}
+# 싱글톤 세션 사용량 트래커 초기화
+global_tracker = UsageTracker()
 
-# [Environment Configuration]
+# 환경 변수 및 설정 로드
 ENTERPRISE_API_URL = os.getenv(
     "ENTERPRISE_API_URL", 
     "https://chatgpt.com/backend-api/codex/responses"
 )
-
-# Activate local mock testing mode when MOCK_TEST_MODE is true or endpoint is set to mock/test
 MOCK_MODE = os.getenv("MOCK_TEST_MODE", "false").lower() == "true" or ENTERPRISE_API_URL in ("mock", "test")
+print(f"[Debug System Config] MOCK_TEST_MODE: {os.getenv('MOCK_TEST_MODE')}, ENTERPRISE_API_URL: {ENTERPRISE_API_URL}, Final MOCK_MODE: {MOCK_MODE}")
 
-# If running in mock mode, route requests to local mock endpoints (Port 18080)
+# Mock 모드 활성화 시 로컬 모크 엔드포인트로 우회
 if MOCK_MODE:
     print("[Info] Running in MOCK test mode. Rewriting ENTERPRISE_API_URL to local mock endpoint.")
-    REAL_ENTERPRISE_API_URL = ENTERPRISE_API_URL
     ENTERPRISE_API_URL = "http://localhost:18080/mock/enterprise/chat/completions"
 
 def get_latest_enterprise_token() -> str:
-    """
-    Dynamically harvest the latest ChatGPT access_token from ~/.codex/auth.json or auth.json.bak
-    so we don't hit 401 Unauthorized scope issues.
-    """
+    """ ~/.codex/auth.json 에서 최신 ChatGPT access_token 로드 """
     paths = [
         os.path.expanduser("~/.codex/auth.json"),
         os.path.expanduser("~/.codex/auth.json.bak")
@@ -55,12 +51,11 @@ def get_latest_enterprise_token() -> str:
                         return f"Bearer {access_token}"
                     return access_token
             except Exception as e:
-                print(f"[Warning] Failed to harvest token from {path}: {e}")
+                print(f"[Warning] Failed to harvest token: {e}")
     return ""
 
-
 def get_latest_enterprise_account_id() -> str:
-    """Return the active enterprise account id without exposing authentication data."""
+    """ auth.json 에서 active account_id 로드 """
     paths = [
         os.path.expanduser("~/.codex/auth.json"),
         os.path.expanduser("~/.codex/auth.json.bak")
@@ -74,182 +69,24 @@ def get_latest_enterprise_account_id() -> str:
                 if account_id:
                     return account_id
             except Exception as e:
-                print(f"[Warning] Failed to read account id from {path}: {e}")
+                print(f"[Warning] Failed to read account id: {e}")
     return ""
 
-async def estimate_model_and_effort(user_prompt: str, token: str, orig_headers: dict) -> str:
-    """
-    Evaluates the model tier and reasoning effort level concurrently
-    by querying the enterprise gpt-5.4-mini model via the responses API,
-    replicating security headers.
-    """
-    # If there is no token, use the cost-safe default rather than an expensive tier.
-    if not token:
-        print("[Warning] No Authorization token provided. Falling back to LUNA:MEDIUM.")
-        return "LUNA:MEDIUM"
-
-    try:
-        # Replicate CLI's original headers with denylist filtering to bypass Cloudflare
-        headers = {}
-        denylist = (
-            "host", "content-length", "content-type", 
-            "connection", "keep-alive", "transfer-encoding",
-            "accept-encoding", "origin", "referer", "authorization"
-        )
-        for k, v in orig_headers.items():
-            if k.lower() in denylist:
-                continue
-            headers[k] = v
-            
-        headers["Authorization"] = token
-        headers["Content-Type"] = "application/json"
-        headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
-        # Preserve a stable response shape for the classifier and avoid accidental tool/metadata leakage.
-        headers["Accept"] = "text/event-stream"
-        if not any(k.lower() == "chatgpt-account-id" for k in headers):
-            account_id = get_latest_enterprise_account_id()
-            if account_id:
-                headers["chatgpt-account-id"] = account_id
-
-        debug_headers = {
-            "authorization_present": bool(headers.get("Authorization")),
-            "accept": headers.get("Accept"),
-            "content_type": headers.get("Content-Type"),
-            "user_agent": headers.get("User-Agent"),
-            "chatgpt_account_id_present": any(k.lower() == "chatgpt-account-id" for k in headers),
-        }
-        print(f"[Debug] Classifier request headers: {json.dumps(debug_headers, ensure_ascii=False)}")
-
-        async with httpx.AsyncClient() as client:
-            payload = {
-                "model": "gpt-5.4-mini",
-                "store": False,
-                "stream": True,
-                "instructions": (
-                    "너는 비용 절감용 라우터다. 유저 요청을 가장 낮은 적절한 등급으로 분류해라.\n"
-                    "반드시 아래 규칙을 지켜라.\n"
-                    "1) 명확한 근거가 없으면 더 낮은 등급을 선택한다.\n"
-                    "2) 구현, 리팩토링, 일반적인 버그 수정은 기본적으로 LUNA 이하로 분류한다.\n"
-                    "3) 성능, 동시성, 교착상태, 메모리 누수, 대규모 최적화, 아키텍처 설계가 명시된 경우에만 TERRA를 사용한다.\n"
-                    "4) 중간 수준의 업무는 `LOW`보다 `MEDIUM`을 우선한다.\n"
-                    "5) 복수 파일 변경, 중간 난이도 디버깅, 일반적인 서비스 로직 개선은 `LUNA:MEDIUM`으로 분류한다.\n"
-                    "6) 아키텍처 변경이 있지만 최고 난도는 아닌 경우는 `TERRA:MEDIUM`으로 분류한다.\n"
-                    "7) 단순 문법 수정, 오타 수정, 명령어 설명은 MINI다.\n"
-                    "8) 오직 한 단어만 출력한다. 다른 설명은 절대 금지한다.\n\n"
-                    "- MINI : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드\n"
-                    "- LUNA:LOW : 단순 기능 구현 스크립트 작성, 가벼운 포맷팅 변경\n"
-                    "- LUNA:MEDIUM : 일반적인 비즈니스 로직 단위 업무 구현, 표준적인 리팩토링\n"
-                    "- TERRA:MEDIUM : 중간 수준 아키텍처 변경, 복수 컴포넌트 간 연동 수정, 일반적 중간 난이도 디버깅\n"
-                    "- TERRA:HIGH : 복잡한 알고리즘 작성, 다중 컴포넌트 아키텍처 분석 및 설계\n"
-                    "- TERRA:EXTRA_HIGH : 고성능 튜닝 및 성능 분석, 메모리 누수 탐지 등 심층 최적화 디버깅\n"
-                    "- TERRA:MAX : 교착상태(Deadlock) 디버깅, 대규모 레이턴시 최적화, 딥 트러블슈팅"
-                ),
-                "input": [
-                    {
-                        "type": "message",
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": user_prompt
-                            }
-                        ]
-                    }
-                ]
-            }
-
-            print(f"[Debug] Classifier request payload model: {payload['model']}")
-
-            # print(f"[DEBUG Classifier Request Headers] {json.dumps(headers, indent=2)}")
-            
-            verdict_text = ""
-            async with client.stream("POST", ENTERPRISE_API_URL, headers=headers, json=payload, timeout=8.0) as response:
-                if response.status_code != 200:
-                    error_body = await response.aread()
-                    safe_error = error_body.decode("utf-8", errors="replace")[:500]
-                    print(
-                        f"[Warning] Classifier request returned HTTP {response.status_code}. "
-                        f"Body preview: {safe_error}"
-                    )
-                response.raise_for_status()
-                
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data_str = line[6:].strip()
-                        if data_str == "[DONE]":
-                            continue
-                        try:
-                            data_json = json.loads(data_str)
-                            if data_json.get("choices"):
-                                choice = data_json[0] if isinstance(data_json, list) else data_json.get("choices", [{}])[0]
-                                message = choice.get("message", {}) if isinstance(choice, dict) else {}
-                                content = message.get("content", "")
-                                if isinstance(content, str) and content.strip():
-                                    verdict_text += content
-                                    continue
-                            # Extract completed text from done event
-                            if data_json.get("type") == "response.output_text.done":
-                                verdict_text = data_json.get("text", "")
-                            # Fallback delta accumulation
-                            elif data_json.get("type") == "response.output_text.delta":
-                                delta_text = data_json.get("delta")
-                                if isinstance(delta_text, str):
-                                    verdict_text += delta_text
-                        except Exception:
-                            pass
-            
-            verdict = verdict_text.strip().upper()
-            # print(f"[DEBUG Classifier Raw Verdict Output] {verdict}")
-
-            # Validation and standard tier mapping
-            valid_tiers = ["MINI", "LUNA:LOW", "LUNA:MEDIUM", "TERRA:MEDIUM", "TERRA:HIGH", "TERRA:EXTRA_HIGH", "TERRA:MAX"]
-            for tier in valid_tiers:
-                if tier in verdict:
-                    return tier
-            return "LUNA:MEDIUM"  # Default fallback mapping
-            
-    except Exception as e:
-        print(f"[Warning] Effort estimation failed, safely falling back to LUNA:MEDIUM: {e}")
-        return "LUNA:MEDIUM"
-
-@app.post("/api/pull")
-async def mock_ollama_pull(request: Request):
-    """
-    Mock endpoint satisfying Ollama model pulling checks.
-    """
-    print("[Mock Ollama] Pulling model request received.")
-    async def stream_progress():
-        status_updates = [
-            {"status": "pulling manifest"},
-            {"status": "downloading", "completed": 100, "total": 100},
-            {"status": "success"}
-        ]
-        for update in status_updates:
-            yield (json.dumps(update) + "\n").encode("utf-8")
-    return StreamingResponse(stream_progress(), media_type="application/x-ndjson")
+# ==========================================
+# 에이전트 CLI 구동용 Mock/Discovery 엔드포인트
+# ==========================================
 
 @app.get("/")
 async def ollama_root():
-    """
-    Mock root endpoint - Codex CLI checks GET / to verify Ollama server is alive.
-    Real Ollama returns 'Ollama is running' as plain text.
-    """
     return PlainTextResponse("Ollama is running")
 
 @app.get("/api/version")
 async def ollama_version():
-    """
-    Mock /api/version endpoint - Codex CLI checks this to detect Ollama version.
-    """
     return {"version": "0.13.4"}
 
 @app.get("/api/tags")
 @app.get("/v1/api/tags")
 async def mock_ollama_tags():
-    """
-    Mock endpoint satisfying Ollama tags check.
-    """
     return {
         "models": [
             {
@@ -264,9 +101,6 @@ async def mock_ollama_tags():
 @app.get("/v1/models")
 @app.get("/v1/v1/models")
 async def get_models():
-    """
-    Mock endpoint satisfying the LM Studio/Ollama discovery check.
-    """
     return {
         "object": "list",
         "data": [
@@ -276,226 +110,222 @@ async def get_models():
         ]
     }
 
-def _parse_and_track_usage(buffer: bytes, model: str, decision: str, effort: str):
-    """
-    Parses the buffered SSE response stream to extract token usage from
-    'response.completed' events, then accumulates into usage_tracker.
-    """
-    try:
-        text = buffer.decode("utf-8", errors="ignore")
-        input_tokens = 0
-        output_tokens = 0
-        for line in text.splitlines():
-            if not line.startswith("data: "):
-                continue
-            data = line[6:].strip()
-            if not data or data == "[DONE]":
-                continue
-            try:
-                event = json.loads(data)
-                # response.completed carries the final usage summary
-                if event.get("type") == "response.completed":
-                    usage = event.get("response", {}).get("usage", {})
-                    input_tokens = usage.get("input_tokens", 0)
-                    output_tokens = usage.get("output_tokens", 0)
-                # Fallback: standard OpenAI chat completions usage field
-                elif "usage" in event and event["usage"]:
-                    input_tokens = event["usage"].get("prompt_tokens", 0)
-                    output_tokens = event["usage"].get("completion_tokens", 0)
-            except Exception:
-                continue
-        if input_tokens or output_tokens:
-            usage_tracker["total_requests"] += 1
-            usage_tracker["total_input_tokens"] += input_tokens
-            usage_tracker["total_output_tokens"] += output_tokens
-            usage_tracker["history"].append({
-                "model": model,
-                "decision": decision,
-                "effort": effort,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-            })
-            print(f"➔ [USAGE] {decision} ({model}) | input={input_tokens} output={output_tokens} tokens")
-    except Exception as e:
-        print(f"[Warning] Failed to parse usage from stream: {e}")
-
+@app.post("/api/pull")
+async def mock_ollama_pull(request: Request):
+    async def stream_progress():
+        status_updates = [
+            {"status": "pulling manifest"},
+            {"status": "downloading", "completed": 100, "total": 100},
+            {"status": "success"}
+        ]
+        for update in status_updates:
+            yield (json.dumps(update) + "\n").encode("utf-8")
+    return StreamingResponse(stream_progress(), media_type="application/x-ndjson")
 
 @app.get("/usage")
 async def get_usage():
-    """
-    Returns accumulated token usage for the current proxy server session.
-    Use: curl http://localhost:18080/usage
-    """
-    total_in = usage_tracker["total_input_tokens"]
-    total_out = usage_tracker["total_output_tokens"]
-    return {
-        "session_summary": {
-            "total_requests": usage_tracker["total_requests"],
-            "total_input_tokens": total_in,
-            "total_output_tokens": total_out,
-            "total_tokens": total_in + total_out,
-        },
-        "per_request_history": usage_tracker["history"],
-    }
+    """ 실시간으로 세션 누적 사용량 및 예상 비용(USD) 조회 """
+    return global_tracker.get_summary()
 
+# ==========================================
+# 핵심 라우팅 하네스 엔드포인트
+# ==========================================
 
 @app.post("/v1/chat/completions")
 @app.post("/v1/v1/chat/completions")
 @app.post("/v1/responses")
 @app.post("/v1/v1/responses")
 async def route_harness(request: Request):
-    body = await request.json()
-    # print(f"\n[DEBUG] Incoming Request Body:\n{json.dumps(body, indent=2)}\n")
+    raw_body = await request.json()
     orig_headers = dict(request.headers)
-    
-    # Locate the authorization header in a case-insensitive manner
-    enterprise_token = None
-    for key, value in orig_headers.items():
-        if key.lower() == "authorization":
-            enterprise_token = value
-            break
+    incoming_path = request.url.path
 
-    # If no token is provided in the headers (like under --oss mode),
-    # dynamically harvest the token from the user's ~/.codex/auth.json file.
+    # 1. 인바운드 소스 프로토콜 판별 (경로 및 페이로드 스펙 기준)
+    source_vendor = "openai"
+    if "messages" in incoming_path:
+        source_vendor = "anthropic"
+    elif "contents" in raw_body:
+        source_vendor = "gemini"
+
+    # 2. 어댑터 팩토리로부터 해당 에이전트용 소스 어댑터 생성
+    source_adapter = AdapterFactory.get_adapter(source_vendor)
+    
+    # 3. 인바운드 요청을 정규화 메시지 포맷으로 파싱
+    unified_req = source_adapter.to_unified_request(raw_body)
+
+    # 4. 엔터프라이즈 자격증명 탐지
+    enterprise_token = None
+    for k, v in orig_headers.items():
+        if k.lower() == "authorization":
+            enterprise_token = v
+            break
     if not enterprise_token:
         enterprise_token = get_latest_enterprise_token()
-        if enterprise_token:
-            print(f"[Info] Dynamically harvested active token from auth.json: {enterprise_token[:25]}...")
-        else:
-            print("[Warning] No active token found in auth.json or headers.")
 
-    # 1. Extract the latest user prompt from either supported request shape.
-    last_prompt = ""
-    inputs = body.get("input", [])
-    if inputs:
-        # Find the last message content
-        last_msg = inputs[-1]
-        content = last_msg.get("content", [])
-        if isinstance(content, list):
-            text_parts = [
-                part.get("text", "") 
-                for part in content 
-                if isinstance(part, dict) and part.get("type") == "input_text"
-            ]
-            last_prompt = " ".join(text_parts)
-        else:
-            last_prompt = str(content)
-    else:
-        messages = body.get("messages", [])
-        for message in reversed(messages):
-            if message.get("role") != "user":
-                continue
-            content = message.get("content", "")
-            if isinstance(content, list):
-                last_prompt = " ".join(
-                    part.get("text", "")
-                    for part in content
-                    if isinstance(part, dict) and isinstance(part.get("text"), str)
-                )
-            else:
-                last_prompt = str(content)
-            break
-
-    # 2. Dynamic estimation of model and reasoning effort using gpt-5.4-mini
-    decision = await estimate_model_and_effort(last_prompt, enterprise_token, orig_headers)
-    print(f"➔ [DECISION] 추정된 등급: {decision}")
-
-    # 3. Payload conversion (Model Mapping to Real Physical ChatGPT IDs)
-    if decision == "MINI":
-        body["model"] = "gpt-5.4-mini"
-    elif decision.startswith("LUNA"):
-        body["model"] = "gpt-5.6-luna"
-    elif decision.startswith("TERRA"):
-        body["model"] = "gpt-5.6-terra"
-
-    decision_to_effort = {
-        "MINI": "low",
-        "LUNA:LOW": "low",
-        "LUNA:MEDIUM": "medium",
-        "TERRA:MEDIUM": "medium",
-        "TERRA:HIGH": "high",
-        "TERRA:EXTRA_HIGH": "extra_high",
-        "TERRA:MAX": "max",
-    }
-    # Translate top-level reasoning_effort into nested reasoning schema for ChatGPT Enterprise compatibility
-    effort = decision_to_effort.get(decision)
-    if "reasoning_effort" in body:
-        del body["reasoning_effort"]
-    
-    if effort and effort != "none":
-        body["reasoning"] = {"effort": effort}
-    else:
-        # If no reasoning effort is chosen or it is 'none', remove reasoning configuration
-        if "reasoning" in body:
-            del body["reasoning"]
-
-    # Force store to false to pass ChatGPT backend validation.
-    body["store"] = False
-
-    # Replicate original headers for forwarding, filtering out sensitive/protocol headers
-    headers = {}
-    denylist = (
-        "host", "content-length", "content-type", 
-        "connection", "keep-alive", "transfer-encoding",
-        "accept-encoding", "origin", "referer", "authorization"
+    # 5. 분류기를 이용한 난이도 의사결정 (gpt-5.4-mini 호출)
+    decision, target_model, effort = await Router.classify_request(
+        unified_request=unified_req,
+        auth_token=enterprise_token,
+        enterprise_api_url=ENTERPRISE_API_URL,
+        account_id=get_latest_enterprise_account_id()
     )
-    for k, v in orig_headers.items():
-        if k.lower() in denylist:
-            continue
-        headers[k] = v
 
-    if enterprise_token:
-        headers["Authorization"] = enterprise_token
-    if not any(k.lower() == "chatgpt-account-id" for k in headers):
-        account_id = get_latest_enterprise_account_id()
-        if account_id:
-            headers["chatgpt-account-id"] = account_id
-    headers["Content-Type"] = "application/json"
-    headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    # 6. 타겟 백엔드 벤더 매핑
+    target_vendor = "openai"
+    if "claude" in target_model:
+        target_vendor = "anthropic"
+    elif "gemini" in target_model:
+        target_vendor = "gemini"
 
-    # print(f"[DEBUG Forwarding Request Headers] {json.dumps(headers, indent=2)}")
-    # Determine dynamic target upstream URL based on incoming path (chat/completions vs responses)
-    incoming_path = request.url.path
-    suffix = "/backend-api/codex/responses" if "responses" in incoming_path else "/backend-api/codex/chat/completions"
+    # 7. 타겟 어댑터 및 자격증명 스왑 해결
+    target_adapter = AdapterFactory.get_adapter(target_vendor)
     
+    if target_vendor == "openai":
+        # master 브랜치의 안전한 헤더 필터링 & 복제 메커니즘 복원
+        target_headers = {}
+        denylist = (
+            "host", "content-length", "content-type", 
+            "connection", "keep-alive", "transfer-encoding",
+            "accept-encoding", "origin", "referer", "authorization"
+        )
+        for k, v in orig_headers.items():
+            if k.lower() in denylist:
+                continue
+            target_headers[k] = v
+
+        if enterprise_token:
+            target_headers["Authorization"] = enterprise_token
+        if not any(k.lower() == "chatgpt-account-id" for k in target_headers):
+            account_id = get_latest_enterprise_account_id()
+            if account_id:
+                target_headers["chatgpt-account-id"] = account_id
+        target_headers["Content-Type"] = "application/json"
+        target_headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        target_headers["Accept"] = "text/event-stream"
+    else:
+        target_headers = AuthManager.resolve_auth_headers(orig_headers, source_vendor, target_vendor)
+
+    # 8. 정규화 요청으로부터 최종 백엔드 전송 페이로드 구성
+    # 3-Tier에 기반한 모델 정보 및 추론 수준(reasoning_effort) 적용
+    unified_req.model = target_model
+    
+    final_payload = target_adapter.from_unified_request(unified_req)
+    
+    # ChatGPT Enterprise API 특화 파라미터 적용 (reasoning.effort 포맷 및 /responses 규격 변환)
+    if target_vendor == "openai":
+        if "reasoning_effort" in final_payload:
+            del final_payload["reasoning_effort"]
+        
+        # ChatGPT Enterprise API는 'extra_high' 대신 'xhigh'를 사용함
+        mapped_effort = "xhigh" if effort == "extra_high" else effort
+        if mapped_effort and mapped_effort != "low":
+            final_payload["reasoning"] = {"effort": mapped_effort}
+        else:
+            if "reasoning" in final_payload:
+                del final_payload["reasoning"]
+        final_payload["store"] = False
+
+        # WAF 403 Forbidden을 회피하기 위해 /responses API용 payload 변환 수행
+        # 단, 이미 responses 규격(input 존재)으로 온 요청은 변환을 생략함
+        if (not MOCK_MODE or "responses" in incoming_path) and ("messages" in final_payload) and ("input" not in final_payload):
+            chatgpt_input = []
+            instructions = ""
+            for msg in final_payload.get("messages", []):
+                if msg["role"] == "system":
+                    instructions = msg["content"]
+                else:
+                    chatgpt_input.append({
+                        "type": "message",
+                        "role": msg["role"],
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": msg["content"]
+                            }
+                        ]
+                    })
+            final_payload["input"] = chatgpt_input
+            if instructions:
+                final_payload["instructions"] = instructions
+
+        # /responses API로 향하는 요청의 규격 정화 (변환 여부와 상관없이 항상 적용)
+        if not MOCK_MODE or "responses" in incoming_path:
+            # 불필요한 파라미터 삭제 및 필수 stream 주입
+            for k in ["messages", "temperature", "max_tokens"]:
+                if k in final_payload:
+                    del final_payload[k]
+            final_payload["stream"] = True
+
+    # 9. 동적 타겟 업스트림 경로 수립
     if MOCK_MODE:
         mock_suffix = "/v1/responses" if "responses" in incoming_path else "/v1/chat/completions"
-        target_url = f"http://localhost:18080/mock/enterprise{mock_suffix}"
+        upstream_url = f"http://localhost:18080/mock/enterprise{mock_suffix}"
     else:
         from urllib.parse import urlparse
         parsed_url = urlparse(ENTERPRISE_API_URL)
         base_domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        target_url = f"{base_domain}{suffix}"
+        # 실서버 연동 시에는 Cloudflare WAF 403 방지를 위해 무조건 /responses로 릴레이
+        upstream_url = f"{base_domain}/backend-api/codex/responses"
 
-    # 4. SSE Stream data forwarding pipeline (with token usage tracking)
-    async def stream_generator():
-        buffer = b""
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            try:
-                async with client.stream("POST", target_url, json=body, headers=headers, timeout=180.0) as upstream_res:
-                    if upstream_res.status_code != 200:
-                        error_body = await upstream_res.aread()
-                        print(f"[Warning] Upstream connection error: Status {upstream_res.status_code}, Body: {error_body.decode('utf-8', errors='ignore')}")
-                    async for chunk in upstream_res.aiter_bytes():
-                        buffer += chunk
-                        yield chunk
-                # Parse usage from buffered SSE after stream ends
-                _parse_and_track_usage(buffer, body.get("model", "unknown"), decision, effort)
-            except Exception as e:
-                print(f"[Error] Error during stream forwarding: {e}")
-                err_msg = json.dumps({
-                    "error": {
-                        "message": f"Proxy stream connection error: {str(e)}",
-                        "type": "proxy_error"
-                    }
-                })
-                yield f"data: {err_msg}\n\n".encode("utf-8")
+    # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
+    if unified_req.stream:
+        async def stream_generator():
+            accumulated_buffer = b""
+            
+            def append_raw(chunk_bytes: bytes):
+                nonlocal accumulated_buffer
+                accumulated_buffer += chunk_bytes
+                
+            # 클라이언트 요청이 /responses 형태인 경우 100% 바이패스(Pass-through) 처리
+            is_passthrough = "responses" in incoming_path
 
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                try:
+                    # 백엔드 비동기 스트림 시작
+                    async with client.stream("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0) as upstream_res:
+                        if upstream_res.status_code != 200:
+                            error_body = await upstream_res.aread()
+                            print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {error_body.decode('utf-8', errors='ignore')}")
+                            upstream_res.raise_for_status()
 
+                        if is_passthrough:
+                            # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
+                            async for chunk in upstream_res.aiter_bytes():
+                                accumulated_buffer += chunk
+                                yield chunk
+                        else:
+                            # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
+                            raw_generator = upstream_res.aiter_bytes()
+                            async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
+                                yield transpiled_chunk
+                            
+                    # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적
+                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision)
+                except Exception as e:
+                    print(f"[Error] Stream routing exception: {e}")
+                    err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
+                    yield f"data: {err_msg}\n\n".encode("utf-8")
+
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+    
+    # 11. 논스트림(Non-streaming) 동기 포워딩 파이프라인
+    else:
+        try:
+            res = await target_adapter.send_request(final_payload, target_headers, upstream_url)
+            if res.status_code == 200:
+                # 사용량 추적기 로깅
+                res_data = res.json()
+                usage = res_data.get("usage", {})
+                in_tok = usage.get("prompt_tokens", 0)
+                out_tok = usage.get("completion_tokens", 0)
+                if in_tok or out_tok:
+                    global_tracker.track_request(target_model, decision, in_tok, out_tok)
+            return res
+        except Exception as e:
+            return PlainTextResponse(f"Proxy connection failed: {e}", status_code=500)
 
 # ==========================================
-# MOCK ENDPOINTS (Enabled when MOCK_MODE is True)
+# MOCK ENTERPRISE API (테스트 자동화용)
 # ==========================================
 
 @app.post("/mock/enterprise/chat/completions")
@@ -503,10 +333,6 @@ async def route_harness(request: Request):
 @app.post("/mock/enterprise/v1/chat/completions")
 @app.post("/mock/enterprise/v1/responses")
 async def mock_enterprise_completions(request: Request):
-    """
-    Mock endpoint simulating the Codex Enterprise API.
-    Handles classifier prompts (via gpt-5.4-mini) and redirected model completions.
-    """
     orig_headers = dict(request.headers)
     auth_header = orig_headers.get("authorization", "")
     
@@ -515,23 +341,16 @@ async def mock_enterprise_completions(request: Request):
     messages = body.get("messages", [])
     last_prompt = messages[-1]["content"] if messages else ""
     
-    # 1. Check if this is a classifier call
+    # 분류기 호출 식별
     is_classification = False
     for msg in messages:
-        if msg.get("role") == "system" and "사내 크레딧 아키텍처 라우터" in msg.get("content", ""):
+        if msg.get("role") == "system" and "비용 절감용 라우터" in msg.get("content", ""):
             is_classification = True
             break
             
     if is_classification:
-        # Determine classification tier based on prompt keywords
-        # Test 1: 단순 오타 수정 -> MINI
-        # Test 2: 단순 알고리즘 질문 -> LUNA:LOW
-        # Test 3: 성능 최적화 디버깅 -> TERRA:EXTRA_HIGH
-        # Test 4: 대규모 동시성 분산 락(Lock) 이슈 질문 -> TERRA:MAX
         verdict = "LUNA:MEDIUM"
-        
         if "알고리즘" in last_prompt or "simple" in last_prompt or "단순" in last_prompt:
-            # We want to distinguish simple sorting from simple typo
             if "오타" in last_prompt or "명령어" in last_prompt:
                 verdict = "MINI"
             else:
@@ -543,8 +362,7 @@ async def mock_enterprise_completions(request: Request):
         elif "오타" in last_prompt or "grammar" in last_prompt or "오타 수정" in last_prompt:
             verdict = "MINI"
             
-        print(f"[Mock Classifier] Classifier received token: '{auth_header[:25]}...'")
-        print(f"[Mock Classifier] Routing verdict for prompt '{last_prompt[:30]}...' -> {verdict}")
+        print(f"[Mock Classifier] Routing verdict for prompt -> {verdict}")
         
         return {
             "choices": [
@@ -559,10 +377,9 @@ async def mock_enterprise_completions(request: Request):
             ]
         }
     
-    # 2. Otherwise, treat as streaming chat completion request
-    effort = body.get("reasoning_effort", "none")
-    print(f"[Mock Enterprise API] Streaming request received. Model: {model}, Effort: {effort}")
-    print(f"[Mock Enterprise API] Authorization Token: '{auth_header[:25]}...'")
+    # 2. 일반 스트리밍 가짜 응답 생성
+    effort = body.get("reasoning", {}).get("effort", "none")
+    print(f"[Mock Enterprise API] Streaming Model: {model}, Effort: {effort}")
 
     async def mock_stream():
         response_text = (
@@ -570,11 +387,11 @@ async def mock_enterprise_completions(request: Request):
             f"질의하신 내용 '{last_prompt[:30]}...'에 대한 심층적 코딩 분석 결과입니다."
         )
         
-        # 1. Emit response.created event (Unified block)
+        # response.created
         created_data = {"id": "mock-resp", "object": "response", "status": "in_progress"}
         yield f"event: response.created\ndata: {json.dumps(created_data)}\n\n".encode("utf-8")
         
-        # 2. Emit text delta events (Unified block per character)
+        # text deltas
         for char in response_text:
             data_obj = {
                 "id": "mock-resp",
@@ -587,26 +404,17 @@ async def mock_enterprise_completions(request: Request):
             }
             yield f"event: response.content_part.delta\ndata: {json.dumps(data_obj)}\n\n".encode("utf-8")
         
-        # 3. Emit response.completed event containing the full accumulated output
+        # response.completed
         completed_data = {
             "id": "mock-resp",
             "object": "response",
             "status": "completed",
-            "output": [
-                {
-                    "id": "item_123",
-                    "object": "response.output_item",
-                    "type": "message",
-                    "status": "completed",
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": response_text
-                        }
-                    ]
+            "response": {
+                "usage": {
+                    "input_tokens": 120,
+                    "output_tokens": 80
                 }
-            ]
+            }
         }
         yield f"event: response.completed\ndata: {json.dumps(completed_data)}\n\n".encode("utf-8")
         yield b"data: [DONE]\n\n"
