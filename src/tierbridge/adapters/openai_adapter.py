@@ -17,6 +17,22 @@ class OpenAIAdapter(BaseAdapter):
             else:
                 messages.append(Message(role=role, content=content))
                 
+        # 2. ChatGPT responses 'input' 파싱 (messages가 비어 있는 경우 백업)
+        if not messages and "input" in raw_request_body:
+            for item in raw_request_body.get("input", []):
+                role = item.get("role", "user")
+                raw_content = item.get("content", [])
+                content_text = ""
+                if isinstance(raw_content, list):
+                    content_text = " ".join(
+                        part.get("text", "") 
+                        for part in raw_content 
+                        if isinstance(part, dict) and part.get("type") == "input_text"
+                    )
+                else:
+                    content_text = str(raw_content)
+                messages.append(Message(role=role, content=content_text))
+                
         return UnifiedRequest(
             system_instruction=system_instruction,
             messages=messages,
@@ -24,7 +40,7 @@ class OpenAIAdapter(BaseAdapter):
             max_tokens=raw_request_body.get("max_tokens", 4096),
             stream=raw_request_body.get("stream", False),
             model=raw_request_body.get("model"),
-            raw_extra={k: v for k, v in raw_request_body.items() if k not in ["messages", "temperature", "max_tokens", "stream", "model"]}
+            raw_extra={k: v for k, v in raw_request_body.items() if k not in ["messages", "temperature", "max_tokens", "stream", "model", "input"]}
         )
 
     def from_unified_request(self, unified_request: UnifiedRequest) -> dict:

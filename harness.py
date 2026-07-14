@@ -226,27 +226,34 @@ async def route_harness(request: Request):
         final_payload["store"] = False
 
         # WAF 403 Forbidden을 회피하기 위해 /responses API용 payload 변환 수행
-        # 단, 이미 responses 규격(input 존재)으로 온 요청은 변환을 생략함
-        if (not MOCK_MODE or "responses" in incoming_path) and ("messages" in final_payload) and ("input" not in final_payload):
-            chatgpt_input = []
-            instructions = ""
-            for msg in final_payload.get("messages", []):
-                if msg["role"] == "system":
-                    instructions = msg["content"]
-                else:
-                    chatgpt_input.append({
-                        "type": "message",
-                        "role": msg["role"],
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": msg["content"]
-                            }
-                        ]
-                    })
-            final_payload["input"] = chatgpt_input
-            if instructions:
-                final_payload["instructions"] = instructions
+        if (not MOCK_MODE or "responses" in incoming_path):
+            if "input" in raw_body:
+                # 원본 요청에 이미 input 규격이 있었던 경우 원형 그대로 복원 (이전 대화의 output_text 파괴 방지)
+                final_payload["input"] = raw_body["input"]
+                if "instructions" in raw_body:
+                    final_payload["instructions"] = raw_body["instructions"]
+            elif ("messages" in final_payload) and ("input" not in final_payload):
+                # OpenAI completions 규격으로 들어온 요청을 responses 규격으로 전환
+                chatgpt_input = []
+                instructions = ""
+                for msg in final_payload.get("messages", []):
+                    if msg["role"] == "system":
+                        instructions = msg["content"]
+                    else:
+                        part_type = "output_text" if msg["role"] == "assistant" else "input_text"
+                        chatgpt_input.append({
+                            "type": "message",
+                            "role": msg["role"],
+                            "content": [
+                                {
+                                    "type": part_type,
+                                    "text": msg["content"]
+                                }
+                            ]
+                        })
+                final_payload["input"] = chatgpt_input
+                if instructions:
+                    final_payload["instructions"] = instructions
 
         # /responses API로 향하는 요청의 규격 정화 (변환 여부와 상관없이 항상 적용)
         if not MOCK_MODE or "responses" in incoming_path:
