@@ -276,6 +276,9 @@ async def route_harness(request: Request):
                 nonlocal accumulated_buffer
                 accumulated_buffer += chunk_bytes
                 
+            # 클라이언트 요청이 /responses 형태인 경우 100% 바이패스(Pass-through) 처리
+            is_passthrough = "responses" in incoming_path
+
             async with httpx.AsyncClient(timeout=180.0) as client:
                 try:
                     # 백엔드 비동기 스트림 시작
@@ -285,10 +288,16 @@ async def route_harness(request: Request):
                             print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {error_body.decode('utf-8', errors='ignore')}")
                             upstream_res.raise_for_status()
 
-                        # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
-                        raw_generator = upstream_res.aiter_bytes()
-                        async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
-                            yield transpiled_chunk
+                        if is_passthrough:
+                            # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
+                            async for chunk in upstream_res.aiter_bytes():
+                                accumulated_buffer += chunk
+                                yield chunk
+                        else:
+                            # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
+                            raw_generator = upstream_res.aiter_bytes()
+                            async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
+                                yield transpiled_chunk
                             
                     # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적
                     global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision)
