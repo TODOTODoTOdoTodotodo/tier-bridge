@@ -89,7 +89,7 @@ class Router:
             ]
         }
 
-        verdict_text = "TERRA:MAX"  # 기본 폴백값 (설계서 실패 안전 규격)
+        verdict_text = "MINI"  # 기본 폴백값 (저비용 모델 안전 규격)
         verdict_accumulated = ""
         try:
             client = cls.get_client()
@@ -124,11 +124,11 @@ class Router:
                     if verdict_accumulated.strip():
                         verdict_text = verdict_accumulated
                     else:
-                        print(f"[Warning] Classifier HTTP status {response.status_code}. Fallback to TERRA:MAX.")
-                        return "TERRA:MAX", "gpt-5.6-terra", "max"
+                        print(f"[Warning] Classifier HTTP status {response.status_code}. Fallback to MINI.")
+                        return "MINI", "gpt-5.4-mini", "low"
         except Exception as e:
-            print(f"[Warning] Classifier connection error: {e} ({type(e).__name__}). Fallback to TERRA:MAX.")
-            return "TERRA:MAX", "gpt-5.6-terra", "max"
+            print(f"[Warning] Classifier connection error: {e} ({type(e).__name__}). Fallback to MINI.")
+            return "MINI", "gpt-5.4-mini", "low"
 
         # 공백 제거 및 대문자 변환
         verdict = verdict_text.strip().upper()
