@@ -39,7 +39,7 @@ class Router:
         user_prompt = cls.extract_user_prompt(unified_request)
         if not user_prompt:
             # 텍스트가 없는 경우 기본 안전값 제공
-            return "LOW", "gpt-4o-mini", "low"
+            return "MINI", "gpt-5.4-mini", "low"
             
         headers = {
             "Authorization": auth_token,

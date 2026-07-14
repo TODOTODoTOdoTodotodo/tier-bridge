@@ -179,22 +179,31 @@ async def route_harness(request: Request):
 
     # 7. 타겟 어댑터 및 자격증명 스왑 해결
     target_adapter = AdapterFactory.get_adapter(target_vendor)
-    target_headers = AuthManager.resolve_auth_headers(orig_headers, source_vendor, target_vendor)
-
-    # 인증 헤더 유실 방지: 원격 혹은 대상 헤더에 authorization이 없는 경우 수집한 토큰 주입
-    if not any(k.lower() == "authorization" for k in target_headers) and enterprise_token:
-        print(f"[Info] Injecting harvested enterprise token: {enterprise_token[:30]}...")
-        target_headers["Authorization"] = enterprise_token
-
-    # 만약 타겟이 엔터프라이즈 ChatGPT API(OpenAI 규격)인 경우 필요한 보조 헤더 추가
+    
     if target_vendor == "openai":
-        target_headers["Content-Type"] = "application/json"
-        target_headers["Accept"] = "text/event-stream"
-        target_headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        # master 브랜치의 안전한 헤더 필터링 & 복제 메커니즘 복원
+        target_headers = {}
+        denylist = (
+            "host", "content-length", "content-type", 
+            "connection", "keep-alive", "transfer-encoding",
+            "accept-encoding", "origin", "referer", "authorization"
+        )
+        for k, v in orig_headers.items():
+            if k.lower() in denylist:
+                continue
+            target_headers[k] = v
+
+        if enterprise_token:
+            target_headers["Authorization"] = enterprise_token
         if not any(k.lower() == "chatgpt-account-id" for k in target_headers):
             account_id = get_latest_enterprise_account_id()
             if account_id:
                 target_headers["chatgpt-account-id"] = account_id
+        target_headers["Content-Type"] = "application/json"
+        target_headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        target_headers["Accept"] = "text/event-stream"
+    else:
+        target_headers = AuthManager.resolve_auth_headers(orig_headers, source_vendor, target_vendor)
 
     # 8. 정규화 요청으로부터 최종 백엔드 전송 페이로드 구성
     # 3-Tier에 기반한 모델 정보 및 추론 수준(reasoning_effort) 적용
@@ -216,7 +225,7 @@ async def route_harness(request: Request):
                 del final_payload["reasoning"]
         final_payload["store"] = False
 
-        # 만약 MOCK_MODE가 아니거나, 혹은 들어온 경로에 responses가 포함되어 있는 경우 (결국 원격 /responses API를 쏘는 경우)
+        # WAF 403 Forbidden을 회피하기 위해 /responses API용 payload 변환 수행
         if not MOCK_MODE or "responses" in incoming_path:
             chatgpt_input = []
             instructions = ""
@@ -238,7 +247,7 @@ async def route_harness(request: Request):
             if instructions:
                 final_payload["instructions"] = instructions
             
-            # 불필요한 파라미터 삭제 (stream은 True로 강제 설정하여 ChatGPT 백엔드 요구 규격 만족)
+            # 불필요한 파라미터 삭제 및 필수 stream 주입
             for k in ["messages", "temperature", "max_tokens"]:
                 if k in final_payload:
                     del final_payload[k]
@@ -252,6 +261,7 @@ async def route_harness(request: Request):
         from urllib.parse import urlparse
         parsed_url = urlparse(ENTERPRISE_API_URL)
         base_domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        # 실서버 연동 시에는 Cloudflare WAF 403 방지를 위해 무조건 /responses로 릴레이
         upstream_url = f"{base_domain}/backend-api/codex/responses"
 
     # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
