@@ -38,9 +38,6 @@ class StreamTranspiler:
                 if text or is_done:
                     formatted_sse = source_adapter.format_stream_chunk(text, is_done)
                     yield formatted_sse.encode("utf-8")
-                    
-                    if is_done:
-                        break
         
         # 마지막 잔여 버퍼 처리
         if buffer.strip():
