@@ -33,11 +33,17 @@ $PIP_BIN install -q -r requirements.txt
 
 echo "🚀 [Step 1/5] Checking for port conflicts on port $PORT..."
 
-# Detect and terminate any existing process on 18080
-PID=$(lsof -t -i:$PORT)
-if [ ! -z "$PID" ]; then
-    echo "⚠️  Port $PORT is currently occupied by PID: $PID. Cleaning up..."
-    kill -9 $PID
+# Detect and terminate any existing processes on port (handles multiple uvicorn reload PIDs)
+PIDS=$(lsof -t -i:$PORT)
+if [ ! -z "$PIDS" ]; then
+    echo "⚠️  Port $PORT is occupied by active processes. Cleaning up..."
+    # 공백 및 줄바꿈 기준으로 정확히 토큰화하여 각각 종료
+    for pid in $(echo "$PIDS"); do
+        if [ ! -z "$pid" ]; then
+            echo "   -> Terminating PID: $pid"
+            kill -9 $pid >/dev/null 2>&1
+        fi
+    done
     sleep 1
 else
     echo "✅ Port $PORT is free and ready."
