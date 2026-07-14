@@ -89,37 +89,46 @@ class Router:
             ]
         }
 
-        verdict_text = "MINI"  # 기본 폴백값
+        verdict_text = "TERRA:MAX"  # 기본 폴백값 (설계서 실패 안전 규격)
+        verdict_accumulated = ""
         try:
             client = cls.get_client()
             async with client.stream("POST", enterprise_api_url, headers=headers, json=payload) as response:
-                    if response.status_code == 200:
-                        async for line in response.aiter_lines():
-                            if line.startswith("data: "):
-                                data_str = line[6:].strip()
-                                if data_str == "[DONE]":
-                                    continue
-                                try:
-                                    data_json = json.loads(data_str)
-                                    # Streaming Delta 파싱
-                                    if data_json.get("choices"):
-                                        choice = data_json["choices"][0]
-                                        content = choice.get("delta", {}).get("content", "")
-                                        if content.strip():
-                                            verdict_text += content
-                                    # response.completed 등의 done 이벤트 처리
-                                    elif data_json.get("type") == "response.output_text.done":
-                                        verdict_text = data_json.get("text", "")
-                                    elif data_json.get("type") == "response.output_text.delta":
-                                        delta_text = data_json.get("delta")
-                                        if isinstance(delta_text, str):
-                                            verdict_text += delta_text
-                                except Exception:
-                                    pass
+                if response.status_code == 200:
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                data_json = json.loads(data_str)
+                                # 1. Streaming Delta 파싱 (OpenAI)
+                                if data_json.get("choices"):
+                                    choice = data_json["choices"][0]
+                                    content = choice.get("delta", {}).get("content", "")
+                                    if content.strip():
+                                        verdict_accumulated += content
+                                    if choice.get("finish_reason") is not None:
+                                        break
+                                # 2. response.output_text.done (ChatGPT Enterprise 완료)
+                                elif data_json.get("type") == "response.output_text.done":
+                                    verdict_accumulated = data_json.get("text", "")
+                                    break
+                                # 3. response.output_text.delta (ChatGPT Enterprise 진행)
+                                elif data_json.get("type") == "response.output_text.delta":
+                                    delta_text = data_json.get("delta")
+                                    if isinstance(delta_text, str):
+                                        verdict_accumulated += delta_text
+                            except Exception:
+                                pass
+                    if verdict_accumulated.strip():
+                        verdict_text = verdict_accumulated
                     else:
-                        print(f"[Warning] Classifier HTTP status {response.status_code}. Fallback to MINI.")
+                        print(f"[Warning] Classifier HTTP status {response.status_code}. Fallback to TERRA:MAX.")
+                        return "TERRA:MAX", "gpt-5.6-terra", "max"
         except Exception as e:
-            print(f"[Warning] Classifier connection error: {e} ({type(e).__name__}). Fallback to MINI.")
+            print(f"[Warning] Classifier connection error: {e} ({type(e).__name__}). Fallback to TERRA:MAX.")
+            return "TERRA:MAX", "gpt-5.6-terra", "max"
 
         # 공백 제거 및 대문자 변환
         verdict = verdict_text.strip().upper()
