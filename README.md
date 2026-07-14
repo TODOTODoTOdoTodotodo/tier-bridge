@@ -11,7 +11,11 @@
 
 ## 구성
 
-- `harness.py` : FastAPI 프록시 서버
+- `harness.py` : 프록시 엔트리포인트 (요청 수신 및 응답 라우팅 릴레이)
+- `src/tierbridge/` : 라우팅 및 연동 비즈니스 로직 패키지
+  - `router.py` : 질문 난이도 평가(`gpt-5.4-mini` 분류기 연동) 및 모델/추론 등급 결정
+  - `stream_transpiler.py` : 이종 벤더 간의 실시간 스트리밍 포맷 트랜스파일러
+  - `usage_tracker.py` : 실시간 스트림 파싱 기반 세션 토큰 소모 통계 및 비용 추적기
 - `test_client.py` : 라우팅 확인용 테스트 클라이언트
 - `patch_auth.py` : 로컬 인증 파일 보정 스크립트
 - `Controller/routing_harness.md` : 설계 설명서
@@ -134,41 +138,29 @@ curl http://localhost:18080/usage
 
 ## 🛠️ 커스터마이징 가이드 (Customization)
 
-사용자마다 라우팅 민감도나 추론 깊이를 조정하고 싶을 경우, `harness.py` 내의 아래 네 가지 포인트를 직접 수정하여 커스텀할 수 있습니다.
+사용자마다 라우팅 민감도나 추론 깊이를 조정하고 싶을 경우, **`src/tierbridge/router.py`** 내의 아래 네 가지 포인트를 직접 수정하여 커스텀할 수 있습니다.
 
 ### 1. 분류기용 기본 모델 조정
 분류 연산을 더 저렴하게 처리하거나 더 똑똑하게 판정하고 싶을 때 사용합니다.
-* **수정 위치**: `harness.py` -> `estimate_model_and_effort` 함수 내부 `payload["model"]` (기본값: `"gpt-5.4-mini"`)
+* **수정 위치**: `src/tierbridge/router.py` -> `Router.classify_request` 함수 내부 `payload["model"]` (기본값: `"gpt-5.4-mini"`)
 
 ### 2. 라우팅 등급 분류 판정 프롬프트 (인스트럭션) 수정
 분류 기준의 임계치(Threshold)를 수정해 특정 키워드가 들어왔을 때 등급 배치를 다르게 유도합니다.
-* **수정 위치**: `harness.py` -> `estimate_model_and_effort` 함수 내부 `payload["instructions"]` 문자열
+* **수정 위치**: `src/tierbridge/router.py` -> `Router.classify_request` 함수 내부 `payload["instructions"]` 문자열
 * **팁**: 예산을 절약하려면 "기본적으로 LUNA 등급 이하로 분류하고, 복잡한 알고리즘이나 최적화 요구 시에만 TERRA 등급을 준다"와 같은 보수적인 명령어를 강화해 줍니다.
 
 ### 3. 실제 물리 모델 매핑 수정
 분류기가 도출한 판정 등급(`MINI`, `LUNA`, `TERRA`)에 따라 원격 실서버로 보낼 실제 물리 모델 ID를 맵핑합니다.
-* **수정 위치**: `harness.py` -> `route_harness` 함수 내부의 모델 스왑 조건문:
+* **수정 위치**: `src/tierbridge/router.py` -> `Router.classify_request` 함수 내부의 모델 스왑 조건문 분기:
   ```python
-  if decision == "MINI":
-      body["model"] = "gpt-5.4-mini"
-  elif decision.startswith("LUNA"):
-      body["model"] = "gpt-5.6-luna"
-  elif decision.startswith("TERRA"):
-      body["model"] = "gpt-5.6-terra"
+  if "MINI" in verdict:
+      return "MINI", "gpt-5.4-mini", "low"
+  elif "LUNA:LOW" in verdict:
+      return "LUNA:LOW", "gpt-5.6-luna", "low"
+  # ... LUNA / TERRA 등급에 따른 물리 모델 ID 할당 분기
   ```
 
 ### 4. 추론 강도 (Reasoning Effort) 매핑 변경
 각 등급에 할당될 실질적인 추론 시간/토큰 한도를 조정합니다.
-* **수정 위치**: `harness.py` -> `route_harness` 함수 내부의 `decision_to_effort` 딕셔너리:
-  ```python
-  decision_to_effort = {
-      "MINI": "low",
-      "LUNA:LOW": "low",
-      "LUNA:MEDIUM": "medium",
-      "TERRA:MEDIUM": "medium",
-      "TERRA:HIGH": "high",
-      "TERRA:EXTRA_HIGH": "extra_high",
-      "TERRA:MAX": "max",
-  }
-  ```
-  *(예: LUNA 등급의 추론 강도를 더 높이거나 낮추고 싶을 때 해당 문자열 값을 `"none"`, `"low"`, `"medium"`, `"high"`, `"max"` 중 원하는 레벨로 변경합니다.)*
+* **수정 위치**: `src/tierbridge/router.py` -> `Router.classify_request` 함수 내부의 반환값 튜플의 3번째 인자 (`reasoning_effort` 매핑 값):
+  *(예: LUNA 등급의 추론 강도를 더 높이거나 낮추고 싶을 때, 해당 분기의 3번째 인자 값을 `"low"`, `"medium"`, `"high"`, `"max"` 중 원하는 레벨로 변경합니다.)*
