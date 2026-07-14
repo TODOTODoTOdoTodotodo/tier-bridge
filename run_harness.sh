@@ -50,7 +50,7 @@ if [ ! -f "harness.py" ]; then
 fi
 
 # Run uvicorn in the background, logging to harness.log
-$PYTHON_BIN -m uvicorn harness:app --host 0.0.0.0 --port $PORT --reload > "$HARNESS_LOG" 2>&1 &
+PYTHONPATH=./src $PYTHON_BIN -m uvicorn harness:app --host 0.0.0.0 --port $PORT --reload > "$HARNESS_LOG" 2>&1 &
 SERVER_PID=$!
 
 echo "⏳ Waiting for harness server to become responsive..."
