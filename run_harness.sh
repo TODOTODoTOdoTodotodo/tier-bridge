@@ -119,9 +119,28 @@ echo ""
 echo "  codex --oss --local-provider=ollama <원하는_명령>"
 echo "  (예: codex --oss --local-provider=ollama chat)"
 echo ""
+echo "💡 실시간 프록시 통신 및 등급 판정 로그 확인 명령어:"
+echo "  tail -f $HARNESS_LOG"
+echo ""
 echo "💡 (만약 그냥 ./run_harness.sh 로 실행하셨다면 아래를 수동으로 입력해 주세요)"
 echo "  export OPENAI_BASE_URL=\"http://localhost:$PORT/v1\""
 echo "  export CODEX_API_BASE=\"http://localhost:$PORT/v1\""
 echo "  export OLLAMA_HOST=\"http://127.0.0.1:$PORT\""
 echo "  export CODEX_OSS_PORT=$PORT"
 echo "-------------------------------------------------------------"
+
+if [ -t 0 ]; then
+    echo ""
+    printf "❓ 실시간 프록시 로그(tail -f %s)를 지금 바로 확인하시겠습니까? [Y/n]: " "$HARNESS_LOG"
+    read -r REPLY
+    case "$REPLY" in
+        [Nn]*)
+            echo "⏩ 로그 모니터링을 건너끕니다."
+            ;;
+        *)
+            echo "📜 실시간 프록시 로그 모니터링을 시작합니다. (종료 시 Ctrl+C)"
+            echo "-------------------------------------------------------------"
+            tail -f "$HARNESS_LOG"
+            ;;
+    esac
+fi
