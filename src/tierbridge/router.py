@@ -145,8 +145,8 @@ class Router:
         # 공백 제거 및 대문자 변환
         verdict = verdict_text.strip().upper()
         clean_prompt = user_prompt.replace("\n", " ").strip()
-        display_prompt = clean_prompt[:77] + "..." if len(clean_prompt) > 80 else clean_prompt
-        print(f"➔ [DECISION] 추정된 등급: {verdict} | 요청 내용: \"{display_prompt}\"")
+        display_prompt = clean_prompt[:47] + "..." if len(clean_prompt) > 50 else clean_prompt
+        print(f"➔ [DECISION] {verdict} | \"{display_prompt}\"")
 
         # 3-Tier 매핑 정책 적용
         if "LUNA:LOW" in verdict or "MINI" in verdict:
