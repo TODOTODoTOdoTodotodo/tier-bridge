@@ -38,8 +38,8 @@ class Router:
         """
         user_prompt = cls.extract_user_prompt(unified_request)
         if not user_prompt:
-            # 텍스트가 없는 경우 기본 안전값 제공
-            return "MINI", "gpt-5.4-mini", "low"
+            # 텍스트가 없는 경우 기본 안전값 제공 (최저 등급: LUNA:LOW)
+            return "LUNA:LOW", "gpt-5.6-luna", "low"
             
         headers = {
             "Authorization": auth_token,
@@ -50,30 +50,27 @@ class Router:
         if account_id:
             headers["chatgpt-account-id"] = account_id
 
-        # 분류를 위한 gpt-5.4-mini 프롬프트 설정 (기존 규칙 재사용)
+        # 분류를 위한 gpt-5.6-luna (low effort) 프롬프트 설정
         payload = {
-            "model": "gpt-5.4-mini",
+            "model": "gpt-5.6-luna",
             "store": False,
             "stream": True,
             "reasoning": {"effort": "low"},
             "instructions": (
-                "너는 비용 절감용 라우터다. 유저 요청을 가장 낮은 적절한 등급으로 분류해라.\n"
+                "너는 비용 절감용 라우터다. 유저 요청을 가장 낮은 적절한 등급으로 정확하게 분류해라.\n"
                 "반드시 아래 규칙을 지켜라.\n"
                 "1) 명확한 근거가 없으면 더 낮은 등급을 선택한다.\n"
-                "2) 구현, 리팩토링, 일반적인 버그 수정은 기본적으로 LUNA 이하로 분류한다.\n"
-                "3) 성능, 동시성, 교착상태, 메모리 누수, 대규모 최적화, 아키텍처 설계가 명시된 경우에만 TERRA를 사용한다.\n"
-                "4) 중간 수준의 업무는 `LOW`보다 `MEDIUM`을 우선한다.\n"
-                "5) 복수 파일 변경, 중간 난이도 디버깅, 일반적인 서비스 로직 개선은 `LUNA:MEDIUM`으로 분류한다.\n"
-                "6) 아키텍처 변경이 있지만 최고 난도는 아닌 경우는 `TERRA:MEDIUM`으로 분류한다.\n"
-                "7) 단순 문법 수정, 오타 수정, 명령어 설명은 MINI다.\n"
-                "8) 오직 한 단어만 출력한다. 다른 설명은 절대 금지한다.\n\n"
-                "- MINI : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드\n"
-                "- LUNA:LOW : 단순 기능 구현 스크립트 작성, 가벼운 포맷팅 변경\n"
-                "- LUNA:MEDIUM : 일반적인 비즈니스 로직 단위 업무 구현, 표준적인 리팩토링\n"
-                "- TERRA:MEDIUM : 중간 수준 아키텍처 변경, 복수 컴포넌트 간 연동 수정, 일반적 중간 난이도 디버깅\n"
-                "- TERRA:HIGH : 복잡한 알고리즘 작성, 다중 컴포넌트 아키텍처 분석 및 설계\n"
-                "- TERRA:EXTRA_HIGH : 고성능 튜닝 및 성능 분석, 메모리 누수 탐지 등 심층 최적화 디버깅\n"
-                "- TERRA:MAX : 교착상태(Deadlock) 디버깅, 대규모 레이턴시 최적화, 딥 트러블슈팅"
+                "2) 단순 오타, 가벼운 수정, 단순 설명은 LUNA:LOW로 분류한다.\n"
+                "3) 표준적인 비즈니스 로직 단위 구현 및 리팩토링은 LUNA:MEDIUM으로 분류한다.\n"
+                "4) 중간 이상의 복잡도, 아키텍처 변경, 복수 파일/컴포넌트 연동 수정부터 TERRA:MEDIUM으로 승격한다.\n"
+                "5) 다중 모듈 알고리즘 작성 및 하이레벨 아키텍처 설계는 TERRA:HIGH로 분류한다.\n"
+                "6) 심층 최적화, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 TERRA:EXTRA_HIGH로 분류한다.\n"
+                "7) 오직 한 단어만 출력한다. 다른 설명은 절대 금지한다.\n\n"
+                "- LUNA:LOW : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드, 단순 스크립트 작성 (최저 등급)\n"
+                "- LUNA:MEDIUM : 일반적인 비즈니스 로직 단위 업무 구현, 표준적인 리팩토링, 단일 파일 디버깅\n"
+                "- TERRA:MEDIUM : 중간 수준 아키텍처 변경, 복수 컴포넌트 간 연동 수정, 중간 난이도 디버깅\n"
+                "- TERRA:HIGH : 복잡한 알고리즘 작성, 다중 컴포넌트 아키텍처 분석 및 시스템 설계\n"
+                "- TERRA:EXTRA_HIGH : 고성능 튜닝 및 성능 분석, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅 (최대 등급)"
             ),
             "input": [
                 {
@@ -91,7 +88,7 @@ class Router:
 
         import asyncio
 
-        verdict_text = "MINI"  # 기본 폴백값 (저비용 모델 안전 규격)
+        verdict_text = "LUNA:LOW"  # 기본 폴백값 (저비용 모델 안전 규격)
         max_retries = 2
         retry_delay = 0.5
         
@@ -142,18 +139,15 @@ class Router:
                 print(f"➔ [RETRY] 0.5초 후 분류기 재시도 발송... ({attempt+1}/{max_retries})")
                 await asyncio.sleep(retry_delay)
             else:
-                print(f"[Warning] All classifier retries failed. Falling back to MINI.")
-                return "MINI", "gpt-5.4-mini", "low"
+                print(f"[Warning] All classifier retries failed. Falling back to LUNA:LOW.")
+                return "LUNA:LOW", "gpt-5.6-luna", "low"
 
         # 공백 제거 및 대문자 변환
         verdict = verdict_text.strip().upper()
         print(f"➔ [DECISION] 추정된 등급: {verdict}")
 
         # 3-Tier 매핑 정책 적용
-        # 설계서의 Model & Reasoning Effort Mapping Rules 준수
-        if "MINI" in verdict:
-            return "MINI", "gpt-5.4-mini", "low"
-        elif "LUNA:LOW" in verdict:
+        if "LUNA:LOW" in verdict or "MINI" in verdict:
             return "LUNA:LOW", "gpt-5.6-luna", "low"
         elif "LUNA:MEDIUM" in verdict:
             return "LUNA:MEDIUM", "gpt-5.6-luna", "medium"
@@ -161,10 +155,7 @@ class Router:
             return "TERRA:MEDIUM", "gpt-5.6-terra", "medium"
         elif "TERRA:HIGH" in verdict:
             return "TERRA:HIGH", "gpt-5.6-terra", "high"
-        elif "TERRA:EXTRA_HIGH" in verdict:
+        elif "TERRA:EXTRA_HIGH" in verdict or "TERRA:XHIGH" in verdict or "TERRA:MAX" in verdict:
             return "TERRA:EXTRA_HIGH", "gpt-5.6-terra", "extra_high"
-        elif "TERRA:MAX" in verdict:
-            return "TERRA:MAX", "gpt-5.6-terra", "max"
         else:
-            # Fallback (설계서: gpt-5.6-terra, max)
-            return verdict, "gpt-5.6-terra", "max"
+            return "LUNA:LOW", "gpt-5.6-luna", "low"

@@ -24,7 +24,7 @@
 
 - `harness.py` : 프록시 엔트리포인트 (요청 수신 및 응답 라우팅 릴레이)
 - `src/tierbridge/` : 라우팅 및 연동 비즈니스 로직 패키지
-  - `router.py` : 질문 난이도 평가(`gpt-5.4-mini` 분류기 연동) 및 모델/추론 등급 결정
+  - `router.py` : 질문 난이도 평가(`gpt-5.6-luna` low effort 분류기 연동) 및 모델/추론 등급 결정
   - `stream_transpiler.py` : 이종 벤더 간의 실시간 스트리밍 포맷 트랜스파일러
   - `usage_tracker.py` : 실시간 스트림 파싱 기반 세션 토큰 소모 통계 및 비용 추적기
 - `test_client.py` : 라우팅 확인용 테스트 클라이언트
@@ -34,41 +34,41 @@
 ## 동작 방식
 
 1. 클라이언트가 `POST /v1/chat/completions` 또는 `POST /v1/responses`로 요청을 보냅니다.
-2. 프록시가 질문을 분류합니다.
-3. 분류 결과에 따라 모델과 추론 수준을 선택합니다.
+2. 프록시가 `gpt-5.6-luna` (low effort)로 질문 난이도를 정밀 분류합니다.
+3. 분류 결과에 따라 모델과 추론 수준을 결정합니다 (최저: `gpt-5.6-luna` low, 상한: `gpt-5.6-terra` extra_high).
 4. 최종 요청을 엔터프라이즈 백엔드로 전달합니다.
 
 ## 등급 체계
 
-- `MINI`
-- `LUNA:LOW`
+- `LUNA:LOW` (최저 기본 / 폴백 등급)
 - `LUNA:MEDIUM`
 - `TERRA:MEDIUM`
 - `TERRA:HIGH`
-- `TERRA:EXTRA_HIGH`
-- `TERRA:MAX`
+- `TERRA:EXTRA_HIGH` (상한 등급)
 
 ## 선택 예시
 
 | 요청 예시 | 선택 레벨 | 모델 | 추론 수준 |
 |---|---|---|---|
-| `명령어 오타 수정 방안` | `MINI` | `gpt-5.4-mini` | `low` |
+| `명령어 오타 수정 방안` | `LUNA:LOW` | `gpt-5.6-luna` | `low` |
 | `파이썬에서 단순 정렬 알고리즘 작성해줘` | `LUNA:LOW` | `gpt-5.6-luna` | `low` |
 | `기존 입력 검증 로직을 리팩토링하고 중복을 줄여줘` | `LUNA:MEDIUM` | `gpt-5.6-luna` | `medium` |
 | `서비스 간 호출 흐름을 정리하고 중간 난이도 아키텍처 수정안을 제시해줘` | `TERRA:MEDIUM` | `gpt-5.6-terra` | `medium` |
 | `복잡한 알고리즘과 다중 컴포넌트 구조를 함께 설계해줘` | `TERRA:HIGH` | `gpt-5.6-terra` | `high` |
 | `사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘` | `TERRA:EXTRA_HIGH` | `gpt-5.6-terra` | `extra_high` |
-| `대규모 동시성 분산 락(Lock) 이슈 해결 방안 설계해줘` | `TERRA:MAX` | `gpt-5.6-terra` | `max` |
 
 ## 실행 및 연동 (원스텝 자동화)
 
-포트 충돌 해제, 프록시 구동, 자가 진단 테스트, 로컬 인증 패치, 그리고 **환경 변수 자동 주입**까지 단 하나의 스크립트로 자동으로 해결할 수 있습니다.
-
-실행 시 `run_harness.sh`가 `.venv`를 자동 생성하고 `requirements.txt`에 정의된 Python 패키지들을 설치합니다. 따라서 별도 수동 설치 없이도 시작할 수 있습니다.
+포트 충돌 해제, 프록시 구동, 로컬 인증 패치, 그리고 **환경 변수 자동 주입**까지 단 하나의 스크립트로 자동으로 해결할 수 있습니다. (기본 구동 시 자가 진단 테스트는 비활성화되어 쾌속 가동됩니다.)
 
 ```bash
 source run_harness.sh
 ```
+
+- 진단 자가 테스트를 포함하여 구동하려면 `--test` 옵션을 사용하거나 `RUN_TESTS=true`를 전달합니다:
+  ```bash
+  source run_harness.sh --test
+  ```
 
 `source` 명령어를 사용해 실행하면 실행 완료 시 환경 변수 4개(`OPENAI_BASE_URL`, `CODEX_API_BASE`, `OLLAMA_HOST`, `CODEX_OSS_PORT`)가 현재 터미널 세션에 자동으로 즉시 주입됩니다. 수동 복사 필요 없이 즉시 `codex --oss --local-provider=ollama`를 입력하고 뒤에 원하는 명령(예: `chat`, `explain` 등)을 붙여서 실행하시면 됩니다.
 
@@ -104,7 +104,7 @@ tail -f harness.log
 
 ## 검증 메모
 
-- 분류 요청은 `gpt-5.4-mini`를 사용합니다.
+- 분류 요청은 `gpt-5.6-luna` (low effort)를 사용합니다.
 - `decision`은 서버 로그의 `➔ [DECISION]` 출력으로 확인하는 것이 가장 정확합니다.
 - production 경로와 mock 경로 모두 등급별 `reasoning`을 반영합니다.
 

@@ -1,15 +1,15 @@
 # TierBridge
 
-This document analyzes the 3-tier routing strategy designed to optimize credits for Codex Enterprise gpt-5.6 family line-ups. It maps incoming CLI requests to appropriate model categories and dynamically tunes the `reasoning_effort` parameter based on task complexity, using `gpt-5.4-mini` as a quick router.
+This document analyzes the 3-tier routing strategy designed to optimize credits for Codex Enterprise gpt-5.6 family line-ups. It maps incoming CLI requests to appropriate model categories and dynamically tunes the `reasoning_effort` parameter based on task complexity, using `gpt-5.6-luna` (low reasoning effort) as a fast and accurate router.
 
 ## 1. System Architecture & Flow (ChatGPT Auth Override)
 
 ```
 [Codex Enterprise CLI / Client]
-(auth_mode = "chatgpt" / --oss --local-provider=lmstudio)
+(auth_mode = "chatgpt" / --oss --local-provider=ollama)
              │
              │ 1. GET /v1/models (Health check)
-             │ 2. POST /v1/chat/completions (without auth headers)
+             │ 2. POST /v1/chat/completions or /v1/responses
              ▼
 ┌─────────────────────────────────────────────────────────┐
 │              LLM Routing Harness Proxy                  │
@@ -17,17 +17,17 @@ This document analyzes the 3-tier routing strategy designed to optimize credits 
 │                                                         │
 │ * Reads ~/.codex/auth.json in background to retrieve    │
 │   active corporate JWT access_token.                    │
-│ * Classifies query via gpt-5.4-mini.                    │
+│ * Classifies query via gpt-5.6-luna (low effort).       │
 │ * Swaps model and reasoning_effort.                     │
 │ * Injects Authorization: Bearer <access_token> header.  │
 └──────────────────────────┬──────────────────────────────┘
                            │
              ┌─────────────┼──────────────┬─────────────┐
              ▼             ▼              ▼             ▼
-          [MINI]      [LUNA:LOW/MED]  [TERRA:HIGH]  [TERRA:EXTRA_HIGH/MAX]
+       [LUNA:LOW]     [LUNA:MEDIUM]  [TERRA:MEDIUM] [TERRA:HIGH/EXTRA_HIGH]
              │             │              │             │
-       gpt-5.4-mini  gpt-5.6-luna   gpt-5.6-terra  gpt-5.6-terra
-     (low / medium)  (low / medium)    (high)    (extra_high / max)
+       gpt-5.6-luna   gpt-5.6-luna   gpt-5.6-terra  gpt-5.6-terra
+          (low)         (medium)        (medium)  (high / extra_high)
              └─────────────┴──────────────┴─────────────┘
                            │
                            ▼ Forward with Injected JWT Auth Header
@@ -38,21 +38,21 @@ This document analyzes the 3-tier routing strategy designed to optimize credits 
 
 | Classification | Destination Model | Reasoning Effort (`reasoning_effort`) | Description / Typical Use Cases |
 | :--- | :--- | :--- | :--- |
-| **MINI** | `gpt-5.4-mini` | `"low"` *(또는 원본 값 보존)* | Simple grammar, minor typos, command guide |
-| **LUNA:LOW** | `gpt-5.6-luna` | `"low"` | Simple scripting, formatting changes |
-| **LUNA:MEDIUM**| `gpt-5.6-luna` | `"medium"` | Standard business logic, refactoring |
-| **TERRA:HIGH** | `gpt-5.6-terra`| `"high"` | Deep algorithms, multi-component architecture |
-| **TERRA:EXTRA_HIGH**| `gpt-5.6-terra`| `"extra_high"` | Advanced debugging, system load tuning |
-| **TERRA:MAX**  | `gpt-5.6-terra`| `"max"` | Deadlock debugging, latency optimization |
+| **LUNA:LOW** (Base / Fallback) | `gpt-5.6-luna` | `"low"` | Simple grammar, minor typos, command guide, simple scripting |
+| **LUNA:MEDIUM**| `gpt-5.6-luna` | `"medium"` | Standard business logic, single-file refactoring, minor debugging |
+| **TERRA:MEDIUM**| `gpt-5.6-terra`| `"medium"` | Medium complexity, multi-component refactoring, API integration |
+| **TERRA:HIGH** | `gpt-5.6-terra`| `"high"` | Complex algorithms, multi-component architecture & design |
+| **TERRA:EXTRA_HIGH**| `gpt-5.6-terra`| `"extra_high"` *(API: `"xhigh"`)* | Deadlock debugging, memory leak detection, deep system tuning (MAX Capped) |
 
 > [!IMPORTANT]
 > 1. Standard `gpt-5.4` and `gpt-5.5` models are excluded from routing.
-> 2. **`gpt-5.4-mini` 모델 역시 추론 레벨을 지원하므로**, 기존의 `pop`(언셋) 처리 정책을 폐지하고, `MINI` 등급으로 분류될 시 `reasoning_effort` 값으로 `"low"`를 할당하거나 클라이언트의 원본 본문 요청 값을 보존하여 전달합니다.
-> 3. If the routing evaluation fails, the system automatically falls back to **`model="gpt-5.6-terra"`, `reasoning_effort="max"`** to guarantee execution stability.
+> 2. **Base Minimum Model**: The minimum model is set to **`gpt-5.6-luna` (`low`)**. `gpt-5.4-mini` is excluded from request execution.
+> 3. **Maximum Model & Effort Capping**: The maximum reasoning tier is capped at **`gpt-5.6-terra` (`extra_high`)**. `max` reasoning effort is mapped down to `"xhigh"` (`extra_high`) to prevent excessive credit burn.
+> 4. **Cost-Efficient Fallback Policy**: If prompt evaluation is empty or routing fails, the system automatically falls back to **`model="gpt-5.6-luna"`, `reasoning_effort="low"`** to preserve company credits ($1,000 monthly limit).
 
 ## 3. Dynamic Token Harvesting Policy
 * Under `--oss` mode, the client does not send auth headers. The proxy dynamically harvests the active `access_token` from `~/.codex/auth.json` on every request. This ensures that token refreshes handled by the native ChatGPT login flow are transparently captured by the proxy.
 
 ## 4. Local Mock Verification Plan
-* `/v1/models` route responds with available model IDs to satisfy the LM Studio mock check.
-* `/v1/chat/completions` parses the queries and routes accordingly.
+* `/v1/models` route responds with available model IDs to satisfy the Ollama/LM Studio mock check.
+* `/v1/chat/completions` and `/v1/responses` parse queries and route dynamically per turn.
