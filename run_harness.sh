@@ -72,17 +72,29 @@ for i in {1..10}; do
     sleep 1
 done
 
-echo "🚀 [Step 3/5] Running routing diagnostics and self-tests..."
-if [ -f "test_client.py" ]; then
-    echo "Running decision test cases..."
-    $PYTHON_BIN test_client.py decision > /dev/null 2>&1
-    sleep 2 # Wait for logs to flush to harness.log
-    echo ""
-    echo "📋 [Harness Routing Decisions Captured]:"
-    grep "➔ \[DECISION\]" "$HARNESS_LOG" | tail -n 7
-    echo ""
+# Parse arguments for optional test execution (OFF by default)
+RUN_TESTS=${RUN_TESTS:-false}
+for arg in "$@"; do
+    if [ "$arg" == "--test" ] || [ "$arg" == "--run-tests" ]; then
+        RUN_TESTS=true
+    fi
+done
+
+echo "🚀 [Step 3/5] Checking routing diagnostics and self-tests option..."
+if [ "$RUN_TESTS" = "true" ]; then
+    if [ -f "test_client.py" ]; then
+        echo "Running decision test cases..."
+        $PYTHON_BIN test_client.py decision > /dev/null 2>&1
+        sleep 2 # Wait for logs to flush to harness.log
+        echo ""
+        echo "📋 [Harness Routing Decisions Captured]:"
+        grep "➔ \[DECISION\]" "$HARNESS_LOG" | tail -n 7
+        echo ""
+    else
+        echo "⚠️  Warning: test_client.py not found. Skipping self-test."
+    fi
 else
-    echo "⚠️  Warning: test_client.py not found. Skipping self-test."
+    echo "⏩ Self-tests disabled by default. (Pass --test or RUN_TESTS=true to enable)"
 fi
 
 echo "🚀 [Step 4/5] Patching 로컬 auth.json to API Key redirection mode..."

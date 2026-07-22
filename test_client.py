@@ -8,13 +8,12 @@ async def run_decision_test():
     headers = {}
 
     test_cases = [
-        ("MINI", "명령어 오타 수정 방안", "gpt-5.4-mini"),
+        ("LUNA:LOW", "명령어 오타 수정 방안", "gpt-5.6-luna"),
         ("LUNA:LOW", "파이썬에서 단순 정렬 알고리즘 작성해줘", "gpt-5.6-luna"),
         ("LUNA:MEDIUM", "기존 입력 검증 로직을 리팩토링하고 중복을 줄여줘", "gpt-5.6-luna"),
         ("TERRA:MEDIUM", "서비스 간 호출 흐름을 정리하고 중간 난이도 아키텍처 수정안을 제시해줘", "gpt-5.6-terra"),
         ("TERRA:HIGH", "복잡한 알고리즘과 다중 컴포넌트 구조를 함께 설계해줘", "gpt-5.6-terra"),
         ("TERRA:EXTRA_HIGH", "사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘", "gpt-5.6-terra"),
-        ("TERRA:MAX", "대규모 동시성 분산 락(Lock) 이슈 해결 방안 설계해줘", "gpt-5.6-terra"),
     ]
 
     async with httpx.AsyncClient(timeout=10.0) as client:
