@@ -37,26 +37,26 @@
 
 ---
 
-### Q3. 모든 분석 요청이 MINI 모델로만 고정(디폴트)되어 처리되는 현상
-> **증상**: 고난도 분석이나 리팩토링 요청을 보내도 등급 분류가 돌지 않고 계속 `MINI` (`gpt-5.4-mini`) 로만 처리됩니다.
+### Q3. 모든 분석 요청이 LUNA:LOW 모델로만 고정(디폴트)되어 처리되는 현상
+> **증상**: 고난도 분석이나 리팩토링 요청을 보내도 등급 분류가 돌지 않고 계속 `LUNA:LOW` (`gpt-5.6-luna`, `low`) 로만 처리됩니다.
 
 * **원인**:
   * 클라이언트가 `/v1/responses` API로 호출할 때는 요청 바디에 `messages` 키 대신 ChatGPT responses 스펙인 **`input`** 키를 담아 보냅니다.
   * 기존 `OpenAIAdapter.to_unified_request`는 오직 `"messages"` 키만 읽도록 설계되어 있어, `/responses` 호출이 오면 질문 텍스트를 아예 추출해내지 못했습니다 (`user_prompt = ""`).
-  * 이로 인해 분류기가 등급 평가 동작을 생략하고 즉시 `MINI`로 기본 안전 규격 폴백 반환을 수행했던 것입니다.
+  * 이로 인해 분류기가 등급 평가 동작을 생략하고 즉시 `LUNA:LOW`로 기본 안전 규격 폴백 반환을 수행했던 것입니다.
 * **해결책**:
   * `"messages"`가 비어 있고 `"input"` 키가 존재하는 경우, `input` 배열 내부에 포장된 각 `input_text` 문자열들을 긁어모아 `UnifiedRequest.messages`로 온전하게 복원해 주는 파이프라인을 구축해 정상 판정을 복구했습니다.
 
 ---
 
 ### Q4. Classifier connection error: (ReadTimeout) 발생 및 지연 현상
-> **증상**: 가끔씩 `[Warning] Classifier connection error: (ReadTimeout). Fallback to MINI.` 경고가 뜨며 `MINI`로 떨어집니다.
+> **증상**: 가끔씩 `[Warning] Classifier connection error: (ReadTimeout). Fallback to LUNA:LOW.` 경고가 뜨며 `LUNA:LOW`로 떨어집니다.
 
 * **원인**:
   * 사용자의 ChatGPT Enterprise 웹 세션 토큰(`access_token`)이 만료되었거나, 일시적인 네트워크 병목이 생겼을 때, Cloudflare WAF(방화벽)는 에러를 즉시 뱉지 않고 **강제로 소켓 커넥션을 대기 보류(Holding)**시킵니다.
   * 이로 인해 분류기가 응답을 받지 못하고 행에 걸리게 되며, 기존의 25초 타임아웃은 터미널이 최대 25초간 함께 굳어버려 먹통이 되는 UX 지연을 초래했습니다.
 * **해결책**:
-  * 질문 난이도 평가 기능은 신속성이 생명이므로, 타임아웃 설정을 **`8.0`초(연결 5.0초)**로 대폭 축소하여 신속한 실패(Fail-fast)를 유도했습니다. 8초가 지연되면 터미널이 대기하지 않고 즉시 안전망인 `MINI` 모델로 매핑해 넘깁니다.
+  * 질문 난이도 평가 기능은 신속성이 생명이므로, 타임아웃 설정을 **`8.0`초(연결 5.0초)**로 대폭 축소하여 신속한 실패(Fail-fast)를 유도했습니다. 8초가 지연되면 터미널이 대기하지 않고 즉시 안전망인 `LUNA:LOW` 모델로 매핑해 넘깁니다.
   * *이 증상이 잦다면 웹브라우저에서 ChatGPT 로그아웃 후 다시 로그인하여 `~/.codex/auth.json` 자격증명을 갱신하는 것이 좋습니다.*
 
 ---
