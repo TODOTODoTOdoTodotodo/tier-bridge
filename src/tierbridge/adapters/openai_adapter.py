@@ -22,13 +22,16 @@ class OpenAIAdapter(BaseAdapter):
             for item in raw_request_body.get("input", []):
                 role = item.get("role", "user")
                 raw_content = item.get("content", [])
-                content_text = ""
+                parts_text = []
                 if isinstance(raw_content, list):
-                    content_text = " ".join(
-                        part.get("text", "") 
-                        for part in raw_content 
-                        if isinstance(part, dict) and part.get("type") == "input_text"
-                    )
+                    for part in raw_content:
+                        if isinstance(part, dict):
+                            t = part.get("text", "")
+                            if t:
+                                parts_text.append(t)
+                        elif isinstance(part, str) and part.strip():
+                            parts_text.append(part.strip())
+                    content_text = " ".join(parts_text)
                 else:
                     content_text = str(raw_content)
                 messages.append(Message(role=role, content=content_text))
