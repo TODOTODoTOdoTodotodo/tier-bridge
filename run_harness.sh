@@ -75,7 +75,7 @@ done
 # Parse arguments for optional test execution (OFF by default)
 RUN_TESTS=${RUN_TESTS:-false}
 for arg in "$@"; do
-    if [ "$arg" == "--test" ] || [ "$arg" == "--run-tests" ]; then
+    if [ "$arg" = "--test" ] || [ "$arg" = "--run-tests" ]; then
         RUN_TESTS=true
     fi
 done
