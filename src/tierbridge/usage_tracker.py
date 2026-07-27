@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 class UsageTracker:
     # 100만 토큰당 가격 (USD)
@@ -50,12 +51,17 @@ class UsageTracker:
         cost_out = (output_tokens * matched_catalog["output"]) / 1_000_000.0
         cost_total = cost_in + cost_out
         
+        now = datetime.now()
+        timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        iso_timestamp = now.isoformat()
+        
         self.total_requests += 1
         self.total_input_tokens += input_tokens
         self.total_output_tokens += output_tokens
         self.total_cost_usd += cost_total
         
         self.history.append({
+            "timestamp": iso_timestamp,
             "model": model,
             "decision": decision,
             "input_tokens": input_tokens,
@@ -63,7 +69,7 @@ class UsageTracker:
             "cost_usd": round(cost_total, 6)
         })
         
-        print(f"➔ [USAGE] {decision} ({model}) | input={input_tokens} output={output_tokens} tokens | cost=${round(cost_total, 6)} USD")
+        print(f"[{timestamp_str}] ➔ [USAGE] {decision} ({model}) | input={input_tokens} output={output_tokens} tokens | cost=${round(cost_total, 6)} USD", flush=True)
 
     def parse_and_track_from_buffer(self, buffer: bytes, model: str, decision: str):
         """

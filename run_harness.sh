@@ -55,8 +55,8 @@ if [ ! -f "harness.py" ]; then
     exit 1
 fi
 
-# Run uvicorn in the background, logging to harness.log
-PYTHONPATH=./src $PYTHON_BIN -m uvicorn harness:app --host 0.0.0.0 --port $PORT --reload > "$HARNESS_LOG" 2>&1 &
+# Run uvicorn in the background, logging to harness.log (no-access-log & unbuffered for clean real-time log)
+PYTHONPATH=./src PYTHONUNBUFFERED=1 $PYTHON_BIN -m uvicorn harness:app --host 0.0.0.0 --port $PORT --no-access-log --reload > "$HARNESS_LOG" 2>&1 &
 SERVER_PID=$!
 
 echo "⏳ Waiting for harness server to become responsive..."
@@ -134,10 +134,10 @@ if [ -t 0 ]; then
     printf "❓ 실시간 프록시 로그(tail -f %s)를 지금 바로 확인하시겠습니까? [Y/n]: " "$HARNESS_LOG"
     read -r REPLY
     case "$REPLY" in
-        [Nn]*)
+        [Nn]* )
             echo "⏩ 로그 모니터링을 건너끕니다."
             ;;
-        *)
+        * )
             echo "📜 실시간 프록시 로그 모니터링을 시작합니다. (종료 시 Ctrl+C)"
             echo "-------------------------------------------------------------"
             tail -f "$HARNESS_LOG"
