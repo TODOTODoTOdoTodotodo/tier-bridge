@@ -162,8 +162,7 @@ class Router:
 
         # 신규 유저 입력 턴일 때만 유저 프롬프트 출력, 후속 턴(Sub-step)에는 비움("")
         if is_new_user_turn and user_prompt:
-            clean_prompt = user_prompt.replace("\n", " ").strip()
-            display_prompt = clean_prompt[:47] + "..." if len(clean_prompt) > 50 else clean_prompt
+            display_prompt = user_prompt.replace("\n", " ").strip()
         else:
             display_prompt = ""
 
