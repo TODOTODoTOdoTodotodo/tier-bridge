@@ -18,10 +18,10 @@ def analyze(log_filepath, target_date=None):
         sys.exit(1)
 
     # 패턴 예시:
-    # [2026-07-27 10:46:15] ➔ [USAGE] LUNA:LOW (gpt-5.6-luna) | input=21 output=381 tokens | cost=$0.001164 USD
-    # ➔ [USAGE] LUNA:LOW (gpt-5.6-luna) | input=21 output=381 tokens | cost=$0.001164 USD  (타임스탬프 없는 구 로그 지원)
+    # [2026-07-27 10:46:15] ➔ [USAGE] LUNA:LOW (gpt-5.6-luna) | input=21 output=381 tokens | loc=42 lines | cost=$0.001164 USD
+    # ➔ [USAGE] LUNA:LOW (gpt-5.6-luna) | input=21 output=381 tokens | cost=$0.001164 USD  (구형 로그 호환)
     usage_pattern = re.compile(
-        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[USAGE\] (?P<decision>[^\s]+) \((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens \| cost=\$(?P<cost>[\d\.]+) USD'
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[USAGE\] (?P<decision>[^\s]+) \((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
     )
 
     records = []
@@ -48,6 +48,7 @@ def analyze(log_filepath, target_date=None):
                 model = match.group("model")
                 in_tok = int(match.group("in_tok"))
                 out_tok = int(match.group("out_tok"))
+                loc_val = int(match.group("loc")) if match.group("loc") else 0
                 cost = float(match.group("cost"))
 
                 records.append({
@@ -58,6 +59,7 @@ def analyze(log_filepath, target_date=None):
                     "input_tokens": in_tok,
                     "output_tokens": out_tok,
                     "total_tokens": in_tok + out_tok,
+                    "loc": loc_val,
                     "cost": cost
                 })
 
@@ -71,10 +73,11 @@ def analyze(log_filepath, target_date=None):
     total_in = sum(r["input_tokens"] for r in records)
     total_out = sum(r["output_tokens"] for r in records)
     total_tokens = total_in + total_out
+    total_loc = sum(r["loc"] for r in records)
     total_cost = sum(r["cost"] for r in records)
 
-    decision_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "cost": 0.0})
-    daily_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "cost": 0.0})
+    decision_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
+    daily_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
 
     for r in records:
         d = r["decision"]
@@ -83,16 +86,18 @@ def analyze(log_filepath, target_date=None):
         decision_stats[d]["count"] += 1
         decision_stats[d]["in_tok"] += r["input_tokens"]
         decision_stats[d]["out_tok"] += r["output_tokens"]
+        decision_stats[d]["loc"] += r["loc"]
         decision_stats[d]["cost"] += r["cost"]
 
         daily_stats[dt_key]["count"] += 1
         daily_stats[dt_key]["in_tok"] += r["input_tokens"]
         daily_stats[dt_key]["out_tok"] += r["output_tokens"]
+        daily_stats[dt_key]["loc"] += r["loc"]
         daily_stats[dt_key]["cost"] += r["cost"]
 
-    print("\n=============================================================")
-    print("📊 [TierBridge 로그 기반 USAGE 사용량 통계 보고서]")
-    print("=============================================================")
+    print("\n=========================================================================================")
+    print("📊 [TierBridge 로그 기반 USAGE 사용량 및 소스코드 작성(LOC) 통계 보고서]")
+    print("=========================================================================================")
     if target_date:
         print(f"🗓️  조회 대상 날짜: {target_date}")
     print(f"📁 대상 로그 파일: {log_filepath}")
@@ -100,21 +105,22 @@ def analyze(log_filepath, target_date=None):
     print(f"📥 총 Input 토큰 수          : {total_in:,} tokens")
     print(f"📤 총 Output 토큰 수         : {total_out:,} tokens")
     print(f"🔢 전체 총 소모 토큰 수       : {total_tokens:,} tokens")
+    print(f"💻 총 작성/생성 코드 (LOC)    : {total_loc:,} lines")
     print(f"💰 총 추정 소모 비용         : ${total_cost:.6f} USD")
-    print("-------------------------------------------------------------")
+    print("-----------------------------------------------------------------------------------------")
 
     print("\n[1] 🎯 등급(Decision)별 소모 분포")
-    print(f"{'Decision 등급':<20} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'비용 (USD)':<12}")
-    print("-" * 75)
+    print(f"{'Decision 등급':<18} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12}")
+    print("-" * 88)
     for dec, s in sorted(decision_stats.items(), key=lambda x: x[1]["cost"], reverse=True):
-        print(f"{dec:<20} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | ${s['cost']:.6f}")
+        print(f"{dec:<18} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}")
 
     print("\n[2] 🗓️  일자(Daily)별 소모 요약")
-    print(f"{'날짜':<12} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'비용 (USD)':<12}")
-    print("-" * 65)
+    print(f"{'날짜':<12} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12}")
+    print("-" * 78)
     for date_str, s in sorted(daily_stats.items()):
-        print(f"{date_str:<12} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | ${s['cost']:.6f}")
-    print("=============================================================\n")
+        print(f"{date_str:<12} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}")
+    print("=========================================================================================\n")
 
 if __name__ == "__main__":
     args = parse_args()

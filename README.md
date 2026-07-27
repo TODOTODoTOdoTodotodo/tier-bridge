@@ -115,13 +115,13 @@ Codex CLI의 `status` 명령은 로컬 Ollama 모드에서 크레딧 정보를 �
 
 **1. 실시간 로그 확인** (`harness.log`에서 요청마다 타임스탬프와 함께 출력):
 ```
-[2026-07-27 10:51:22] ➔ [DECISION] LUNA:LOW | "명령어 오타 수정 방안"
-[2026-07-27 10:51:42] ➔ [USAGE] LUNA:LOW (gpt-5.6-luna) | input=21 output=365 tokens | cost=$0.001116 USD
+[2026-07-27 11:09:14] ➔ [DECISION] LUNA:LOW | "파이썬에서 단순 정렬 알고리즘 작성해줘"
+[2026-07-27 11:09:14] ➔ [USAGE] LUNA:LOW (gpt-5.6-luna) | input=21 output=370 tokens | loc=19 lines | cost=$0.001131 USD
 ```
 
-**2. 로그 기반 기간별/일자별 통계 분석 스크립트 실행**:
+**2. 로그 기반 기간별/일자별 통계 분석 스크립트 실행 (토큰 및 생성 코드 LOC 분석)**:
 ```bash
-# 전체 기간 소모량 및 등급별 분포 분석
+# 전체 기간 소모량, 등급별 분포 및 총 작성 코드 라인 수(LOC) 분석
 ./analyze_usage.py
 
 # 특정 날짜(YYYY-MM-DD) 소모량만 필터링하여 조회
@@ -141,16 +141,18 @@ curl http://localhost:18080/usage
     "total_input_tokens": 4210,
     "total_output_tokens": 1830,
     "total_tokens": 6040,
+    "total_loc": 142,
     "total_cost_usd": 0.00625
   },
   "per_request_history": [
     {
-      "timestamp": "2026-07-27T10:51:42.123456",
+      "timestamp": "2026-07-27T11:09:14.123456",
       "model": "gpt-5.6-luna",
       "decision": "LUNA:LOW",
       "input_tokens": 21,
-      "output_tokens": 365,
-      "cost_usd": 0.001116
+      "output_tokens": 370,
+      "loc": 19,
+      "cost_usd": 0.001131
     }
   ]
 }

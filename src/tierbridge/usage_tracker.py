@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 
 class UsageTracker:
@@ -18,6 +19,7 @@ class UsageTracker:
         self.total_requests = 0
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+        self.total_loc = 0
         self.total_cost_usd = 0.0
         self.history = []
 
@@ -28,14 +30,30 @@ class UsageTracker:
                 "total_input_tokens": self.total_input_tokens,
                 "total_output_tokens": self.total_output_tokens,
                 "total_tokens": self.total_input_tokens + self.total_output_tokens,
+                "total_loc": self.total_loc,
                 "total_cost_usd": round(self.total_cost_usd, 6)
             },
             "per_request_history": self.history
         }
 
-    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int):
+    @staticmethod
+    def extract_code_lines(full_text: str) -> int:
         """
-        토큰 소모량을 전달받아 예상 비용을 계산하고 통계 세션에 누적합니다.
+        마크다운 응답 텍스트에서 코드 블록(``` ... ```) 내부의 소스코드 줄 수(LOC)를 계산합니다.
+        """
+        if not full_text:
+            return 0
+        
+        loc_count = 0
+        code_blocks = re.findall(r'```[\w\-]*\n(.*?)```', full_text, re.DOTALL)
+        for block in code_blocks:
+            lines = [line for line in block.splitlines() if line.strip()]
+            loc_count += len(lines)
+        return loc_count
+
+    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0):
+        """
+        토큰 소모량 및 코드 작성 줄 수(LOC)를 전달받아 예상 비용을 계산하고 통계 세션에 누적합니다.
         """
         # 모델명 소문자 매핑
         model_key = model.lower()
@@ -58,6 +76,7 @@ class UsageTracker:
         self.total_requests += 1
         self.total_input_tokens += input_tokens
         self.total_output_tokens += output_tokens
+        self.total_loc += loc
         self.total_cost_usd += cost_total
         
         self.history.append({
@@ -66,19 +85,21 @@ class UsageTracker:
             "decision": decision,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "loc": loc,
             "cost_usd": round(cost_total, 6)
         })
         
-        print(f"[{timestamp_str}] ➔ [USAGE] {decision} ({model}) | input={input_tokens} output={output_tokens} tokens | cost=${round(cost_total, 6)} USD", flush=True)
+        print(f"[{timestamp_str}] ➔ [USAGE] {decision} ({model}) | input={input_tokens} output={output_tokens} tokens | loc={loc} lines | cost=${round(cost_total, 6)} USD", flush=True)
 
     def parse_and_track_from_buffer(self, buffer: bytes, model: str, decision: str):
         """
-        스트리밍 버퍼에 쌓인 SSE 최종 응답 텍스트를 파싱하여 토큰 소모량을 식별 및 수집합니다.
+        스트리밍 버퍼에 쌓인 SSE 최종 응답 텍스트를 파싱하여 토큰 소모량 및 코드 라인 수(LOC)를 식별 및 수집합니다.
         """
         try:
             text = buffer.decode("utf-8", errors="ignore")
             input_tokens = 0
             output_tokens = 0
+            response_full_text = ""
             
             for line in text.splitlines():
                 line = line.strip()
@@ -103,10 +124,26 @@ class UsageTracker:
                         input_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
                         output_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
                         
+                    # 3. 응답 텍스트 조각 수집 (LOC 파싱용)
+                    if event.get("type") == "response.content_part.delta":
+                        delta_part = event.get("delta", {})
+                        if isinstance(delta_part, dict) and delta_part.get("type") == "text":
+                            response_full_text += delta_part.get("text", "")
+                    elif event.get("type") == "response.output_text.delta":
+                        delta_text = event.get("delta")
+                        if isinstance(delta_text, str):
+                            response_full_text += delta_text
+                    elif event.get("choices"):
+                        c = event["choices"][0]
+                        delta_c = c.get("delta", {})
+                        if delta_c.get("content"):
+                            response_full_text += delta_c["content"]
                 except Exception:
                     continue
             
+            loc = self.extract_code_lines(response_full_text)
+            
             if input_tokens or output_tokens:
-                self.track_request(model, decision, input_tokens, output_tokens)
+                self.track_request(model, decision, input_tokens, output_tokens, loc)
         except Exception as e:
             print(f"[Warning] Failed to parse usage stats from buffer: {e}")
