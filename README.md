@@ -93,14 +93,14 @@ source run_harness.sh
 
 ## 실시간 프록시 로그 확인 방법
 
-원스텝 가동 스크립트(`source run_harness.sh`)를 실행하면 서버의 세부 로그가 백그라운드로 전환되어 `harness.log`에 실시간으로 기록됩니다. 
+원스텝 가동 스크립트(`source run_harness.sh`)를 실행하면 서버의 세부 로그가 백그라운드로 전환되어 `harness.log`에 실시간으로 기록됩니다. (HTTP 액세스 잡음 로그는 제거되어 핵심 라우터 로그만 깔끔하게 표시됩니다.)
 등급 판정 결과와 원격 실서버 통신 로그를 모니터링하려면 터미널 창을 하나 더 열어 아래 명령어를 실행하십시오:
 
 ```bash
 tail -f harness.log
 ```
 
-*(여기서 실시간으로 결정되는 `➔ [DECISION]` 등급과 커넥션 상태를 바로 추적할 수 있습니다.)*
+*(여기서 실시간으로 결정되는 `➔ [DECISION]` 등급과 `➔ [USAGE]` 소모량이 타임스탬프와 함께 출력됩니다.)*
 
 ## 검증 메모
 
@@ -108,18 +108,27 @@ tail -f harness.log
 - `decision`은 서버 로그의 `➔ [DECISION]` 출력으로 확인하는 것이 가장 정확합니다.
 - production 경로와 mock 경로 모두 등급별 `reasoning`을 반영합니다.
 
-## 토큰 소모량 확인 방법
+## 토큰 소모량 및 기간별 통계 확인 방법
 
 Codex CLI의 `status` 명령은 로컬 Ollama 모드에서 크레딧 정보를 표시하지 않습니다.
-대신 프록시가 직접 업스트림 응답에서 토큰 소모량을 파싱하여 세션 단위로 누적합니다.
+대신 프록시가 직접 업스트림 응답에서 토큰 소모량을 파싱하여 세션 및 로그 단위로 누적합니다.
 
-**실시간 로그 확인** (`harness.log`에서 요청마다 출력):
+**1. 실시간 로그 확인** (`harness.log`에서 요청마다 타임스탬프와 함께 출력):
 ```
-➔ [DECISION] 추정된 등급: TERRA:HIGH
-➔ [USAGE] TERRA:HIGH (gpt-5.6-terra) | input=1024 output=512 tokens
+[2026-07-27 10:51:22] ➔ [DECISION] LUNA:LOW | "명령어 오타 수정 방안"
+[2026-07-27 10:51:42] ➔ [USAGE] LUNA:LOW (gpt-5.6-luna) | input=21 output=365 tokens | cost=$0.001116 USD
 ```
 
-**세션 전체 누적 사용량 조회** (별도 터미널에서):
+**2. 로그 기반 기간별/일자별 통계 분석 스크립트 실행**:
+```bash
+# 전체 기간 소모량 및 등급별 분포 분석
+./analyze_usage.py
+
+# 특정 날짜(YYYY-MM-DD) 소모량만 필터링하여 조회
+./analyze_usage.py --date 2026-07-27
+```
+
+**3. API 세션 전체 누적 사용량 조회** (별도 터미널에서):
 ```bash
 curl http://localhost:18080/usage
 ```
@@ -131,10 +140,18 @@ curl http://localhost:18080/usage
     "total_requests": 5,
     "total_input_tokens": 4210,
     "total_output_tokens": 1830,
-    "total_tokens": 6040
+    "total_tokens": 6040,
+    "total_cost_usd": 0.00625
   },
   "per_request_history": [
-    { "model": "gpt-5.6-terra", "decision": "TERRA:HIGH", "effort": "high", "input_tokens": 1024, "output_tokens": 512 }
+    {
+      "timestamp": "2026-07-27T10:51:42.123456",
+      "model": "gpt-5.6-luna",
+      "decision": "LUNA:LOW",
+      "input_tokens": 21,
+      "output_tokens": 365,
+      "cost_usd": 0.001116
+    }
   ]
 }
 ```

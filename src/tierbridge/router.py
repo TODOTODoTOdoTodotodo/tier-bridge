@@ -17,12 +17,25 @@ class Router:
             )
         return cls._client
     @staticmethod
-    def extract_user_prompt(unified_request: UnifiedRequest) -> str:
-        """가장 최근의 사용자 질의를 추출합니다."""
+    def extract_user_prompt_and_turn_status(unified_request: UnifiedRequest) -> Tuple[str, bool]:
+        """
+        가장 최근의 사용자 질의 및 신규 유저 턴 여부를 추출합니다.
+        Returns: (user_prompt, is_new_user_turn)
+        """
+        if not unified_request.messages:
+            return "", False
+
+        # 가장 최근 메시지가 유저 역할이고 내용이 있는 경우 신규 유저 입력 턴으로 판단
+        last_msg = unified_request.messages[-1]
+        is_new_user_turn = (last_msg.role == "user" and bool(last_msg.content.strip()))
+
+        # 분류기 전달용 가장 최근 유저 프롬프트 추출
+        user_prompt = ""
         for msg in reversed(unified_request.messages):
             if msg.role == "user" and msg.content.strip():
-                return msg.content.strip()
-        return ""
+                user_prompt = msg.content.strip()
+                break
+        return user_prompt, is_new_user_turn
 
     @classmethod
     async def classify_request(
@@ -36,7 +49,7 @@ class Router:
         요청 난이도를 분류하여 (최종_결정_등급, 타겟_모델_식별자, reasoning_effort) 튜플을 반환합니다.
         등급: LOW, MID, HIGH
         """
-        user_prompt = cls.extract_user_prompt(unified_request)
+        user_prompt, is_new_user_turn = cls.extract_user_prompt_and_turn_status(unified_request)
         if not user_prompt:
             # 텍스트가 없는 경우 기본 안전값 제공 (최저 등급: LUNA:LOW)
             return "LUNA:LOW", "gpt-5.6-luna", "low"
@@ -87,6 +100,7 @@ class Router:
         }
 
         import asyncio
+        from datetime import datetime
 
         verdict_text = "LUNA:LOW"  # 기본 폴백값 (저비용 모델 안전 규격)
         max_retries = 2
@@ -144,9 +158,16 @@ class Router:
 
         # 공백 제거 및 대문자 변환
         verdict = verdict_text.strip().upper()
-        clean_prompt = user_prompt.replace("\n", " ").strip()
-        display_prompt = clean_prompt[:47] + "..." if len(clean_prompt) > 50 else clean_prompt
-        print(f"➔ [DECISION] {verdict} | \"{display_prompt}\"")
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 신규 유저 입력 턴일 때만 유저 프롬프트 출력, 후속 턴(Sub-step)에는 비움("")
+        if is_new_user_turn and user_prompt:
+            clean_prompt = user_prompt.replace("\n", " ").strip()
+            display_prompt = clean_prompt[:47] + "..." if len(clean_prompt) > 50 else clean_prompt
+        else:
+            display_prompt = ""
+
+        print(f"[{now_str}] ➔ [DECISION] {verdict} | \"{display_prompt}\"", flush=True)
 
         # 3-Tier 매핑 정책 적용
         if "LUNA:LOW" in verdict or "MINI" in verdict:
