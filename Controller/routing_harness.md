@@ -16,7 +16,7 @@ This document defines the dynamic routing strategy designed to optimize credits 
 │                    (Port: 18080)                        │
 │                                                         │
 │ * Inspects incoming request 'model':                    │
-│   - 'gpt-5.6-sol' / '4tier' / 'sol'                     │
+│   - '--model super' / 'gpt-5.6-sol' / '4tier'           │
 │     ➔ Activates 4-Tier Sol Router (LUNA ➔ TERRA ➔ SOL)  │
 │   - Default ('gpt-5.4', 'gpt-5.6-terra', etc.)         │
 │     ➔ Activates Standard 3-Tier Router (LUNA ➔ TERRA)   │

@@ -28,7 +28,7 @@ Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=ollama`)로
 * **실시간 생성 소스코드(LOC) 집계**: 모델 답변 내 마크다운 코드 블록(` ``` `) 라인을 추출하여 개발 생산성 지표(LOC)를 파싱합니다.
 * **유연한 날짜 필터링**: `--date YYYY-MM-DD` 옵션을 통해 특정 일자의 사용량만 선택하여 정밀 모니터링할 수 있습니다.
 * **하위 호환성 유지**: 타임스탬프 또는 LOC 필드가 없는 구형 로그 형식도 예외 없이 호환하여 유실 없이 파싱합니다.
-* **3-Tier 소모 분포 제공**: `LUNA:LOW`, `LUNA:MEDIUM`, `TERRA:MEDIUM`, `TERRA:HIGH`, `TERRA:EXTRA_HIGH` 등 등급별 소모 비용, 토큰 비율 및 작성 LOC를 명확하게 구분해 표시합니다.
+* **3-Tier / 4-Tier 동적 등급 소모 분포 제공**: `LUNA:LOW`, `LUNA:MEDIUM`, `TERRA:MEDIUM`, `TERRA:HIGH`, `TERRA:EXTRA_HIGH`, `SOL:EXTRA_HIGH` 등 등급별 소모 비용, 토큰 비율 및 작성 LOC를 명확하게 구분해 표시합니다.
 
 ---
 
