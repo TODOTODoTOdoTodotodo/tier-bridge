@@ -49,13 +49,21 @@ else
     echo "✅ Port $PORT is free and ready."
 fi
 
+# Parse command line arguments for optional test execution
+RUN_TESTS=${RUN_TESTS:-false}
+for arg in "$@"; do
+    if [ "$arg" = "--test" ] || [ "$arg" = "--run-tests" ]; then
+        RUN_TESTS=true
+    fi
+done
+
 echo "🚀 [Step 2/5] Starting LLM Routing Harness Proxy in background..."
 if [ ! -f "harness.py" ]; then
     echo "❌ Error: harness.py not found in current directory!"
     exit 1
 fi
 
-# Run uvicorn in the background, logging to harness.log (no-access-log & unbuffered for clean real-time log)
+# Run uvicorn in the background (Dual Router handles requests dynamically per CLI call)
 PYTHONPATH=./src PYTHONUNBUFFERED=1 $PYTHON_BIN -m uvicorn harness:app --host 0.0.0.0 --port $PORT --no-access-log --reload > "$HARNESS_LOG" 2>&1 &
 SERVER_PID=$!
 
@@ -72,14 +80,6 @@ for i in {1..10}; do
     sleep 1
 done
 
-# Parse arguments for optional test execution (OFF by default)
-RUN_TESTS=${RUN_TESTS:-false}
-for arg in "$@"; do
-    if [ "$arg" = "--test" ] || [ "$arg" = "--run-tests" ]; then
-        RUN_TESTS=true
-    fi
-done
-
 echo "🚀 [Step 3/5] Checking routing diagnostics and self-tests option..."
 if [ "$RUN_TESTS" = "true" ]; then
     if [ -f "test_client.py" ]; then
@@ -88,7 +88,7 @@ if [ "$RUN_TESTS" = "true" ]; then
         sleep 2 # Wait for logs to flush to harness.log
         echo ""
         echo "📋 [Harness Routing Decisions Captured]:"
-        grep "➔ \[DECISION\]" "$HARNESS_LOG" | tail -n 7
+        grep "➔ \[DECISION" "$HARNESS_LOG" | tail -n 7
         echo ""
     else
         echo "⚠️  Warning: test_client.py not found. Skipping self-test."
@@ -112,21 +112,14 @@ export CODEX_OSS_PORT=$PORT
 
 echo "🚀 [Step 5/5] One-Step integration complete! 🎉"
 echo "-------------------------------------------------------------"
-echo "💡 만약 'source run_harness.sh' 로 실행하셨다면,"
-echo "   환경 변수 4개가 현재 터미널 세션에 자동으로 주입되었습니다!"
-echo "   즉시 아래 명령어로 연동하여 첫 명령을 내리실 수 있습니다:"
+echo "💡 Codex CLI 실행 시점에 원하는 라우터를 선택하여 명령을 전달할 수 있습니다:"
 echo ""
-echo "  codex --oss --local-provider=ollama <원하는_명령>"
-echo "  (예: codex --oss --local-provider=ollama chat)"
+echo "  1) 일반 라우터 (gpt-5.6-terra 캡핑 비용절감 모드):"
+echo "     codex --oss --local-provider=ollama <명령>"
 echo ""
-echo "💡 실시간 프록시 통신 및 등급 판정 로그 확인 명령어:"
-echo "  tail -f $HARNESS_LOG"
-echo ""
-echo "💡 (만약 그냥 ./run_harness.sh 로 실행하셨다면 아래를 수동으로 입력해 주세요)"
-echo "  export OPENAI_BASE_URL=\"http://localhost:$PORT/v1\""
-echo "  export CODEX_API_BASE=\"http://localhost:$PORT/v1\""
-echo "  export OLLAMA_HOST=\"http://127.0.0.1:$PORT\""
-echo "  export CODEX_OSS_PORT=$PORT"
+echo "  2) 고출력 Sol 라우터 (gpt-5.6-sol 최상위 무제한 파워 모드):"
+echo "     codex --oss --local-provider=ollama --model gpt-5.6-sol <명령>"
+echo "     (또는 --model high-power)"
 echo "-------------------------------------------------------------"
 
 if [ -t 0 ]; then

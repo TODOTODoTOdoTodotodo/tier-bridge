@@ -43,15 +43,24 @@ class Router:
         unified_request: UnifiedRequest, 
         auth_token: str, 
         enterprise_api_url: str,
-        account_id: str = None
+        account_id: str = None,
+        requested_model: str = ""
     ) -> Tuple[str, str, str]:
         """
-        요청 난이도를 분류하여 (최종_결정_등급, 타겟_모델_식별자, reasoning_effort) 튜플을 반환합니다.
-        등급: LOW, MID, HIGH
+        요청 난이도를 판정하여 3-Tier (luna->terra) 또는 4-Tier (luna->terra->sol) 라우팅을 수행합니다.
+        requested_model: Codex CLI 시점에 지정된 모델명 (e.g. gpt-5.6-sol, 4tier)
         """
         user_prompt, is_new_user_turn = cls.extract_user_prompt_and_turn_status(unified_request)
+        
+        # CLI 실행 시점에 4-Tier Sol 라우터 활성화 여부 판별 (--model gpt-5.6-sol 또는 --model 4tier)
+        req_clean = (requested_model or unified_request.model or "").lower()
+        is_4tier_sol_mode = (
+            req_clean in ("gpt-5.6-sol", "4tier", "sol")
+            or os.getenv("ROUTING_MODE", "").lower() in ("high_power", "4tier", "sol")
+            or os.getenv("HIGH_POWER_MODE", "").lower() == "true"
+        )
+
         if not user_prompt:
-            # 텍스트가 없는 경우 기본 안전값 제공 (최저 등급: LUNA:LOW)
             return "LUNA:LOW", "gpt-5.6-luna", "low"
             
         headers = {
@@ -63,7 +72,7 @@ class Router:
         if account_id:
             headers["chatgpt-account-id"] = account_id
 
-        # 분류를 위한 gpt-5.6-luna (low effort) 프롬프트 설정
+        # 지능형 라우터 프롬프트 설정
         payload = {
             "model": "gpt-5.6-luna",
             "store": False,
@@ -75,15 +84,15 @@ class Router:
                 "1) 명확한 근거가 없으면 더 낮은 등급을 선택한다.\n"
                 "2) 단순 오타, 가벼운 수정, 단순 설명은 LUNA:LOW로 분류한다.\n"
                 "3) 표준적인 비즈니스 로직 단위 구현 및 리팩토링은 LUNA:MEDIUM으로 분류한다.\n"
-                "4) 중간 이상의 복잡도, 아키텍처 변경, 복수 파일/컴포넌트 연동 수정부터 TERRA:MEDIUM으로 승격한다.\n"
+                "4) 중간 이상의 복잡도, 아키텍처 변경, 복수 파일/컴포넌트 연동 수정은 TERRA:MEDIUM으로 승격한다.\n"
                 "5) 다중 모듈 알고리즘 작성 및 하이레벨 아키텍처 설계는 TERRA:HIGH로 분류한다.\n"
-                "6) 심층 최적화, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 TERRA:EXTRA_HIGH로 분류한다.\n"
+                "6) 심층 최적화, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 EXTRA_HIGH로 분류한다.\n"
                 "7) 오직 한 단어만 출력한다. 다른 설명은 절대 금지한다.\n\n"
-                "- LUNA:LOW : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드, 단순 스크립트 작성 (최저 등급)\n"
+                "- LUNA:LOW : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드, 단순 스크립트 작성\n"
                 "- LUNA:MEDIUM : 일반적인 비즈니스 로직 단위 업무 구현, 표준적인 리팩토링, 단일 파일 디버깅\n"
                 "- TERRA:MEDIUM : 중간 수준 아키텍처 변경, 복수 컴포넌트 간 연동 수정, 중간 난이도 디버깅\n"
                 "- TERRA:HIGH : 복잡한 알고리즘 작성, 다중 컴포넌트 아키텍처 분석 및 시스템 설계\n"
-                "- TERRA:EXTRA_HIGH : 고성능 튜닝 및 성능 분석, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅 (최대 등급)"
+                "- EXTRA_HIGH : 고성능 튜닝 및 성능 분석, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅 (최고 난이도)"
             ),
             "input": [
                 {
@@ -102,7 +111,7 @@ class Router:
         import asyncio
         from datetime import datetime
 
-        verdict_text = "LUNA:LOW"  # 기본 폴백값 (저비용 모델 안전 규격)
+        verdict_text = "LUNA:LOW"
         max_retries = 2
         retry_delay = 0.5
         
@@ -119,7 +128,6 @@ class Router:
                                     break
                                 try:
                                     data_json = json.loads(data_str)
-                                    # 1. Streaming Delta 파싱 (OpenAI)
                                     if data_json.get("choices"):
                                         choice = data_json["choices"][0]
                                         content = choice.get("delta", {}).get("content", "")
@@ -127,11 +135,9 @@ class Router:
                                             verdict_accumulated += content
                                         if choice.get("finish_reason") is not None:
                                             break
-                                    # 2. response.output_text.done (ChatGPT Enterprise 완료)
                                     elif data_json.get("type") == "response.output_text.done":
                                         verdict_accumulated = data_json.get("text", "")
                                         break
-                                    # 3. response.output_text.delta (ChatGPT Enterprise 진행)
                                     elif data_json.get("type") == "response.output_text.delta":
                                         delta_text = data_json.get("delta")
                                         if isinstance(delta_text, str):
@@ -140,7 +146,7 @@ class Router:
                                     pass
                         if verdict_accumulated.strip():
                             verdict_text = verdict_accumulated
-                            break  # 성공했으므로 시도 루프 탈출
+                            break
                         else:
                             print(f"[Warning] Classifier HTTP status {response.status_code} with empty body on attempt {attempt+1}/{max_retries+1}.")
                     else:
@@ -148,7 +154,6 @@ class Router:
             except Exception as e:
                 print(f"[Warning] Classifier connection error on attempt {attempt+1}/{max_retries+1}: {e} ({type(e).__name__}).")
             
-            # 재시도 딜레이 적용
             if attempt < max_retries:
                 print(f"➔ [RETRY] 0.5초 후 분류기 재시도 발송... ({attempt+1}/{max_retries})")
                 await asyncio.sleep(retry_delay)
@@ -156,28 +161,33 @@ class Router:
                 print(f"[Warning] All classifier retries failed. Falling back to LUNA:LOW.")
                 return "LUNA:LOW", "gpt-5.6-luna", "low"
 
-        # 공백 제거 및 대문자 변환
         verdict = verdict_text.strip().upper()
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # 신규 유저 입력 턴일 때만 유저 프롬프트 출력, 후속 턴(Sub-step)에는 비움("")
         if is_new_user_turn and user_prompt:
             display_prompt = user_prompt.replace("\n", " ").strip()
         else:
             display_prompt = ""
 
-        print(f"[{now_str}] ➔ [DECISION] {verdict} | \"{display_prompt}\"", flush=True)
-
-        # 3-Tier 매핑 정책 적용
+        # 등급 판정 및 라우터 모드(3-Tier vs 4-Tier Sol)에 따른 매핑
         if "LUNA:LOW" in verdict or "MINI" in verdict:
-            return "LUNA:LOW", "gpt-5.6-luna", "low"
+            final_decision, final_model, final_effort = "LUNA:LOW", "gpt-5.6-luna", "low"
         elif "LUNA:MEDIUM" in verdict:
-            return "LUNA:MEDIUM", "gpt-5.6-luna", "medium"
+            final_decision, final_model, final_effort = "LUNA:MEDIUM", "gpt-5.6-luna", "medium"
         elif "TERRA:MEDIUM" in verdict:
-            return "TERRA:MEDIUM", "gpt-5.6-terra", "medium"
+            final_decision, final_model, final_effort = "TERRA:MEDIUM", "gpt-5.6-terra", "medium"
         elif "TERRA:HIGH" in verdict:
-            return "TERRA:HIGH", "gpt-5.6-terra", "high"
-        elif "TERRA:EXTRA_HIGH" in verdict or "TERRA:XHIGH" in verdict or "TERRA:MAX" in verdict:
-            return "TERRA:EXTRA_HIGH", "gpt-5.6-terra", "extra_high"
+            final_decision, final_model, final_effort = "TERRA:HIGH", "gpt-5.6-terra", "high"
+        elif any(k in verdict for k in ["EXTRA_HIGH", "XHIGH", "MAX", "SOL"]):
+            if is_4tier_sol_mode:
+                # 4-Tier Sol 라우터 모드: 최상위 gpt-5.6-sol 모델로 라우팅
+                final_decision, final_model, final_effort = "SOL:EXTRA_HIGH", "gpt-5.6-sol", "extra_high"
+            else:
+                # 기존 3-Tier 라우터 모드: gpt-5.6-terra 모델로 상한선 Capping
+                final_decision, final_model, final_effort = "TERRA:EXTRA_HIGH", "gpt-5.6-terra", "extra_high"
         else:
-            return "LUNA:LOW", "gpt-5.6-luna", "low"
+            final_decision, final_model, final_effort = "LUNA:LOW", "gpt-5.6-luna", "low"
+
+        mode_tag = "4-TIER SOL ROUTER" if is_4tier_sol_mode else "STANDARD 3-TIER ROUTER"
+        print(f"[{now_str}] ➔ [DECISION: {mode_tag}] {final_decision} ({final_model}:{final_effort}) | \"{display_prompt}\"", flush=True)
+        return final_decision, final_model, final_effort

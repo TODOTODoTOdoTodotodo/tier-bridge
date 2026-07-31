@@ -26,7 +26,11 @@ ENTERPRISE_API_URL = os.getenv(
     "https://chatgpt.com/backend-api/codex/responses"
 )
 MOCK_MODE = os.getenv("MOCK_TEST_MODE", "false").lower() == "true" or ENTERPRISE_API_URL in ("mock", "test")
+ROUTING_MODE = os.getenv("ROUTING_MODE", "standard").lower()
+HIGH_POWER_MODE = os.getenv("HIGH_POWER_MODE", "false").lower() == "true" or ROUTING_MODE in ("high_power", "high", "power")
+effective_mode = "HIGH_POWER (고출력 모드 - TERRA 직송)" if HIGH_POWER_MODE else "STANDARD (일반 모드 - 동적 3-Tier 라우팅)"
 print(f"[Debug System Config] MOCK_TEST_MODE: {os.getenv('MOCK_TEST_MODE')}, ENTERPRISE_API_URL: {ENTERPRISE_API_URL}, Final MOCK_MODE: {MOCK_MODE}")
+print(f"[Debug System Config] Active Routing Mode: {effective_mode}")
 
 # Mock 모드 활성화 시 로컬 모크 엔드포인트로 우회
 if MOCK_MODE:
@@ -106,7 +110,9 @@ async def get_models():
         "data": [
             {"id": "gpt-5.4-mini", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.6-luna", "object": "model", "owned_by": "openai"},
-            {"id": "gpt-5.6-terra", "object": "model", "owned_by": "openai"}
+            {"id": "gpt-5.6-terra", "object": "model", "owned_by": "openai"},
+            {"id": "gpt-5.6-sol", "object": "model", "owned_by": "openai"},
+            {"id": "high-power", "object": "model", "owned_by": "openai"}
         ]
     }
 
@@ -162,12 +168,16 @@ async def route_harness(request: Request):
     if not enterprise_token:
         enterprise_token = get_latest_enterprise_token()
 
-    # 5. 분류기를 이용한 난이도 의사결정 (gpt-5.4-mini 호출)
+    # CLI 실행 시점에 요청된 모델 식별 (e.g. gpt-5.6-sol, gpt-5.6-terra, high-power)
+    requested_model = raw_body.get("model", "")
+
+    # 5. 분류기를 이용한 난이도 및 라우터 선택 (일반 라우터 vs 고출력 Sol 라우터)
     decision, target_model, effort = await Router.classify_request(
         unified_request=unified_req,
         auth_token=enterprise_token,
         enterprise_api_url=ENTERPRISE_API_URL,
-        account_id=get_latest_enterprise_account_id()
+        account_id=get_latest_enterprise_account_id(),
+        requested_model=requested_model
     )
 
     # 6. 타겟 백엔드 벤더 매핑
@@ -351,25 +361,25 @@ async def mock_enterprise_completions(request: Request):
     # 분류기 호출 식별
     is_classification = False
     for msg in messages:
-        if msg.get("role") == "system" and "비용 절감용 라우터" in msg.get("content", ""):
+        sys_content = msg.get("content", "") if msg.get("role") == "system" else ""
+        if "4-Tier LLM 라우터" in sys_content or "비용 절감용 라우터" in sys_content or "라우터" in sys_content:
             is_classification = True
             break
             
     if is_classification:
         verdict = "LUNA:MEDIUM"
-        if "알고리즘" in last_prompt or "simple" in last_prompt or "단순" in last_prompt:
-            if "오타" in last_prompt or "명령어" in last_prompt:
-                verdict = "MINI"
-            else:
-                verdict = "LUNA:LOW"
-        elif "최적화" in last_prompt or "tuning" in last_prompt or "메모리 누수" in last_prompt:
-            verdict = "TERRA:EXTRA_HIGH"
-        elif "분산 락" in last_prompt or "교착상태" in last_prompt or "deadlock" in last_prompt or "동시성" in last_prompt:
-            verdict = "TERRA:MAX"
-        elif "오타" in last_prompt or "grammar" in last_prompt or "오타 수정" in last_prompt:
-            verdict = "MINI"
+        if "오타" in last_prompt or "명령어 오타" in last_prompt:
+            verdict = "LUNA:LOW"
+        elif "리팩토링" in last_prompt or "단순" in last_prompt:
+            verdict = "LUNA:MEDIUM"
+        elif "호출 흐름" in last_prompt or "중간 난이도" in last_prompt:
+            verdict = "TERRA:MEDIUM"
+        elif "복잡한 알고리즘" in last_prompt or "다중 컴포넌트" in last_prompt:
+            verdict = "TERRA:HIGH"
+        elif "최적화" in last_prompt or "메모리 누수" in last_prompt or "분산 락" in last_prompt or "데드락" in last_prompt:
+            verdict = "SOL:EXTRA_HIGH"
             
-        print(f"[Mock Classifier] Routing verdict for prompt -> {verdict}")
+        print(f"[Mock Classifier] 4-Tier verdict for prompt -> {verdict}")
         
         return {
             "choices": [
