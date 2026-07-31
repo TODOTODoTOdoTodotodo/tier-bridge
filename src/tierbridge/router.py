@@ -52,11 +52,11 @@ class Router:
         """
         user_prompt, is_new_user_turn = cls.extract_user_prompt_and_turn_status(unified_request)
         
-        # CLI 실행 시점에 4-Tier Sol 라우터 활성화 여부 판별 (--model gpt-5.6-sol 또는 --model 4tier)
+        # CLI 실행 시점에 4-Tier Sol 라우터 활성화 여부 판별 (--model super, --model gpt-5.6-sol, --model 4tier)
         req_clean = (requested_model or unified_request.model or "").lower()
         is_4tier_sol_mode = (
-            req_clean in ("gpt-5.6-sol", "4tier", "sol")
-            or os.getenv("ROUTING_MODE", "").lower() in ("high_power", "4tier", "sol")
+            req_clean in ("gpt-5.6-sol", "4tier", "sol", "super", "high-power")
+            or os.getenv("ROUTING_MODE", "").lower() in ("high_power", "4tier", "sol", "super")
             or os.getenv("HIGH_POWER_MODE", "").lower() == "true"
         )
 

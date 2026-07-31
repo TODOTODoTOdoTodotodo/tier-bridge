@@ -48,9 +48,9 @@ This document defines the dynamic routing strategy designed to optimize credits 
   * **특징**: `sol` 모델을 사용하지 않고 `terra` 계열 상한선으로 캡핑하여 회사의 크레딧을 철저히 보존합니다.
 
 * **4-Tier Sol 라우터 (4-Tier Sol Router)**:
-  * **CLI 실행 명령**: `codex --oss --local-provider=ollama --model gpt-5.6-sol` (또는 `--model 4tier`)
+  * **CLI 실행 명령**: `codex --oss --local-provider=ollama --model super` (또는 `--model gpt-5.6-sol`)
   * **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (high) ~ 최상위 **`gpt-5.6-sol` (extra_high / API: `xhigh`)**
-  * **특징**: `luna`로 시작하는 스마트 동적 라우터를 유지하되, 최상위 고난도 작업(메모리 누수, 교착상태, 초대규모 분석) 발생 시 `gpt-5.6-sol`까지 라우팅 영역을 확장합니다.
+  * **특징**: `luna`로 시작하는 스마트 동적 라우터를 유지하되, 최상위 고난도 작업(메모리 누수, 교착상태, 초대규모 분석) 발생 시 `gpt-5.6-sol`까지 라우팅 영역을 확장합니다. 단축 인자 `--model super`로 직관적으로 호출할 수 있습니다.
 
 ### 2.2. Tier Classification Table
 | Router Mode | Classification | Destination Model | Reasoning Effort | Description / Typical Use Cases |
@@ -64,12 +64,12 @@ This document defines the dynamic routing strategy designed to optimize credits 
 
 > [!IMPORTANT]
 > 1. **Default 3-Tier Protection**: Running standard `codex --oss --local-provider=ollama` strictly limits maximum model consumption to **`gpt-5.6-terra`**.
-> 2. **4-Tier Sol Elevation**: Specifying `--model gpt-5.6-sol` at CLI execution time expands the top-tier ceiling to **`gpt-5.6-sol` (`extra_high`)** while retaining low-tier `luna` savings for simple turns.
+> 2. **4-Tier Sol Elevation**: Specifying `--model super` (or `--model gpt-5.6-sol`) at CLI execution time expands the top-tier ceiling to **`gpt-5.6-sol` (`extra_high`)** while retaining low-tier `luna` savings for simple turns.
 
 ## 3. Dynamic Token Harvesting Policy
 * Under `--oss` mode, the client does not send auth headers. The proxy dynamically harvests the active `access_token` from `~/.codex/auth.json` on every request. This ensures that token refreshes handled by the native ChatGPT login flow are transparently captured by the proxy.
 
 ## 4. Local Mock Verification Plan
-* `/v1/models` route exposes `gpt-5.4-mini`, `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, and `4tier`.
+* `/v1/models` route exposes `gpt-5.4-mini`, `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `4tier`, and `super`.
 * `harness.py` inspects incoming request `model` dynamically.
 * `run_harness.sh` starts standard proxy without requiring upfront interactive server prompts.

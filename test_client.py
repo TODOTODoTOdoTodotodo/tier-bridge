@@ -11,9 +11,9 @@ async def run_decision_test():
         ("3-Tier Standard - LUNA:LOW", "명령어 오타 수정 방안", "gpt-5.6-terra"),
         ("3-Tier Standard - TERRA:HIGH", "복잡한 알고리즘과 다중 컴포넌트 구조를 함께 설계해줘", "gpt-5.6-terra"),
         ("3-Tier Standard - TERRA:EXTRA_HIGH (Capped at Terra)", "사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘", "gpt-5.6-terra"),
-        ("4-Tier Sol Router - LUNA:LOW (Low effort savings)", "명령어 오타 수정 방안", "gpt-5.6-sol"),
-        ("4-Tier Sol Router - SOL:EXTRA_HIGH (Extended to Sol)", "사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘", "gpt-5.6-sol"),
-        ("4-Tier Sol Router - SOL:EXTRA_HIGH (Extended to Sol)", "대규모 동시성 분산 락(Lock) 이슈 및 데드락 디버깅 해결 방안 설계해줘", "gpt-5.6-sol"),
+        ("4-Tier Sol Router (--model super) - LUNA:LOW", "명령어 오타 수정 방안", "super"),
+        ("4-Tier Sol Router (--model super) - SOL:EXTRA_HIGH", "사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘", "super"),
+        ("4-Tier Sol Router (--model gpt-5.6-sol) - SOL:EXTRA_HIGH", "대규모 동시성 분산 락(Lock) 이슈 및 데드락 디버깅 해결 방안 설계해줘", "gpt-5.6-sol"),
     ]
 
     async with httpx.AsyncClient(timeout=10.0) as client:
