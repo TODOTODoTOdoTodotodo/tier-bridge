@@ -31,12 +31,19 @@
 - `patch_auth.py` : 로컬 인증 파일 보정 스크립트
 - `Controller/routing_harness.md` : 설계 설명서
 
-## 동작 방식
+## 동작 방식 및 라우팅 모드
 
-1. 클라이언트가 `POST /v1/chat/completions` 또는 `POST /v1/responses`로 요청을 보냅니다.
-2. 프록시가 `gpt-5.6-luna` (low effort)로 질문 난이도를 정밀 분류합니다.
-3. 분류 결과에 따라 모델과 추론 수준을 결정합니다 (최저: `gpt-5.6-luna` low, 상한: `gpt-5.6-terra` extra_high).
-4. 최종 요청을 엔터프라이즈 백엔드로 전달합니다.
+하네스는 별도의 서버 구동 모드 선택 없이 항시 실행되며, **Codex CLI 실행 시점에 전달하는 인자**에 따라 라우팅 범위가 동적으로 결정됩니다.
+
+1. **기존 3-Tier 라우터 (기본 실행)**:
+   - **CLI 명령어**: `codex --oss --local-provider=ollama <명령>`
+   - **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (extra_high)
+   - **특징**: `sol` 모델을 사용하지 않고 `terra` 상한선으로 크레딧을 보존합니다.
+
+2. **4-Tier Sol 라우터 (단축 인자 `--model super` 지정)**:
+   - **CLI 명령어**: `codex --oss --local-provider=ollama --model super <명령>` (또는 `--model gpt-5.6-sol`)
+   - **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (high) ~ 최상위 **`gpt-5.6-sol` (extra_high)**
+   - **특징**: 단순 작업은 `luna`로 비용을 아끼고, 메모리 누수/데드락 등 초고난도 작업 시 `gpt-5.6-sol`까지 라우팅을 확장합니다.
 
 ## 등급 체계
 
@@ -44,18 +51,19 @@
 - `LUNA:MEDIUM`
 - `TERRA:MEDIUM`
 - `TERRA:HIGH`
-- `TERRA:EXTRA_HIGH` (상한 등급)
+- `TERRA:EXTRA_HIGH` (3-Tier 모드 상한 등급)
+- `SOL:EXTRA_HIGH` (4-Tier Sol 모드 최상위 초고출력 등급)
 
 ## 선택 예시
 
-| 요청 예시 | 선택 레벨 | 모델 | 추론 수준 |
-|---|---|---|---|
-| `명령어 오타 수정 방안` | `LUNA:LOW` | `gpt-5.6-luna` | `low` |
-| `파이썬에서 단순 정렬 알고리즘 작성해줘` | `LUNA:LOW` | `gpt-5.6-luna` | `low` |
-| `기존 입력 검증 로직을 리팩토링하고 중복을 줄여줘` | `LUNA:MEDIUM` | `gpt-5.6-luna` | `medium` |
-| `서비스 간 호출 흐름을 정리하고 중간 난이도 아키텍처 수정안을 제시해줘` | `TERRA:MEDIUM` | `gpt-5.6-terra` | `medium` |
-| `복잡한 알고리즘과 다중 컴포넌트 구조를 함께 설계해줘` | `TERRA:HIGH` | `gpt-5.6-terra` | `high` |
-| `사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘` | `TERRA:EXTRA_HIGH` | `gpt-5.6-terra` | `extra_high` |
+| 요청 예시 | 모드 | 선택 레벨 | 최종 모델 | 추론 수준 |
+|---|---|---|---|---|
+| `명령어 오타 수정 방안` | 공통 | `LUNA:LOW` | `gpt-5.6-luna` | `low` |
+| `기존 입력 검증 로직을 리팩토링하고 중복을 줄여줘` | 공통 | `LUNA:MEDIUM` | `gpt-5.6-luna` | `medium` |
+| `서비스 간 호출 흐름을 정리하고 중간 난이도 아키텍처 수정안을 제시해줘` | 공통 | `TERRA:MEDIUM` | `gpt-5.6-terra` | `medium` |
+| `복잡한 알고리즘과 다중 컴포넌트 구조를 함께 설계해줘` | 공통 | `TERRA:HIGH` | `gpt-5.6-terra` | `high` |
+| `사내 데이터 파이프라인의 메모리 누수 탐지 및 최적화` | 3-Tier 기본 | `TERRA:EXTRA_HIGH` | `gpt-5.6-terra` | `extra_high` |
+| `사내 데이터 파이프라인의 메모리 누수 탐지 및 최적화` | 4-Tier `--model super` | `SOL:EXTRA_HIGH` | `gpt-5.6-sol` | `extra_high` |
 
 ## 실행 및 연동 (원스텝 자동화)
 
