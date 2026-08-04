@@ -69,8 +69,8 @@ This document defines the dynamic routing strategy designed to optimize credits 
 ## 3. Dynamic Token Harvesting & Zero-Drop USAGE Policy
 * Under `--oss` mode, the client does not send auth headers. The proxy dynamically harvests the active `access_token` from `~/.codex/auth.json` on every request. This ensures that token refreshes handled by the native ChatGPT login flow are transparently captured by the proxy.
 * **Zero-Drop USAGE Guarantee (누락 없는 USAGE 트래킹 정책)**:
-  1. **`stream_options: {"include_usage": true}` Auto-injection**: Injects usage request options into SSE completion payloads so upstream API events contain explicit usage metadata.
-  2. **Multi-layer SSE Event Parser**: Extracts usage across diverse schemas (`response.usage`, `event.usage`, `prompt_tokens`, `input_tokens`).
+  1. **`/responses` Payload Sanitization**: Strips incompatible parameters like `stream_options` to prevent WAF / 400 Bad Request (`unknown_parameter`) errors from ChatGPT Enterprise backend API.
+  2. **Multi-layer SSE Event Parser**: Extracts usage across diverse SSE response schemas (`response.usage`, `event.usage`, `prompt_tokens`, `input_tokens`).
   3. **Prompt-based Token Estimation Fallback**: If upstream SSE chunks omit usage or return 0 tokens (e.g. during specific tool-call steps), the proxy estimates input token count based on request payload text length, ensuring **100% of DECISION events are logged with valid USAGE records**.
 
 ## 4. Local Mock Verification Plan

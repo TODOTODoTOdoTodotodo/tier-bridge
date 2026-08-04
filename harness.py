@@ -272,13 +272,11 @@ async def route_harness(request: Request):
 
         # /responses API로 향하는 요청의 규격 정화 (변환 여부와 상관없이 항상 적용)
         if not MOCK_MODE or "responses" in incoming_path:
-            # 불필요한 파라미터 삭제 및 필수 stream 주입
-            for k in ["messages", "temperature", "max_tokens"]:
+            # 불필요한 파라미터 삭제 및 필수 stream 주입 (stream_options는 /responses API에서 400 에러를 유발하므로 제거)
+            for k in ["messages", "temperature", "max_tokens", "stream_options"]:
                 if k in final_payload:
                     del final_payload[k]
             final_payload["stream"] = True
-            if "stream_options" not in final_payload:
-                final_payload["stream_options"] = {"include_usage": True}
 
     # 9. 동적 타겟 업스트림 경로 수립
     if MOCK_MODE:
