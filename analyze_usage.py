@@ -75,6 +75,7 @@ def analyze(log_filepath, target_date=None):
     total_tokens = total_in + total_out
     total_loc = sum(r["loc"] for r in records)
     total_cost = sum(r["cost"] for r in records)
+    total_credits = total_cost / 0.20
 
     decision_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
     daily_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
@@ -95,9 +96,9 @@ def analyze(log_filepath, target_date=None):
         daily_stats[dt_key]["loc"] += r["loc"]
         daily_stats[dt_key]["cost"] += r["cost"]
 
-    print("\n=========================================================================================")
+    print("\n====================================================================================================")
     print("📊 [TierBridge 로그 기반 USAGE 사용량 및 소스코드 작성(LOC) 통계 보고서]")
-    print("=========================================================================================")
+    print("====================================================================================================")
     if target_date:
         print(f"🗓️  조회 대상 날짜: {target_date}")
     print(f"📁 대상 로그 파일: {log_filepath}")
@@ -107,20 +108,23 @@ def analyze(log_filepath, target_date=None):
     print(f"🔢 전체 총 소모 토큰 수       : {total_tokens:,} tokens")
     print(f"💻 총 작성/생성 코드 (LOC)    : {total_loc:,} lines")
     print(f"💰 총 추정 소모 비용         : ${total_cost:.6f} USD")
-    print("-----------------------------------------------------------------------------------------")
+    print(f"💳 총 추정 소모 크레딧       : {total_credits:.2f} Credits (1 Credit = $0.20 USD)")
+    print("----------------------------------------------------------------------------------------------------")
 
     print("\n[1] 🎯 등급(Decision)별 소모 분포")
-    print(f"{'Decision 등급':<18} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12}")
-    print("-" * 88)
+    print(f"{'Decision 등급':<18} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12} | {'예상 크레딧 (Credits)':<20}")
+    print("-" * 105)
     for dec, s in sorted(decision_stats.items(), key=lambda x: x[1]["cost"], reverse=True):
-        print(f"{dec:<18} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}")
+        credits = s['cost'] / 0.20
+        print(f"{dec:<18} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
 
     print("\n[2] 🗓️  일자(Daily)별 소모 요약")
-    print(f"{'날짜':<12} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12}")
-    print("-" * 78)
+    print(f"{'날짜':<12} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12} | {'예상 크레딧 (Credits)':<20}")
+    print("-" * 95)
     for date_str, s in sorted(daily_stats.items()):
-        print(f"{date_str:<12} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}")
-    print("=========================================================================================\n")
+        credits = s['cost'] / 0.20
+        print(f"{date_str:<12} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
+    print("====================================================================================================\n")
 
 if __name__ == "__main__":
     args = parse_args()

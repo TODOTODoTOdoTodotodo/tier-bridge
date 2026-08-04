@@ -66,8 +66,12 @@ This document defines the dynamic routing strategy designed to optimize credits 
 > 1. **Default 3-Tier Protection**: Running standard `codex --oss --local-provider=ollama` strictly limits maximum model consumption to **`gpt-5.6-terra`**.
 > 2. **4-Tier Sol Elevation**: Specifying `--model super` (or `--model gpt-5.6-sol`) at CLI execution time expands the top-tier ceiling to **`gpt-5.6-sol` (`extra_high`)** while retaining low-tier `luna` savings for simple turns.
 
-## 3. Dynamic Token Harvesting Policy
+## 3. Dynamic Token Harvesting & Zero-Drop USAGE Policy
 * Under `--oss` mode, the client does not send auth headers. The proxy dynamically harvests the active `access_token` from `~/.codex/auth.json` on every request. This ensures that token refreshes handled by the native ChatGPT login flow are transparently captured by the proxy.
+* **Zero-Drop USAGE Guarantee (누락 없는 USAGE 트래킹 정책)**:
+  1. **`/responses` Payload Sanitization**: Strips incompatible parameters like `stream_options` to prevent WAF / 400 Bad Request (`unknown_parameter`) errors from ChatGPT Enterprise backend API.
+  2. **Multi-layer SSE Event Parser**: Extracts usage across diverse SSE response schemas (`response.usage`, `event.usage`, `prompt_tokens`, `input_tokens`).
+  3. **Prompt-based Token Estimation Fallback**: If upstream SSE chunks omit usage or return 0 tokens (e.g. during specific tool-call steps), the proxy estimates input token count based on request payload text length, ensuring **100% of DECISION events are logged with valid USAGE records**.
 
 ## 4. Local Mock Verification Plan
 * `/v1/models` route exposes `gpt-5.4-mini`, `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `4tier`, and `super`.

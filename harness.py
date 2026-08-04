@@ -172,7 +172,11 @@ async def route_harness(request: Request):
     # CLI 실행 시점에 요청된 모델 식별 (e.g. gpt-5.6-sol, gpt-5.6-terra, high-power)
     requested_model = raw_body.get("model", "")
 
-    # 5. 분류기를 이용한 난이도 및 라우터 선택 (일반 라우터 vs 고출력 Sol 라우터)
+    # 5. 프롬프트 텍스트 및 분류기를 이용한 난이도/라우터 선택
+    user_prompt, _ = Router.extract_user_prompt_and_turn_status(unified_req)
+    if not user_prompt:
+        user_prompt = str(raw_body.get("instructions", "")) + str(raw_body.get("input", ""))
+
     decision, target_model, effort = await Router.classify_request(
         unified_request=unified_req,
         auth_token=enterprise_token,
@@ -268,8 +272,8 @@ async def route_harness(request: Request):
 
         # /responses API로 향하는 요청의 규격 정화 (변환 여부와 상관없이 항상 적용)
         if not MOCK_MODE or "responses" in incoming_path:
-            # 불필요한 파라미터 삭제 및 필수 stream 주입
-            for k in ["messages", "temperature", "max_tokens"]:
+            # 불필요한 파라미터 삭제 및 필수 stream 주입 (stream_options는 /responses API에서 400 에러를 유발하므로 제거)
+            for k in ["messages", "temperature", "max_tokens", "stream_options"]:
                 if k in final_payload:
                     del final_payload[k]
             final_payload["stream"] = True
@@ -286,6 +290,7 @@ async def route_harness(request: Request):
         upstream_url = f"{base_domain}/backend-api/codex/responses"
 
     # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
+    raw_prompt_text = user_prompt
     if unified_req.stream:
         async def stream_generator():
             accumulated_buffer = b""
@@ -317,10 +322,12 @@ async def route_harness(request: Request):
                             async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
                                 yield transpiled_chunk
                             
-                    # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision)
+                    # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적 (Zero-Drop guarantee)
+                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text)
                 except Exception as e:
                     print(f"[Error] Stream routing exception: {e}")
+                    # 스트림 에러 예외 발생 시에도 턴 추적 누락을 방지하기 위해 폴백 추적 실행
+                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text)
                     err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
                     yield f"data: {err_msg}\n\n".encode("utf-8")
 
@@ -333,11 +340,13 @@ async def route_harness(request: Request):
             if res.status_code == 200:
                 # 사용량 추적기 로깅
                 res_data = res.json()
-                usage = res_data.get("usage", {})
-                in_tok = usage.get("prompt_tokens", 0)
-                out_tok = usage.get("completion_tokens", 0)
-                if in_tok or out_tok:
-                    global_tracker.track_request(target_model, decision, in_tok, out_tok)
+                usage = res_data.get("usage", {}) if isinstance(res_data, dict) else {}
+                in_tok = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+                out_tok = usage.get("completion_tokens", usage.get("output_tokens", 0))
+                if not in_tok and not out_tok:
+                    in_tok = max(100, int(len(raw_prompt_text) * 0.35))
+                    out_tok = 150
+                global_tracker.track_request(target_model, decision, in_tok, out_tok)
             return res
         except Exception as e:
             return PlainTextResponse(f"Proxy connection failed: {e}", status_code=500)
