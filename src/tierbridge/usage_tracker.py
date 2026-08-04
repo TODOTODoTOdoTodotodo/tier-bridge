@@ -91,9 +91,10 @@ class UsageTracker:
         
         print(f"[{timestamp_str}] ➔ [USAGE] {decision} ({model}) | input={input_tokens} output={output_tokens} tokens | loc={loc} lines | cost=${round(cost_total, 6)} USD", flush=True)
 
-    def parse_and_track_from_buffer(self, buffer: bytes, model: str, decision: str):
+    def parse_and_track_from_buffer(self, buffer: bytes, model: str, decision: str, prompt_text: str = ""):
         """
         스트리밍 버퍼에 쌓인 SSE 최종 응답 텍스트를 파싱하여 토큰 소모량 및 코드 라인 수(LOC)를 식별 및 수집합니다.
+        업스트림 API에서 usage 정보가 유실된 경우에도 prompt_text 기반 추정 폴백으로 Zero-Drop USAGE를 보장합니다.
         """
         try:
             text = buffer.decode("utf-8", errors="ignore")
@@ -110,21 +111,25 @@ class UsageTracker:
                     continue
                 try:
                     event = json.loads(data)
+                    if not isinstance(event, dict):
+                        continue
                     
-                    # 1. response.completed 또는 response 구조 탐색 (ChatGPT Enterprise)
+                    # 1. 다각도 usage 필드 탐색 (ChatGPT Enterprise / OpenAI responses / Chat Completions 규격 지원)
+                    candidate_usage = None
                     if "response" in event and isinstance(event["response"], dict):
-                        usage = event["response"].get("usage", {})
-                        if usage:
-                            input_tokens = usage.get("input_tokens", 0)
-                            output_tokens = usage.get("output_tokens", 0)
-                            
-                    # 2. 일반 OpenAI chat completions 규격의 usage 필드 탐색
-                    elif "usage" in event and event["usage"]:
-                        usage = event["usage"]
-                        input_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
-                        output_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0))
+                        candidate_usage = event["response"].get("usage")
+                    if not candidate_usage and "usage" in event:
+                        candidate_usage = event["usage"]
                         
-                    # 3. 응답 텍스트 조각 수집 (LOC 파싱용)
+                    if candidate_usage and isinstance(candidate_usage, dict):
+                        in_val = candidate_usage.get("input_tokens") or candidate_usage.get("prompt_tokens") or 0
+                        out_val = candidate_usage.get("output_tokens") or candidate_usage.get("completion_tokens") or 0
+                        if in_val:
+                            input_tokens = in_val
+                        if out_val:
+                            output_tokens = out_val
+                        
+                    # 2. 응답 텍스트 조각 수집 (LOC 파싱 및 출력 토큰 추정용)
                     if event.get("type") == "response.content_part.delta":
                         delta_part = event.get("delta", {})
                         if isinstance(delta_part, dict) and delta_part.get("type") == "text":
@@ -143,7 +148,18 @@ class UsageTracker:
             
             loc = self.extract_code_lines(response_full_text)
             
-            if input_tokens or output_tokens:
-                self.track_request(model, decision, input_tokens, output_tokens, loc)
+            # Zero-Drop Guarantee: API에서 usage가 포함되지 않은 스트림 응답인 경우 프롬프트/답변 길이 기반 폴백 수집
+            if input_tokens == 0 and output_tokens == 0:
+                if prompt_text:
+                    input_tokens = max(100, int(len(prompt_text) * 0.35))
+                else:
+                    input_tokens = 500
+                    
+                if response_full_text:
+                    output_tokens = max(20, int(len(response_full_text) * 0.35))
+                else:
+                    output_tokens = 150
+
+            self.track_request(model, decision, input_tokens, output_tokens, loc)
         except Exception as e:
             print(f"[Warning] Failed to parse usage stats from buffer: {e}")
