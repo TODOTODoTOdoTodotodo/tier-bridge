@@ -172,7 +172,11 @@ async def route_harness(request: Request):
     # CLI 실행 시점에 요청된 모델 식별 (e.g. gpt-5.6-sol, gpt-5.6-terra, high-power)
     requested_model = raw_body.get("model", "")
 
-    # 5. 분류기를 이용한 난이도 및 라우터 선택 (일반 라우터 vs 고출력 Sol 라우터)
+    # 5. 프롬프트 텍스트 및 분류기를 이용한 난이도/라우터 선택
+    user_prompt, _ = Router.extract_user_prompt_and_turn_status(unified_req)
+    if not user_prompt:
+        user_prompt = str(raw_body.get("instructions", "")) + str(raw_body.get("input", ""))
+
     decision, target_model, effort = await Router.classify_request(
         unified_request=unified_req,
         auth_token=enterprise_token,
@@ -288,7 +292,7 @@ async def route_harness(request: Request):
         upstream_url = f"{base_domain}/backend-api/codex/responses"
 
     # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
-    raw_prompt_text = user_prompt or (str(raw_body.get("instructions", "")) + str(raw_body.get("input", "")))
+    raw_prompt_text = user_prompt
     if unified_req.stream:
         async def stream_generator():
             accumulated_buffer = b""
