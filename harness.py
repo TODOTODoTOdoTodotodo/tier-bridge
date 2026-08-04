@@ -173,7 +173,7 @@ async def route_harness(request: Request):
     requested_model = raw_body.get("model", "")
 
     # 5. 프롬프트 텍스트 및 분류기를 이용한 난이도/라우터 선택
-    user_prompt, _ = Router.extract_user_prompt_and_turn_status(unified_req)
+    user_prompt, is_new_user_turn, substep_prompt = Router.extract_user_prompt_and_turn_status(unified_req)
     if not user_prompt:
         user_prompt = str(raw_body.get("instructions", "")) + str(raw_body.get("input", ""))
 
@@ -290,7 +290,7 @@ async def route_harness(request: Request):
         upstream_url = f"{base_domain}/backend-api/codex/responses"
 
     # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
-    raw_prompt_text = user_prompt
+    raw_prompt_text = user_prompt if is_new_user_turn else (substep_prompt or user_prompt)
     if unified_req.stream:
         async def stream_generator():
             accumulated_buffer = b""
