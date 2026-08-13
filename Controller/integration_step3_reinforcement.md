@@ -1,6 +1,6 @@
 # 📑 Step 3: 비용/난이도 기반 기억 가중치 재강화 엔진 (Cost-Weighted Reinforcement)
 
-이 문서는 TierBridge 하네스에서 많은 크레딧과 달러 비용(`cost_usd`)이 투입되어 해결된 고난도 대화/디버깅 턴을 감지하여, `sub-memory-bootstrap` (Giyeok) 연관 그래프(`networkx`) 및 임베딩 랭킹 상위로 강제 고정하는 **Step 3 구현 작업지시서**입니다.
+이 문서는 TierBridge 하네스에서 많은 크레딧과 달러 비용(`cost_usd`)이 투입되어 해결된 고난도 대화/디버깅 턴을 감지하여, `sub-memory-bootstrap` (Giyeok) 연관 그래프(`networkx`) 및 임베딩 랭킹 상위로 Direct Module을 통해 강제 고정하는 **Step 3 구현 작업지시서**입니다.
 
 ---
 
@@ -24,10 +24,10 @@
                          [MemoryReinforcer.calculate_score()]
                                     │
                                     ▼
-                  [HTTP POST /mcp - reinforce_memory]
+         [Direct In-process Python Import: MemoryService.reinforce_memory()]
                                     │
                                     ▼
-               [Update networkx edge weight & vec rank]
+               [Update networkx edge weight & vec rank (<5ms)]
 ```
 
 ---
@@ -37,14 +37,12 @@
 ### 3.1 신규 모듈 생성: `src/tierbridge/memory_reinforcer.py`
 ```python
 import asyncio
-import httpx
 import logging
 from typing import Dict, Any
 
 logger = logging.getLogger("TierBridge.MemoryReinforcer")
 
 class MemoryReinforcer:
-    MCP_ENDPOINT = "http://127.0.0.1:8766/mcp"
     COST_THRESHOLD_USD = 0.05  # $0.05 이상 소모 턴 시 강화 트리거
 
     @classmethod
@@ -62,27 +60,24 @@ class MemoryReinforcer:
             return
 
         weight = cls.compute_reinforce_weight(cost_usd, decision)
-
-        payload = {
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {
-                "name": "reinforce_memory",
-                "arguments": {
-                    "memory_tag": session_id,
-                    "strength_delta": weight,
-                    "reason": f"High value turn solved via {decision} with ${cost_usd:.4f} USD"
-                }
-            },
-            "id": 1
-        }
+        reason_msg = f"High value turn solved via {decision} with ${cost_usd:.4f} USD"
 
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                await client.post(cls.MCP_ENDPOINT, json=payload)
-                logger.info(f"Memory Reinforcement Triggered: [{session_id}] Weight={weight}")
+            from sub_memory.service import MemoryService
+            service = MemoryService()
+            
+            # Direct In-process Reinforcement (<5ms)
+            await asyncio.to_thread(
+                service.reinforce_memory,
+                memory_tag=session_id,
+                strength_delta=weight,
+                reason=reason_msg
+            )
+            logger.info(f"Direct Memory Reinforcement Success: [{session_id}] Weight={weight}")
+        except ImportError:
+            logger.warning("sub_memory module not found for reinforcement.")
         except Exception as e:
-            logger.warning(f"Memory Reinforcement Post Failed: {e}")
+            logger.warning(f"Memory Reinforcement Direct Call Failed: {e}")
 ```
 
 ### 3.2 `harness.py` 연동 지점
