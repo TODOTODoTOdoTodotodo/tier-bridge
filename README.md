@@ -2,220 +2,169 @@
 
 이 저장소는 Codex/ChatGPT 요청을 로컬 프록시로 받아서, 질문 난이도에 따라 모델과 추론 수준을 분류해 전달하는 하네스입니다.
 
-## 목적
+---
 
-- 단순한 작업은 낮은 비용 경로로 보냅니다.
-- 중간 난이도 작업은 `LUNA:MEDIUM` 또는 `TERRA:MEDIUM`으로 구분합니다.
-- 고난도 작업만 상위 추론 단계로 보냅니다.
-- 로컬 인증 정보는 `~/.codex/auth.json`에서 자동으로 읽습니다.
+## 💡 개요 및 목적
 
-## 핵심 강점 및 특징 (Key Strengths)
+* 단순한 작업(명령어 안내, 단순 오타 수정, 파일 읽기/조회 스텝)은 저비용 저추론 모델(`LUNA:LOW`)로 보냅니다.
+* 표준적인 비즈니스 로직 단위 구현 및 리팩토링은 `LUNA:MEDIUM`으로 처리합니다.
+* 중간 이상의 복잡도 및 아키텍처 연동 작업은 `TERRA:MEDIUM` / `TERRA:HIGH` 단계로 라우팅합니다.
+* 초대규모 분석, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 최상위 `SOL:EXTRA_HIGH` (`gpt-5.6-sol`)로 승격합니다.
+* 로컬 인증 정보는 `~/.codex/auth.json`에서 자동으로 읽어 투명하게 엔터프라이즈 JWT 토큰을 주입합니다.
+
+---
+
+## 🔥 핵심 강점 및 특징 (Key Features & Strengths)
 
 - **Zero-Code Agent Modification (에이전트 무손상 구동)**:
-  * 에이전트 CLI 내부 코드나 설정을 전혀 수정할 필요가 없습니다. 
-  * 환경 변수 가로채기(`OPENAI_BASE_URL` 등)를 통해 투명하게 작동하므로, 에이전트 고유의 프롬프트 흐름이나 툴 사용(MCP) 제어 로직을 100% 무손상 상태로 이식합니다.
+  - 에이전트 CLI 내부 코드나 설정을 전혀 수정할 필요가 없습니다. 
+  - 환경 변수 가로채기(`OPENAI_BASE_URL` 등)를 통해 투명하게 작동하므로, 에이전트 고유의 프롬프트 흐름이나 툴 사용(MCP) 제어 로직을 100% 무손상 상태로 이식합니다.
+- **Sub-step Cost Auto-scaling (서브 스텝 단위 비용 자동 강하)**:
+  - 사용자 턴 내에서 에이전트가 툴(Tool Call)을 실행하고 코드를 편집/조회하는 릴레이 스텝(Turn 2+) 시 최신 서브 작업 텍스트(`substep_prompt`)를 정밀 추출하여 난이도를 재판정합니다.
+  - 가벼운 서브 작업(파일 수정, 조회, 단순 스크립트 실행) 단계는 자동으로 **`LUNA:LOW`**로 강하되어 **추가 크레딧 절약율 30~50%를 제공**합니다.
 - **Seamless Session Continuation (세션 컨텍스트 완벽 보존)**:
-  * 하네스가 매 스텝마다 실시간으로 모델 ID를 교체(예: `gpt-5.4-mini` ➔ `gpt-5.6-terra`)하여 릴레이하더라도, 백엔드 레벨에서 동일한 대화 세션 ID(`conversation_id`)와 이전 누적 대화 기록이 고스란히 전송됩니다.
-  * 이로 인해 모델 변경으로 인한 기억 단절이나 컨텍스트가 꼬이는 부작용 없이, AI가 앞선 스텝에서 수행한 작업 흐름을 완벽히 이해하고 대화를 이어갑니다.
-- **동적 비용 효율성 극대화**:
-  * 컨텍스트를 안전하게 보존하면서 단순 질문은 저비용(`MINI`)으로, 복잡한 설계/디버깅 단계는 고성능(`TERRA`) 모델로 실시간 오토 스케일링함으로써 극대화된 크레딧 보존율을 제공합니다.
+  - 하네스가 매 스텝마다 실시간으로 모델 ID를 교체(예: `gpt-5.6-luna` ➔ `gpt-5.6-terra`)하여 릴레이하더라도, 백엔드 레벨에서 동일한 대화 세션 ID(`conversation_id`)와 이전 누적 대화 기록이 완벽하게 보존됩니다.
+- **Zero-Drop USAGE & Session ID (`[sid]`) Tracking**:
+  - 업스트림 backend SSE 파서 강화 및 Prompt-based Fallback Token Estimator를 적용하여 backend 사용량 정보 유실 시에도 ** usage 기록 누락 0건 (Zero-Drop)**을 보장합니다.
+  - 로그 라인마다 세션 ID 태그(`[sid: <session_id>]`)를 기록하여 대화 세션별 정밀 크레딧 오디팅이 가능합니다.
+- **Kibana-Style Interactive Web Analytics Dashboard (`./analyze_usage.py --html`)**:
+  - `analyze_usage.py` 실행 시 CLI 리치 표 보고서뿐만 아니라, 반응형 그래프(Chart.js)와 **동적 월 선택 Dropdown UI**가 포함된 **Kibana 다크테마 시각화 웹 대시보드 (`usage_dashboard.html`)**를 자동 생성하여 브라우저에 엽니다.
 
-## 구성
+---
 
-- `harness.py` : 프록시 엔트리포인트 (요청 수신 및 응답 라우팅 릴레이)
-- `src/tierbridge/` : 라우팅 및 연동 비즈니스 로직 패키지
-  - `router.py` : 질문 난이도 평가(`gpt-5.6-luna` low effort 분류기 연동) 및 모델/추론 등급 결정
-  - `stream_transpiler.py` : 이종 벤더 간의 실시간 스트리밍 포맷 트랜스파일러
-  - `usage_tracker.py` : 실시간 스트림 파싱 기반 세션 토큰 소모 통계 및 비용 추적기
-- `test_client.py` : 라우팅 확인용 테스트 클라이언트
-- `patch_auth.py` : 로컬 인증 파일 보정 스크립트
-- `Controller/routing_harness.md` : 설계 설명서
+## 🛠️ 시스템 구조 (System Architecture)
 
-## 동작 방식 및 라우팅 모드
+```
+[Codex Enterprise CLI]
+ (e.g. codex --oss --local-provider=ollama [--model super])
+             │
+             │ 1. GET /v1/models (Health check & Model discovery)
+             │ 2. POST /v1/chat/completions or /v1/responses (Payload contains 'model')
+             ▼
+┌─────────────────────────────────────────────────────────┐
+│              LLM Routing Harness Proxy                  │
+│                    (Port: 18080)                        │
+│                                                         │
+│ * Inspects incoming request 'model':                    │
+│   - '--model super' / 'gpt-5.6-sol' / '4tier'           │
+│     ➔ Activates 4-Tier Sol Router (LUNA ➔ TERRA ➔ SOL)  │
+│   - Default ('gpt-5.4', 'gpt-5.6-terra', etc.)         │
+│     ➔ Activates Standard 3-Tier Router (LUNA ➔ TERRA)   │
+│ * Classifies query via gpt-5.6-luna (low effort).       │
+│ * Swaps target model & reasoning_effort dynamically.    │
+│ * Injects Authorization: Bearer <access_token> header.  │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+             ┌─────────────┼──────────────┬──────────────┐
+             ▼             ▼              ▼              ▼
+       [LUNA:LOW/MID] [TERRA:MEDIUM]  [TERRA:HIGH] [SOL:EXTRA_HIGH]
+             │             │              │              │
+       gpt-5.6-luna   gpt-5.6-terra  gpt-5.6-terra   gpt-5.6-sol
+         (low/med)       (medium)        (high)     (extra_high: 4-Tier만)
+             └─────────────┴──────────────┴──────────────┘
+                           │
+                           ▼ Forward with Injected JWT Auth Header
+                [Codex Enterprise API]
+```
 
-하네스는 별도의 서버 구동 모드 선택 없이 항시 실행되며, **Codex CLI 실행 시점에 전달하는 인자**에 따라 라우팅 범위가 동적으로 결정됩니다.
+---
 
-1. **기존 3-Tier 라우터 (기본 실행)**:
-   - **CLI 명령어**: `codex --oss --local-provider=ollama <명령>`
-   - **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (extra_high)
-   - **특징**: `sol` 모델을 사용하지 않고 `terra` 상한선으로 크레딧을 보존합니다.
+## 🎯 CLI 실행 시점 동적 라우터 선택 (3-Tier vs 4-Tier Sol Router)
 
-2. **4-Tier Sol 라우터 (단축 인자 `--model super` 지정)**:
-   - **CLI 명령어**: `codex --oss --local-provider=ollama --model super <명령>` (또는 `--model gpt-5.6-sol`)
-   - **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (high) ~ 최상위 **`gpt-5.6-sol` (extra_high)**
-   - **특징**: 단순 작업은 `luna`로 비용을 아끼고, 메모리 누수/데드락 등 초고난도 작업 시 `gpt-5.6-sol`까지 라우팅을 확장합니다.
+하네스 서버는 별도 프롬프트나 서버 모드 전환 없이 항시 백그라운드에서 실행되며, **Codex CLI 실행 명령어의 `--model` 인자**에 따라 라우터 동작 방식이 동적으로 선택됩니다.
 
-## 등급 체계
+1. **기존 3-Tier 라우터 (Standard 3-Tier Router - 기본 실행)**:
+   * **CLI 실행 명령**: `codex --oss --local-provider=ollama`
+   * **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (extra_high)
+   * **특징**: `sol` 모델을 소비하지 않고 `terra` 계열 상한선으로 캡핑하여 크레딧을 보존합니다.
 
-- `LUNA:LOW` (최저 기본 / 폴백 등급)
-- `LUNA:MEDIUM`
-- `TERRA:MEDIUM`
-- `TERRA:HIGH`
-- `TERRA:EXTRA_HIGH` (3-Tier 모드 상한 등급)
-- `SOL:EXTRA_HIGH` (4-Tier Sol 모드 최상위 초고출력 등급)
+2. **4-Tier Sol 라우터 (4-Tier Sol Router - `--model super` 단축 인자)**:
+   * **CLI 실행 명령**: `codex --oss --local-provider=ollama --model super` *(또는 `--model gpt-5.6-sol`)*
+   * **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (high) ~ 최상위 **`gpt-5.6-sol` (extra_high / API: `xhigh`)**
+   * **특징**: 저난도 스텝은 `luna`로 크레딧을 절약하고, 메모리 누수/데드락 디버깅 등 최상위 고난도 작업 시 `gpt-5.6-sol`까지 라우팅 영역을 확장합니다.
 
-## 선택 예시
+---
 
-| 요청 예시 | 모드 | 선택 레벨 | 최종 모델 | 추론 수준 |
-|---|---|---|---|---|
-| `명령어 오타 수정 방안` | 공통 | `LUNA:LOW` | `gpt-5.6-luna` | `low` |
-| `기존 입력 검증 로직을 리팩토링하고 중복을 줄여줘` | 공통 | `LUNA:MEDIUM` | `gpt-5.6-luna` | `medium` |
-| `서비스 간 호출 흐름을 정리하고 중간 난이도 아키텍처 수정안을 제시해줘` | 공통 | `TERRA:MEDIUM` | `gpt-5.6-terra` | `medium` |
-| `복잡한 알고리즘과 다중 컴포넌트 구조를 함께 설계해줘` | 공통 | `TERRA:HIGH` | `gpt-5.6-terra` | `high` |
-| `사내 데이터 파이프라인의 메모리 누수 탐지 및 최적화` | 3-Tier 기본 | `TERRA:EXTRA_HIGH` | `gpt-5.6-terra` | `extra_high` |
-| `사내 데이터 파이프라인의 메모리 누수 탐지 및 최적화` | 4-Tier `--model super` | `SOL:EXTRA_HIGH` | `gpt-5.6-sol` | `extra_high` |
+## 📊 등급 체계 및 분류 기준 (Tier Classification)
 
-## 실행 및 연동 (원스텝 자동화)
+| Router Mode | Classification | Destination Model | Reasoning Effort | Description / Typical Use Cases |
+| :--- | :--- | :--- | :--- | :--- |
+| **Common (1/4 & 2/4)** | **LUNA:LOW** | `gpt-5.6-luna` | `"low"` | Simple grammar, minor typos, file read/edit sub-steps |
+| **Common (1/4 & 2/4)** | **LUNA:MEDIUM** | `gpt-5.6-luna` | `"medium"` | Standard business logic, single-file refactoring |
+| **Common (2/4 & 3/4)** | **TERRA:MEDIUM** | `gpt-5.6-terra` | `"medium"` | Medium complexity, multi-component refactoring |
+| **Common (2/4 & 3/4)** | **TERRA:HIGH** | `gpt-5.6-terra` | `"high"` | Complex algorithms, multi-component architecture |
+| **3-Tier Max** | **TERRA:EXTRA_HIGH** | `gpt-5.6-terra` | `"extra_high"` | Deep debugging & tuning (3-Tier Mode Max Capped) |
+| **4-Tier Max** | **SOL:EXTRA_HIGH** | `gpt-5.6-sol` | `"extra_high"` | Deadlock debugging, memory leak detection (4-Tier Sol Max) |
 
-포트 충돌 해제, 프록시 구동, 로컬 인증 패치, 그리고 **환경 변수 자동 주입**까지 단 하나의 스크립트로 자동으로 해결할 수 있습니다. (기본 구동 시 자가 진단 테스트는 비활성화되어 쾌속 가동됩니다.)
+---
+
+## 🚀 실행 및 연동 (원스텝 자동화)
+
+포트 충돌 해제, 백그라운드 프록시 가동, 인증 패치, 환경 변수 주입까지 단 하나의 스크립트로 처리됩니다:
 
 ```bash
 source run_harness.sh
 ```
 
-- 진단 자가 테스트를 포함하여 구동하려면 `--test` 옵션을 사용하거나 `RUN_TESTS=true`를 전달합니다:
-  ```bash
-  source run_harness.sh --test
-  ```
-
-`source` 명령어를 사용해 실행하면 실행 완료 시 환경 변수 4개(`OPENAI_BASE_URL`, `CODEX_API_BASE`, `OLLAMA_HOST`, `CODEX_OSS_PORT`)가 현재 터미널 세션에 자동으로 즉시 주입됩니다. 수동 복사 필요 없이 즉시 `codex --oss --local-provider=ollama`를 입력하고 뒤에 원하는 명령(예: `chat`, `explain` 등)을 붙여서 실행하시면 됩니다.
-
-### 수동 실행 (상세)
-
-만약 수동으로 한 단계씩 제어하고 싶다면 아래 명령어를 사용합니다.
-
-#### 1. 서버 개별 실행
-```bash
-./.venv/bin/python -m uvicorn harness:app --host 0.0.0.0 --port 18080 --reload
-```
-
-#### 2. 등급 판정 자가 테스트
-```bash
-./.venv/bin/python test_client.py decision
-```
-
-#### 3. 일반 스트리밍 릴레이 테스트
-```bash
-./.venv/bin/python test_client.py
-```
-
-## 실시간 프록시 로그 확인 방법
-
-원스텝 가동 스크립트(`source run_harness.sh`)를 실행하면 서버의 세부 로그가 백그라운드로 전환되어 `harness.log`에 실시간으로 기록됩니다. (HTTP 액세스 잡음 로그는 제거되어 핵심 라우터 로그만 깔끔하게 표시됩니다.)
-등급 판정 결과와 원격 실서버 통신 로그를 모니터링하려면 터미널 창을 하나 더 열어 아래 명령어를 실행하십시오:
+`source` 명령어 실행 시 환경 변수 4개(`OPENAI_BASE_URL`, `CODEX_API_BASE`, `OLLAMA_HOST`, `CODEX_OSS_PORT`)가 현재 터미널 세션에 자동으로 즉시 주입됩니다. 수동 설정 필요 없이 즉시 아래 명령어로 실행하실 수 있습니다.
 
 ```bash
-tail -f harness.log
+# 기본 3-Tier 모드 가동
+codex --oss --local-provider=ollama chat
+
+# 4-Tier Sol 라우팅 모드 가동 (단축 인자 --model super 사용)
+codex --oss --local-provider=ollama --model super chat
 ```
 
-*(여기서 실시간으로 결정되는 `➔ [DECISION]` 등급과 `➔ [USAGE]` 소모량이 타임스탬프와 함께 출력됩니다.)*
+---
 
-## 검증 메모
+## 📈 토큰/크레딧 분석 및 Kibana 시각화 웹 대시보드 사용법 (`analyze_usage.py`)
 
-- 분류 요청은 `gpt-5.6-luna` (low effort)를 사용합니다.
-- `decision`은 서버 로그의 `➔ [DECISION]` 출력으로 확인하는 것이 가장 정확합니다.
-- production 경로와 mock 경로 모두 등급별 `reasoning`을 반영합니다.
+`harness.log`에 실시간 수집되는 `➔ [DECISION]` 및 `➔ [USAGE]` 이벤트 기반으로 크레딧, 토큰, LOC 및 프롬프트 인사이트를 정밀 파싱합니다.
 
-## 토큰 소모량 및 기간별 통계 확인 방법
-
-Codex CLI의 `status` 명령은 로컬 Ollama 모드에서 크레딧 정보를 표시하지 않습니다.
-대신 프록시가 직접 업스트림 응답에서 토큰 소모량을 파싱하여 세션 및 로그 단위로 누적합니다.
-
-**1. 실시간 로그 확인** (`harness.log`에서 요청마다 타임스탬프와 함께 출력):
-```
-[2026-07-27 11:09:14] ➔ [DECISION] LUNA:LOW | "파이썬에서 단순 정렬 알고리즘 작성해줘"
-[2026-07-27 11:09:14] ➔ [USAGE] LUNA:LOW (gpt-5.6-luna) | input=21 output=370 tokens | loc=19 lines | cost=$0.001131 USD
-```
-
-**2. 로그 기반 기간별/일자별 통계 분석 스크립트 실행 (토큰 및 생성 코드 LOC 분석)**:
+### 1. CLI 요약 리포터 실행
 ```bash
-# 전체 기간 소모량, 등급별 분포 및 총 작성 코드 라인 수(LOC) 분석
+# 전체 누적 통계, 월별/일자별/세션별 및 Top 프롬프트 인사이트 조회
 ./analyze_usage.py
 
-# 특정 날짜(YYYY-MM-DD) 소모량만 필터링하여 조회
-./analyze_usage.py --date 2026-07-27
+# 특정 월(YYYY-MM) 단위 필터링 조회
+./analyze_usage.py --month 2026-08
+
+# 특정 날짜(YYYY-MM-DD) 단위 필터링 조회
+./analyze_usage.py --date 2026-08-04
+
+# 특정 세션 ID 필터링 조회
+./analyze_usage.py --session 5eb61a1e
 ```
 
-**3. API 세션 전체 누적 사용량 조회** (별도 터미널에서):
+### 2. Kibana 스타일 동적 웹 대시보드 열기 (`--html` / `-w`)
 ```bash
-curl http://localhost:18080/usage
+./analyze_usage.py --html
 ```
+명령 실행 시 Kibana 풍의 다크테마 웹페이지 (**`usage_dashboard.html`**)가 자동 생성되어 브라우저에 엽니다.
 
-응답 예시:
-```json
-{
-  "session_summary": {
-    "total_requests": 5,
-    "total_input_tokens": 4210,
-    "total_output_tokens": 1830,
-    "total_tokens": 6040,
-    "total_loc": 142,
-    "total_cost_usd": 0.00625
-  },
-  "per_request_history": [
-    {
-      "timestamp": "2026-07-27T11:09:14.123456",
-      "model": "gpt-5.6-luna",
-      "decision": "LUNA:LOW",
-      "input_tokens": 21,
-      "output_tokens": 370,
-      "loc": 19,
-      "cost_usd": 0.001131
-    }
-  ]
-}
-```
+* **동적 월 선택 Dropdown UI**: 상단 드롭다운에서 월(`전체 월`, `2026-08`, `2026-07` 등)을 전환하면 KPI 카드, 일자별 추이 차트, 등급 분포 파이 차트, 프롬프트 인사이트 표가 실시간으로 동적 필터링됩니다.
+* **KPI Metric Cards**: Total Credits (1 Credit = $0.20 USD), Estimated Value ($), Total Tokens, Unique Sessions, LUNA Auto-scaling Savings ($ / Credits).
+* **Top Credit Consuming Prompts**: 가장 많은 크레딧을 소모한 프롬프트/릴레이 턴 TOP 15 목록 및 등급 배치 인사이트.
 
+---
 
+## 📁 프로젝트 주요 구성 (Directory & Files)
 
-## 주의사항
+- `harness.py` : 하네스 프록시 메인 서버 (FastAPI/Uvicorn, 모델 스왑 & 엔터프라이즈 JWT 헤더 주입)
+- `analyze_usage.py` : 로그 파싱, 크레딧 집계, 월별/세션별 분석 및 Kibana 웹 대시보드 리포터
+- `run_harness.sh` : 프록시 원스텝 가동 및 터미널 환경변수 자동 주입 스크립트
+- `src/tierbridge/` :
+  - `router.py` : `substep_prompt` extraction, 3-Tier / 4-Tier Sol classification & dynamic effort mapping
+  - `usage_tracker.py` : Zero-Drop token parser, LOC extractor & `[sid]` session logging
+  - `stream_transpiler.py` : SSE 스트림 실시간 트랜스파일러
+- `Controller/` :
+  - `routing_harness.md` : 동적 라우팅 알고리즘 & 하네스 설계 명세 문서 (Documentation First)
+  - `analyze_usage.md` : 사용량 통계, 크레딧 산출, Kibana 대시보드 & 오디팅 가이드 문서 (Documentation First)
 
-- 이 저장소는 외부 MCP나 외부 스킬 연결을 전제로 하지 않습니다.
-- 실제 엔터프라이즈 인증은 로컬 `auth.json`에 의존합니다.
-- 비용 민감도가 높으므로, 분류 기준은 보수적으로 유지하는 편이 좋습니다.
+---
 
-## 🛠️ 커스터마이징 가이드 (Customization)
+## 🛡️ License & Rules Compliance
 
-사용자마다 라우팅 민감도나 추론 깊이를 조정하고 싶을 경우, **`src/tierbridge/router.py`** 내의 아래 네 가지 포인트를 직접 수정하여 커스텀할 수 있습니다.
-
-### 1. 분류기용 기본 모델 조정
-분류 연산을 더 저렴하게 처리하거나 더 똑똑하게 판정하고 싶을 때 사용합니다.
-* **수정 위치**: `src/tierbridge/router.py` -> `Router.classify_request` 함수 내부 `payload["model"]` (기본값: `"gpt-5.4-mini"`)
-
-### 2. 라우팅 등급 분류 판정 프롬프트 (인스트럭션) 수정
-분류 기준의 임계치(Threshold)를 수정해 특정 키워드가 들어왔을 때 등급 배치를 다르게 유도합니다.
-* **수정 위치**: `src/tierbridge/router.py` -> `Router.classify_request` 함수 내부 `payload["instructions"]` 문자열
-* **팁**: 예산을 절약하려면 "기본적으로 LUNA 등급 이하로 분류하고, 복잡한 알고리즘이나 최적화 요구 시에만 TERRA 등급을 준다"와 같은 보수적인 명령어를 강화해 줍니다.
-
-### 3. 실제 물리 모델 매핑 수정
-분류기가 도출한 판정 등급(`MINI`, `LUNA`, `TERRA`)에 따라 원격 실서버로 보낼 실제 물리 모델 ID를 맵핑합니다.
-* **수정 위치**: `src/tierbridge/router.py` -> `Router.classify_request` 함수 내부의 모델 스왑 조건문 분기:
-  ```python
-  if "MINI" in verdict:
-      return "MINI", "gpt-5.4-mini", "low"
-  elif "LUNA:LOW" in verdict:
-      return "LUNA:LOW", "gpt-5.6-luna", "low"
-  # ... LUNA / TERRA 등급에 따른 물리 모델 ID 할당 분기
-  ```
-
-### 4. 추론 강도 (Reasoning Effort) 매핑 변경
-각 등급에 할당될 실질적인 추론 시간/토큰 한도를 조정합니다.
-* **수정 위치**: `src/tierbridge/router.py` -> `Router.classify_request` 함수 내부의 반환값 튜플의 3번째 인자 (`reasoning_effort` 매핑 값):
-  *(예: LUNA 등급의 추론 강도를 더 높이거나 낮추고 싶을 때, 해당 분기의 3번째 인자 값을 `"low"`, `"medium"`, `"high"`, `"max"` 중 원하는 레벨로 변경합니다.)*
-
-## 💡 동적 비용 최적화 메커니즘 (Dynamic Cost Optimization)
-
-이 프록시 하네스는 사용자의 턴(Turn) 단위가 아닌, **에이전트가 내부적으로 쪼개어 날리는 스텝(Step) 단위의 개별 API 호출마다 실시간으로 등급을 판정**하여 비용을 절감합니다.
-
-### 겉만 고난도인 단순 작업의 비용 절감 기전 예시
-만약 사용자가 첫 질문에 겉으로만 거창한 키워드를 던졌으나, 실제 분석 결과 단순한 오타/세미콜론 누락 등의 가벼운 작업으로 판명될 경우 하네스는 다음과 같이 똑똑하게 대처합니다:
-
-1. **1단계: 첫 질문 시점 (고성능 모델 배치)**
-   * **사용자 질문**: *"대규모 동시성 분산 락(Lock) 이슈 해결 및 코드 오타 수정해줘"*
-   * **하네스의 동작**: 텍스트 프롬프트의 겉모양을 판정하여 안전을 위해 상위 모델인 **`TERRA:MAX` (`gpt-5.6-terra`, `max`)**를 배치합니다. (이 단계에서는 분석 전이므로 불가피하게 고성능 브레인을 빌려 씁니다.)
-2. **2단계: 에이전트의 코드 분석 단계 (상위 모델 유지)**
-   * **에이전트의 분석**: `TERRA` 모델의 고추론 능력을 빌려 프로젝트 코드를 훑어본 후, 이 분산 락 에러의 원인이 단순히 config 설정 파일 내 타임아웃 초단위 수치 오타(`3000`초 ➔ `3`초) 때문임을 완벽히 파악합니다.
-3. **3단계: 실제 오타 수정 및 빌드 단계 (저비용 단순 태스크로 자동 강하 🚀)**
-   * **에이전트의 요청**: *"config.properties 파일의 `lock.timeout=3000`을 `lock.timeout=3`으로 수정해주고 빌드 명령을 알려줘."*
-   * **하네스의 동작**: 수정 및 빌드를 제안하는 새로운 구체적인 스텝 텍스트 프롬프트를 다시 떼어내어 난이도를 즉시 재판정합니다.
-   * **결과**: 가벼운 파일 교체 및 단순 명령어 조회이므로 즉시 **`MINI` (`gpt-5.4-mini`, `low`)** 등급으로 강하 분류하여 3단계 이후의 수많은 테스트 및 수정 과정에 소모될 막대한 토큰 비용을 최소화합니다.
+- Documentation First Policy 준수: 도메인 로직 변경 시 `Controller/*.md` 문서를 선제적으로 갱신합니다.
+- ChatGPT Enterprise API 표준 준수: Incompatible parameter (`stream_options`) 자동 제거 및 JWT Token transparency 보장.
