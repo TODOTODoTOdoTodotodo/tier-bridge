@@ -156,6 +156,72 @@ async def switch_model_version(request: Request):
         version_id = "latest"
     return HealingEngine.switch_version(version_id)
 
+@app.get("/v1/dashboard/stats")
+async def get_dashboard_stats():
+    """ 대시보드 3초 라이브 자동 갱신(Live Auto-Sync)용 최신 집계 수치 및 힐링 데이터 반환 """
+    log_file = "harness.log"
+    records = []
+    prompt_history = []
+    
+    if os.path.exists(log_file):
+        usage_pattern = re.compile(
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE\] (?P<decision>[^\s]+) \((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
+        )
+        decision_pattern = re.compile(
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
+        )
+        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                d_match = decision_pattern.search(line)
+                if d_match:
+                    prompt_history.append({
+                        "timestamp": d_match.group("timestamp"),
+                        "sid": d_match.group("sid") or "N/A",
+                        "decision": d_match.group("decision"),
+                        "prompt": d_match.group("prompt")
+                    })
+                    continue
+                u_match = usage_pattern.search(line)
+                if u_match:
+                    ts_str = u_match.group("timestamp")
+                    sid_str = u_match.group("sid") or "N/A"
+                    date_key = "Unknown Date"
+                    month_key = "Unknown Month"
+                    if ts_str:
+                        try:
+                            dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                            date_key = dt.strftime("%Y-%m-%d")
+                            month_key = dt.strftime("%Y-%m")
+                        except ValueError:
+                            pass
+                    in_tok = int(u_match.group("in_tok"))
+                    out_tok = int(u_match.group("out_tok"))
+                    loc_val = int(u_match.group("loc")) if u_match.group("loc") else 0
+                    cost = float(u_match.group("cost"))
+                    associated_prompt = prompt_history[-1]["prompt"] if prompt_history else ""
+                    if prompt_history and sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
+                        sid_str = prompt_history[-1]["sid"]
+
+                    records.append({
+                        "date": date_key,
+                        "month": month_key,
+                        "session_id": sid_str,
+                        "decision": u_match.group("decision"),
+                        "model": u_match.group("model"),
+                        "prompt": associated_prompt,
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "total_tokens": in_tok + out_tok,
+                        "loc": loc_val,
+                        "cost": cost
+                    })
+
+    return {
+        "records": records,
+        "healing_status": HealingEngine.get_healing_status()
+    }
+
 # ==========================================
 # 핵심 라우팅 하네스 엔드포인트
 # ==========================================

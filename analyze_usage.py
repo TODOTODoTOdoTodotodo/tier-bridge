@@ -79,7 +79,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TierBridge Kibana AI Usage Analytics Dashboard</title>
+    <title>TierBridge Kibana AI Real-time Live Analytics Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -103,11 +103,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 </h1>
             </div>
             <p class="text-slate-400 text-sm pl-12">
-                Codex Enterprise 토큰 소모량, 힐링팩터 모델 핫패치 & 버전 관리 대시보드
+                Codex Enterprise 토큰 소모량, 힐링팩터 모델 핫패치 & 3초 실시간 라이브 대시보드
             </p>
         </div>
         
-        <!-- Controls: Dynamic Month Selector, Model Version Selector & Healing Badge -->
+        <!-- Controls: Dynamic Month Selector, Model Version Selector & Live Indicator -->
         <div class="mt-4 md:mt-0 flex flex-wrap items-center gap-3">
             <!-- Dynamic Month Dropdown Selector -->
             <div class="flex items-center gap-2 bg-slate-800/90 border border-indigo-500/40 px-3 py-1.5 rounded-xl shadow-lg">
@@ -129,10 +129,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 </select>
             </div>
 
+            <!-- Real-time Live Auto-Sync Status Badge -->
+            <div class="px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>Live Sync (3s)</span>
+            </div>
+
             <!-- Healing Factor Notification Button -->
             <button id="healingNoticeBtn" onclick="openHealingModal()"
                     class="hidden px-3.5 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl shadow-lg hover:bg-emerald-500/30 transition-all flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                 <i class="fa-solid fa-kit-medical text-emerald-400"></i>
                 <span>💡 신규 모델 발견 & 단가 비교</span>
             </button>
@@ -212,7 +217,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <h2 class="text-base font-semibold text-slate-200 flex items-center gap-2">
                     <i class="fa-solid fa-chart-area text-sky-400"></i> 선택 기간 일자별 추이 (Daily Trend)
                 </h2>
-                <span class="text-xs text-slate-400">Kibana Timeline</span>
+                <span class="text-xs text-slate-400">Kibana Live Timeline</span>
             </div>
             <div class="h-64">
                 <canvas id="dailyTrendChart"></canvas>
@@ -327,8 +332,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
     <!-- Client-side Interactive Scripts -->
     <script>
-        const allRecords = {client_records_json};
-        const healingData = {healing_status_json};
+        let allRecords = {client_records_json};
+        let healingData = {healing_status_json};
         let dailyChart = null;
         let decisionChart = null;
 
@@ -351,6 +356,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             if (healingData.has_new_healing) {{
                 document.getElementById('healingNoticeBtn').classList.remove('hidden');
                 document.getElementById('healingBanner').classList.remove('hidden');
+            }} else {{
+                document.getElementById('healingNoticeBtn').classList.add('hidden');
+                document.getElementById('healingBanner').classList.add('hidden');
             }}
         }}
 
@@ -403,10 +411,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }});
                 const data = await res.json();
                 if (data.success) {{
-                    alert('✅ 모델 버전이 ' + vid + '로 성공적으로 스위칭되었습니다.');
+                    alert('✅ 모델 버전 스위칭 완료');
                 }}
             }} catch(e) {{
-                alert('ℹ️ 모델 버전이 ' + vid + '로 설정되었습니다.');
+                alert('ℹ️ 모델 버전이 설정되었습니다.');
             }}
         }}
 
@@ -579,7 +587,6 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     badgeClass = p.decision.includes('MEDIUM') ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30';
                 }}
 
-                // HTML 특수문자 이스케이프 파싱
                 const safePrompt = p.prompt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
                 tableHtml += `
@@ -616,10 +623,33 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }});
         }}
 
+        // 3초 주기 실시간 라이브 자동 갱신 (Real-time Live Auto-Sync Polling)
+        async function fetchLiveDashboardStats() {{
+            try {{
+                const res = await fetch('http://localhost:18080/v1/dashboard/stats');
+                if (res.ok) {{
+                    const data = await res.json();
+                    if (data.records && data.records.length > 0) {{
+                        allRecords = data.records;
+                    }}
+                    if (data.healing_status) {{
+                        healingData = data.healing_status;
+                        initVersionSelector();
+                    }}
+                    const currentMonth = document.getElementById('monthSelect').value;
+                    renderDashboard(currentMonth);
+                }}
+            }} catch(e) {{
+                // Proxy server offline or starting
+            }}
+        }}
+
         window.onload = function() {{
             initVersionSelector();
             const initialMonth = document.getElementById('monthSelect').value;
             renderDashboard(initialMonth);
+            // 3초 주기로 실시간 자동 폴링 가동
+            setInterval(fetchLiveDashboardStats, 3000);
         }};
     </script>
 </body>
@@ -628,7 +658,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     with open(html_filename, "w", encoding="utf-8") as f:
         f.write(html_content)
     
-    print(f"✅ [Kibana Healing Factor Dashboard] 성공적으로 생성되었습니다: {os.path.abspath(html_filename)}")
+    print(f"✅ [Kibana Real-time Live Dashboard] 성공적으로 생성되었습니다: {os.path.abspath(html_filename)}")
     return html_filename
 
 def analyze(log_filepath, target_date=None, target_month=None, target_session=None, generate_html=False, open_browser=True):
