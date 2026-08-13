@@ -1,6 +1,8 @@
 import os
 import json
+import re
 import httpx
+from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from dotenv import load_dotenv
@@ -134,6 +136,101 @@ async def get_usage():
     """ 실시간으로 세션 누적 사용량 및 예상 비용(USD) 조회 """
     return global_tracker.get_summary()
 
+from src.tierbridge.healing_engine import HealingEngine
+
+@app.get("/v1/models/healing-status")
+async def get_healing_status():
+    """ 힐링 모듈 상태, 신규 모델 발견 여부 및 비용 비교표 조회 """
+    return HealingEngine.get_healing_status()
+
+@app.post("/v1/models/heal")
+async def apply_healing():
+    """ 신규 저비용/고출력 모델 스냅샷을 핫패치 릴리즈 적용 """
+    return HealingEngine.apply_healing()
+
+@app.post("/v1/models/version/switch")
+async def switch_model_version(request: Request):
+    """ 특정 모델 버전(e.g., v1.0.0, latest)으로 라우팅 롤백/복원 """
+    try:
+        body = await request.json()
+        version_id = body.get("version_id", "latest")
+    except Exception:
+        version_id = "latest"
+    return HealingEngine.switch_version(version_id)
+
+@app.get("/v1/dashboard/stats")
+async def get_dashboard_stats():
+    """ 대시보드 3초 라이브 자동 갱신(Live Auto-Sync)용 최신 집계 수치 및 힐링 데이터 반환 """
+    log_file = "harness.log"
+    records = []
+    prompt_history = []
+    
+    if os.path.exists(log_file):
+        usage_pattern = re.compile(
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE\] (?P<decision>[^\s]+) \((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
+        )
+        decision_pattern = re.compile(
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
+        )
+        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                d_match = decision_pattern.search(line)
+                if d_match:
+                    prompt_history.append({
+                        "timestamp": d_match.group("timestamp"),
+                        "sid": d_match.group("sid") or "N/A",
+                        "decision": d_match.group("decision"),
+                        "prompt": d_match.group("prompt")
+                    })
+                    continue
+                u_match = usage_pattern.search(line)
+                if u_match:
+                    ts_str = u_match.group("timestamp")
+                    sid_str = u_match.group("sid") or "N/A"
+                    date_key = "Unknown Date"
+                    month_key = "Unknown Month"
+                    if ts_str:
+                        try:
+                            dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                            date_key = dt.strftime("%Y-%m-%d")
+                            month_key = dt.strftime("%Y-%m")
+                        except ValueError:
+                            pass
+                    in_tok = int(u_match.group("in_tok"))
+                    out_tok = int(u_match.group("out_tok"))
+                    loc_val = int(u_match.group("loc")) if u_match.group("loc") else 0
+                    cost = float(u_match.group("cost"))
+                    associated_prompt = prompt_history[-1]["prompt"] if prompt_history else ""
+                    if prompt_history and sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
+                        sid_str = prompt_history[-1]["sid"]
+
+                    if sid_str == "N/A" and associated_prompt:
+                        import hashlib
+                        prompt_hash = hashlib.md5(associated_prompt.encode("utf-8")).hexdigest()[:8]
+                        sid_str = f"sess_{prompt_hash}"
+                    elif sid_str == "N/A":
+                        sid_str = "sess_legacy"
+
+                    records.append({
+                        "date": date_key,
+                        "month": month_key,
+                        "session_id": sid_str,
+                        "decision": u_match.group("decision"),
+                        "model": u_match.group("model"),
+                        "prompt": associated_prompt,
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "total_tokens": in_tok + out_tok,
+                        "loc": loc_val,
+                        "cost": cost
+                    })
+
+    return {
+        "records": records,
+        "healing_status": HealingEngine.get_healing_status()
+    }
+
 # ==========================================
 # 핵심 라우팅 하네스 엔드포인트
 # ==========================================
@@ -172,14 +269,38 @@ async def route_harness(request: Request):
     # CLI 실행 시점에 요청된 모델 식별 (e.g. gpt-5.6-sol, gpt-5.6-terra, high-power)
     requested_model = raw_body.get("model", "")
     
-    # 세션 ID 추출 (conversation_id 또는 session_id 탐색)
-    session_id = (
-        raw_body.get("conversation_id")
-        or raw_body.get("session_id")
-        or orig_headers.get("x-conversation-id")
-        or orig_headers.get("conversation-id")
-        or ""
-    )
+    # 세션 ID 정밀 추출 (conversation_id, session_id, x-conversation-id 또는 첫 질문 프롬프트 해시 기반 Fallback)
+    session_id = ""
+    if isinstance(raw_body, dict):
+        session_id = (
+            raw_body.get("conversation_id")
+            or raw_body.get("session_id")
+            or raw_body.get("chat_id")
+        )
+        if not session_id and isinstance(raw_body.get("metadata"), dict):
+            session_id = raw_body["metadata"].get("conversation_id") or raw_body["metadata"].get("session_id")
+
+    if not session_id and isinstance(orig_headers, dict):
+        for k, v in orig_headers.items():
+            k_lower = str(k).lower()
+            if k_lower in ("x-conversation-id", "x-session-id", "conversation-id", "session-id", "conversation_id", "session_id", "chat-id"):
+                if v and str(v).strip():
+                    session_id = str(v).strip()
+                    break
+
+    if not session_id and unified_req and unified_req.messages:
+        for msg in unified_req.messages:
+            if msg.role == "user" and msg.content.strip():
+                import hashlib
+                prompt_hash = hashlib.md5(msg.content.strip().encode("utf-8")).hexdigest()[:8]
+                session_id = f"sess_{prompt_hash}"
+                break
+
+    if not session_id and isinstance(raw_body, dict) and raw_body.get("user"):
+        session_id = str(raw_body.get("user")).strip()
+
+    if not session_id:
+        session_id = "sess_main"
 
     # 5. 프롬프트 텍스트 및 분류기를 이용한 난이도/라우터 선택
     user_prompt, is_new_user_turn, substep_prompt = Router.extract_user_prompt_and_turn_status(unified_req)

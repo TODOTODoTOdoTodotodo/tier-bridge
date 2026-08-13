@@ -29,6 +29,7 @@ Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=ollama`)로
 * **유연한 날짜 필터링**: `--date YYYY-MM-DD` 옵션을 통해 특정 일자의 사용량만 선택하여 정밀 모니터링할 수 있습니다.
 * **하위 호환성 유지**: 타임스탬프 또는 LOC 필드가 없는 구형 로그 형식도 예외 없이 호환하여 유실 없이 파싱합니다.
 * **엔터프라이즈 크레딧(Enterprise Credits) 자동 산출**: 달러 비용(`cost_usd`)을 기반으로 Codex Enterprise 크레딧 환산 단가(`1 Credit = $0.20 USD`)를 적용하여 예상 차감 크레딧 수치를 일자별/등급별로 함께 리포팅합니다.
+* **실시간 라이브 자동 갱신 대시보드 (Real-time Live Auto-Sync)**: 하네스 프록시(`harness.py`)의 `GET /v1/dashboard/stats` API와 연동하여 3초 주기로 자동 폴링을 수행함으로써 브라우저를 켜두기만 해도 새로운 로그, 크레딧 소모량, 차트 및 프롬프트 표가 새로고침 없이 실시간 라이브로 자동 갱신됩니다.
 * **월별(Monthly) 기간 필터링 및 동적 월 선택 드롭다운**: 특정 월(예: `2026-08`) 단위의 CLI 파싱뿐만 아니라, HTML 웹 대시보드(`usage_dashboard.html`) 상단에서 사용자가 드롭다운으로 월을 클릭 시 KPI 카드, 트렌드 차트, 등급 분포 및 프롬프트 인사이트 표가 동적으로 즉시 필터링됩니다.
 * **세션 ID(Session / Conversation ID)별 소모 요약 및 필터링 (`--session`)**: 요청 페이로드의 세션 ID(`[sid: <session_id>]`)를 자동 파싱하여 각 대화 세션별 소모 토큰 및 크레딧을 명확히 구분하고 정밀 필터링을 지원합니다.
 * **Kibana 스타일 시각화 웹 대시보드 리포트 생성 (`--html`)**: `--html` 옵션으로 명령 실행 시 Kibana 스타일의 다크테마 대시보드 웹페이지 (`usage_dashboard.html`)를 자동 생성하여 반응형 그래프(Chart.js) 및 실시간 KPI 카드로 월별/일자별/세션별 추이를 시각적으로 제공합니다.
