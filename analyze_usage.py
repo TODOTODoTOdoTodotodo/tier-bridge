@@ -18,63 +18,33 @@ def parse_args():
     parser.add_argument("--no-open", action="store_true", help="HTML 대시보드 생성 후 브라우저 자동 오픈 금지")
     return parser.parse_args()
 
-def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None):
+def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None):
     html_filename = "usage_dashboard.html"
     
-    # 일자별 차트 데이터 구성
-    sorted_dates = sorted(daily_stats.keys())
-    chart_dates_json = json.dumps(sorted_dates)
-    chart_credits_json = json.dumps([round(daily_stats[d]["cost"] / 0.20, 2) for d in sorted_dates])
-    chart_tokens_json = json.dumps([daily_stats[d]["in_tok"] + daily_stats[d]["out_tok"] for d in sorted_dates])
-    
-    # 등급별 차트 데이터 구성
-    sorted_decisions = sorted(decision_stats.keys(), key=lambda k: decision_stats[k]["cost"], reverse=True)
-    chart_dec_labels_json = json.dumps(sorted_decisions)
-    chart_dec_credits_json = json.dumps([round(decision_stats[d]["cost"] / 0.20, 2) for d in sorted_decisions])
-    
-    # 프롬프트 인사이트 데이터 TOP 15 구성
-    top_prompts = sorted(prompt_stats.values(), key=lambda x: x["cost"], reverse=True)[:15]
-    
-    prompt_rows_html = ""
-    for idx, p in enumerate(top_prompts, 1):
-        prompt_txt = p["prompt"] if p["prompt"] else "(서브 스텝 / 연속 릴레이 스텝)"
-        credits = round(p["cost"] / 0.20, 3)
-        sid_txt = p.get("session_id", "N/A")
-        sid_short = sid_txt[:8] if sid_txt != "N/A" else "N/A"
-        
-        badge_class = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-        if "TERRA" in p["decision"] or "SOL" in p["decision"]:
-            badge_class = "bg-amber-500/20 text-amber-300 border-amber-500/30" if "MEDIUM" in p["decision"] else "bg-rose-500/20 text-rose-300 border-rose-500/30"
-        
-        prompt_rows_html += f"""
-        <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
-            <td class="px-4 py-3 text-slate-400 font-mono text-sm">{idx}</td>
-            <td class="px-4 py-3 font-mono text-xs text-sky-400" title="{sid_txt}">{sid_short}</td>
-            <td class="px-4 py-3 text-slate-200 font-medium max-w-md truncate" title="{prompt_txt}">{prompt_txt}</td>
-            <td class="px-4 py-3 text-right text-slate-300">{p['count']:,}회</td>
-            <td class="px-4 py-3 text-right text-sky-400 font-mono">{p['in_tok'] + p['out_tok']:,}</td>
-            <td class="px-4 py-3 text-right text-indigo-300 font-mono font-semibold">${p['cost']:.4f}</td>
-            <td class="px-4 py-3 text-right text-emerald-400 font-mono font-bold">{credits:.2f} Cr</td>
-            <td class="px-4 py-3 text-center">
-                <span class="px-2.5 py-1 text-xs font-semibold rounded-full border {badge_class}">
-                    {p['decision']}
-                </span>
-            </td>
-        </tr>
-        """
+    # 동적 월 선택 드롭다운 옵션 구성 (전체 원본 레코드 기준)
+    available_months = sorted(list(set(r["month"] for r in all_raw_records if r["month"] != "Unknown Month")), reverse=True)
+    month_options_html = '<option value="ALL" ' + ('selected' if not target_month else '') + '>전체 기간 (All Months)</option>'
+    for m in available_months:
+        selected_attr = 'selected' if target_month == m else ''
+        month_options_html += f'<option value="{m}" {selected_attr}>{m}</option>'
 
-    # 절감액 추정 (Terra 대신 Luna로 처리되어 절약된 비율 계산)
-    luna_cost = sum(decision_stats[d]["cost"] for d in decision_stats if "LUNA" in d)
-    luna_count = sum(decision_stats[d]["count"] for d in decision_stats if "LUNA" in d)
-    saved_usd = (luna_count * 0.12) - luna_cost if luna_count else 0.0
-    saved_usd = max(0.0, saved_usd)
-    saved_credits = saved_usd / 0.20
-
-    filter_info = []
-    if target_month: filter_info.append(f"월: {target_month}")
-    if target_date: filter_info.append(f"일자: {target_date}")
-    if target_session: filter_info.append(f"세션ID: {target_session}")
-    filter_desc = ", ".join(filter_info) if filter_info else "전체 누적 통계"
+    # Client-side JavaScript 처리를 위한 원본 JSON 데이터 구성
+    client_records = []
+    for r in all_raw_records:
+        client_records.append({
+            "date": r["date"],
+            "month": r["month"],
+            "session_id": r["session_id"],
+            "decision": r["decision"],
+            "model": r["model"],
+            "prompt": r["prompt"],
+            "input_tokens": r["input_tokens"],
+            "output_tokens": r["output_tokens"],
+            "total_tokens": r["total_tokens"],
+            "loc": r["loc"],
+            "cost": r["cost"]
+        })
+    client_records_json = json.dumps(client_records)
 
     html_content = f"""<!DOCTYPE html>
 <html lang="ko" class="dark">
@@ -105,16 +75,24 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
                 </h1>
             </div>
             <p class="text-slate-400 text-sm pl-12">
-                Codex Enterprise 토큰 소모량, 차감 크레딧, 월별/세션별 & 프롬프트 인사이트 시각화 대시보드
+                Codex Enterprise 토큰 소모량, 차감 크레딧, 동적 월 선택 & 프롬프트 인사이트 대시보드
             </p>
         </div>
-        <div class="mt-4 md:mt-0 flex items-center gap-3">
-            <span class="px-3.5 py-1.5 bg-slate-800/80 border border-slate-700 text-slate-300 text-xs font-mono rounded-lg">
-                <i class="fa-regular fa-calendar mr-1.5 text-indigo-400"></i>
-                {filter_desc}
-            </span>
-            <span class="px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold rounded-lg flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Live Log Parser Active
+        
+        <!-- Controls: Dynamic Month Selector & Live Badge -->
+        <div class="mt-4 md:mt-0 flex flex-wrap items-center gap-3">
+            <!-- Dynamic Month Dropdown Selector -->
+            <div class="flex items-center gap-2 bg-slate-800/90 border border-indigo-500/40 px-3 py-1.5 rounded-xl shadow-lg shadow-indigo-950/30">
+                <i class="fa-solid fa-calendar-check text-indigo-400 text-sm"></i>
+                <span class="text-xs font-semibold text-slate-300">조회 월 선택:</span>
+                <select id="monthSelect" onchange="onMonthChange(this.value)" 
+                        class="bg-slate-900 text-emerald-400 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-indigo-400 cursor-pointer">
+                    {month_options_html}
+                </select>
+            </div>
+
+            <span class="px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold rounded-xl flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Live Log Dynamic Sync
             </span>
         </div>
     </header>
@@ -124,7 +102,7 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
         <!-- Card 1: Total Credits -->
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Total Consumed Credits</div>
-            <div class="text-3xl font-extrabold text-emerald-400 font-mono mb-1">{total_credits:.2f} <span class="text-sm font-normal text-slate-400">Cr</span></div>
+            <div class="text-3xl font-extrabold text-emerald-400 font-mono mb-1" id="kpiCredits">0.00 <span class="text-sm font-normal text-slate-400">Cr</span></div>
             <div class="text-xs text-slate-400">1 Credit = $0.20 USD 기준</div>
             <div class="absolute -right-3 -bottom-3 text-emerald-500/10 text-6xl"><i class="fa-solid fa-credit-card"></i></div>
         </div>
@@ -132,23 +110,23 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
         <!-- Card 2: Total Cost -->
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Estimated Value</div>
-            <div class="text-3xl font-extrabold text-indigo-300 font-mono mb-1">${total_cost:.4f}</div>
-            <div class="text-xs text-slate-400">총 {len(records):,}회 성사 요청</div>
+            <div class="text-3xl font-extrabold text-indigo-300 font-mono mb-1" id="kpiCost">$0.0000</div>
+            <div class="text-xs text-slate-400" id="kpiRequests">총 0회 성사 요청</div>
             <div class="absolute -right-3 -bottom-3 text-indigo-500/10 text-6xl"><i class="fa-solid fa-dollar-sign"></i></div>
         </div>
 
         <!-- Card 3: Total Tokens -->
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Total Tokens</div>
-            <div class="text-3xl font-extrabold text-sky-400 font-mono mb-1">{total_tokens:,}</div>
-            <div class="text-xs text-slate-400">Input: {(sum(r['input_tokens'] for r in records)):,}</div>
+            <div class="text-3xl font-extrabold text-sky-400 font-mono mb-1" id="kpiTokens">0</div>
+            <div class="text-xs text-slate-400" id="kpiInTokens">Input: 0</div>
             <div class="absolute -right-3 -bottom-3 text-sky-500/10 text-6xl"><i class="fa-solid fa-cubes"></i></div>
         </div>
 
         <!-- Card 4: Total Sessions -->
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Unique Sessions</div>
-            <div class="text-3xl font-extrabold text-purple-400 font-mono mb-1">{len(session_stats):,} <span class="text-sm font-normal text-slate-400">sessions</span></div>
+            <div class="text-3xl font-extrabold text-purple-400 font-mono mb-1" id="kpiSessions">0 <span class="text-sm font-normal text-slate-400">sessions</span></div>
             <div class="text-xs text-slate-400">식별된 대화 세션 ID 수</div>
             <div class="absolute -right-3 -bottom-3 text-purple-500/10 text-6xl"><i class="fa-solid fa-layer-group"></i></div>
         </div>
@@ -156,8 +134,8 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
         <!-- Card 5: Savings -->
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden border-emerald-500/30 bg-emerald-950/20">
             <div class="text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-2">LUNA Auto-scaling Savings</div>
-            <div class="text-3xl font-extrabold text-emerald-300 font-mono mb-1">${saved_usd:.2f}</div>
-            <div class="text-xs text-emerald-400/80">약 {saved_credits:.1f} Credits 크레딧 아낌</div>
+            <div class="text-3xl font-extrabold text-emerald-300 font-mono mb-1" id="kpiSavingsUsd">$0.00</div>
+            <div class="text-xs text-emerald-400/80" id="kpiSavingsCredits">약 0.0 Cr 크레딧 아낌</div>
             <div class="absolute -right-3 -bottom-3 text-emerald-400/10 text-6xl"><i class="fa-solid fa-shield-halved"></i></div>
         </div>
     </div>
@@ -168,7 +146,7 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
         <div class="lg:col-span-2 glass-card p-6 rounded-2xl">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-base font-semibold text-slate-200 flex items-center gap-2">
-                    <i class="fa-solid fa-chart-area text-sky-400"></i> 일자별 크레딧 & 토큰 소모 추이 (Daily Trend)
+                    <i class="fa-solid fa-chart-area text-sky-400"></i> 선택 기간 일자별 추이 (Daily Trend)
                 </h2>
                 <span class="text-xs text-slate-400">Kibana Timeline</span>
             </div>
@@ -198,7 +176,7 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
                 <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
                     <i class="fa-solid fa-fire text-amber-400"></i> Top 크레딧 소모 프롬프트 턴 & 인사이트 (Prompt Insights)
                 </h2>
-                <p class="text-xs text-slate-400 mt-1">가장 많은 크레딧과 토큰을 소모한 턴별 프롬프트 및 라우팅 등급 인사이트</p>
+                <p class="text-xs text-slate-400 mt-1">선택한 월/기간 내 가장 많은 크레딧과 토큰을 소모한 턴별 프롬프트 및 라우팅 등급 인사이트</p>
             </div>
             <div class="relative">
                 <input type="text" id="searchInput" placeholder="프롬프트/세션ID 검색..." onkeyup="filterTable()" 
@@ -221,8 +199,8 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
                         <th class="px-4 py-3 text-center rounded-tr-xl">최종 라우팅 등급</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800">
-                    {prompt_rows_html}
+                <tbody class="divide-y divide-slate-800" id="promptTableBody">
+                    <!-- Dynamic JavaScript Table Insertion -->
                 </tbody>
             </table>
         </div>
@@ -233,79 +211,212 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
         TierBridge Analytics Core • Powered by LLM Routing Harness Proxy • Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     </footer>
 
-    <!-- Chart.js Scripts -->
+    <!-- Client-side Interactive Scripts -->
     <script>
-        const dailyDates = {chart_dates_json};
-        const dailyCredits = {chart_credits_json};
-        const dailyTokens = {chart_tokens_json};
+        const allRecords = {client_records_json};
+        let dailyChart = null;
+        let decisionChart = null;
 
-        const decLabels = {chart_dec_labels_json};
-        const decCredits = {chart_dec_credits_json};
+        function renderDashboard(targetMonth) {{
+            // 1. 월 필터링 데이터 준비
+            const filteredRecords = (targetMonth === 'ALL' || !targetMonth) 
+                ? allRecords 
+                : allRecords.filter(r => r.month === targetMonth);
 
-        // Line Chart: Daily Trend
-        new Chart(document.getElementById('dailyTrendChart'), {{
-            type: 'line',
-            data: {{
-                labels: dailyDates,
-                datasets: [
-                    {{
-                        label: 'Consumed Credits (Cr)',
-                        data: dailyCredits,
-                        borderColor: '#34d399',
-                        backgroundColor: 'rgba(52, 211, 153, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.35,
-                        yAxisID: 'y'
+            if (filteredRecords.length === 0) {{
+                document.getElementById('kpiCredits').innerText = '0.00 Cr';
+                document.getElementById('kpiCost').innerText = '$0.0000';
+                document.getElementById('kpiRequests').innerText = '총 0회 성사 요청';
+                document.getElementById('kpiTokens').innerText = '0';
+                document.getElementById('kpiInTokens').innerText = 'Input: 0';
+                document.getElementById('kpiSessions').innerHTML = '0 <span class="text-sm font-normal text-slate-400">sessions</span>';
+                document.getElementById('kpiSavingsUsd').innerText = '$0.00';
+                document.getElementById('kpiSavingsCredits').innerText = '약 0.0 Cr 크레딧 아낌';
+                document.getElementById('promptTableBody').innerHTML = '<tr><td colspan="8" class="text-center py-6 text-slate-500">해당 월에 데이터가 없습니다.</td></tr>';
+                return;
+            }}
+
+            // 2. KPI 계산
+            const totalCost = filteredRecords.reduce((acc, r) => acc + r.cost, 0);
+            const totalCredits = totalCost / 0.20;
+            const totalIn = filteredRecords.reduce((acc, r) => acc + r.input_tokens, 0);
+            const totalOut = filteredRecords.reduce((acc, r) => acc + r.output_tokens, 0);
+            const totalTok = totalIn + totalOut;
+
+            const sessions = new Set(filteredRecords.map(r => r.session_id)).size;
+
+            let lunaCost = 0;
+            let lunaCount = 0;
+            filteredRecords.forEach(r => {{
+                if (r.decision.includes('LUNA')) {{
+                    lunaCost += r.cost;
+                    lunaCount += 1;
+                }}
+            }});
+            const savedUsd = Math.max(0, (lunaCount * 0.12) - lunaCost);
+            const savedCredits = savedUsd / 0.20;
+
+            document.getElementById('kpiCredits').innerHTML = totalCredits.toFixed(2) + ' <span class="text-sm font-normal text-slate-400">Cr</span>';
+            document.getElementById('kpiCost').innerText = '$' + totalCost.toFixed(4);
+            document.getElementById('kpiRequests').innerText = '총 ' + filteredRecords.length.toLocaleString() + '회 성사 요청';
+            document.getElementById('kpiTokens').innerText = totalTok.toLocaleString();
+            document.getElementById('kpiInTokens').innerText = 'Input: ' + totalIn.toLocaleString();
+            document.getElementById('kpiSessions').innerHTML = sessions.toLocaleString() + ' <span class="text-sm font-normal text-slate-400">sessions</span>';
+            document.getElementById('kpiSavingsUsd').innerText = '$' + savedUsd.toFixed(2);
+            document.getElementById('kpiSavingsCredits').innerText = '약 ' + savedCredits.toFixed(1) + ' Cr 크레딧 아낌';
+
+            // 3. 일자별 추이 데이터 집계
+            const dailyMap = {{}};
+            filteredRecords.forEach(r => {{
+                if (!dailyMap[r.date]) dailyMap[r.date] = {{ cost: 0, tokens: 0 }};
+                dailyMap[r.date].cost += r.cost;
+                dailyMap[r.date].tokens += r.total_tokens;
+            }});
+
+            const sortedDates = Object.keys(dailyMap).sort();
+            const dailyCreditsData = sortedDates.map(d => (dailyMap[d].cost / 0.20).toFixed(2));
+            const dailyTokensData = sortedDates.map(d => dailyMap[d].tokens);
+
+            // Line Chart Render / Update
+            if (dailyChart) {{
+                dailyChart.data.labels = sortedDates;
+                dailyChart.data.datasets[0].data = dailyCreditsData;
+                dailyChart.data.datasets[1].data = dailyTokensData;
+                dailyChart.update();
+            }} else {{
+                dailyChart = new Chart(document.getElementById('dailyTrendChart'), {{
+                    type: 'line',
+                    data: {{
+                        labels: sortedDates,
+                        datasets: [
+                            {{
+                                label: 'Consumed Credits (Cr)',
+                                data: dailyCreditsData,
+                                borderColor: '#34d399',
+                                backgroundColor: 'rgba(52, 211, 153, 0.1)',
+                                borderWidth: 3,
+                                fill: true,
+                                tension: 0.35,
+                                yAxisID: 'y'
+                            }},
+                            {{
+                                label: 'Total Tokens',
+                                data: dailyTokensData,
+                                borderColor: '#38bdf8',
+                                backgroundColor: 'rgba(56, 189, 248, 0.05)',
+                                borderWidth: 2,
+                                borderDash: [4, 4],
+                                fill: false,
+                                tension: 0.35,
+                                yAxisID: 'y1'
+                            }}
+                        ]
                     }},
-                    {{
-                        label: 'Total Tokens',
-                        data: dailyTokens,
-                        borderColor: '#38bdf8',
-                        backgroundColor: 'rgba(56, 189, 248, 0.05)',
-                        borderWidth: 2,
-                        borderDash: [4, 4],
-                        fill: false,
-                        tension: 0.35,
-                        yAxisID: 'y1'
+                    options: {{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {{
+                            legend: {{ labels: {{ color: '#94a3b8', font: {{ family: 'Inter' }} }} }}
+                        }},
+                        scales: {{
+                            x: {{ grid: {{ color: 'rgba(51, 65, 85, 0.3)' }}, ticks: {{ color: '#94a3b8' }} }},
+                            y: {{ position: 'left', grid: {{ color: 'rgba(51, 65, 85, 0.3)' }}, ticks: {{ color: '#34d399' }} }},
+                            y1: {{ position: 'right', grid: {{ drawOnChartArea: false }}, ticks: {{ color: '#38bdf8' }} }}
+                        }}
                     }}
-                ]
-            }},
-            options: {{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {{
-                    legend: {{ labels: {{ color: '#94a3b8', font: {{ family: 'Inter' }} }} }}
-                }},
-                scales: {{
-                    x: {{ grid: {{ color: 'rgba(51, 65, 85, 0.3)' }}, ticks: {{ color: '#94a3b8' }} }},
-                    y: {{ position: 'left', grid: {{ color: 'rgba(51, 65, 85, 0.3)' }}, ticks: {{ color: '#34d399' }} }},
-                    y1: {{ position: 'right', grid: {{ drawOnChartArea: false }}, ticks: {{ color: '#38bdf8' }} }}
-                }}
+                }});
             }}
-        }});
 
-        // Doughnut Chart: Decision Share
-        new Chart(document.getElementById('decisionChart'), {{
-            type: 'doughnut',
-            data: {{
-                labels: decLabels,
-                datasets: [{{
-                    data: decCredits,
-                    backgroundColor: ['#34d399', '#818cf8', '#fbbf24', '#f43f5e', '#a78bfa', '#38bdf8'],
-                    borderWidth: 0
-                }}]
-            }},
-            options: {{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {{
-                    legend: {{ position: 'bottom', labels: {{ color: '#94a3b8', boxWidth: 12, font: {{ family: 'Inter', size: 11 }} }} }}
-                }}
+            // 4. Decision 등급 분포 파이 차트 데이터 집계
+            const decMap = {{}};
+            filteredRecords.forEach(r => {{
+                if (!decMap[r.decision]) decMap[r.decision] = 0;
+                decMap[r.decision] += r.cost;
+            }});
+
+            const decLabels = Object.keys(decMap).sort((a,b) => decMap[b] - decMap[a]);
+            const decCreditsData = decLabels.map(k => (decMap[k] / 0.20).toFixed(2));
+
+            if (decisionChart) {{
+                decisionChart.data.labels = decLabels;
+                decisionChart.data.datasets[0].data = decCreditsData;
+                decisionChart.update();
+            }} else {{
+                decisionChart = new Chart(document.getElementById('decisionChart'), {{
+                    type: 'doughnut',
+                    data: {{
+                        labels: decLabels,
+                        datasets: [{{
+                            data: decCreditsData,
+                            backgroundColor: ['#34d399', '#818cf8', '#fbbf24', '#f43f5e', '#a78bfa', '#38bdf8'],
+                            borderWidth: 0
+                        }}]
+                    }},
+                    options: {{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {{
+                            legend: {{ position: 'bottom', labels: {{ color: '#94a3b8', boxWidth: 12, font: {{ family: 'Inter', size: 11 }} }} }}
+                        }}
+                    }}
+                }});
             }}
-        }});
 
-        // Table Filter Function
+            // 5. Top 프롬프트 인사이트 표 구성 (TOP 15)
+            const promptMap = {{}};
+            filteredRecords.forEach(r => {{
+                const pKey = r.prompt ? r.prompt : "(서브 스텝 / 연속 릴레이)";
+                if (!promptMap[pKey]) {{
+                    promptMap[pKey] = {{
+                        prompt: pKey,
+                        count: 0,
+                        tokens: 0,
+                        cost: 0,
+                        decision: r.decision,
+                        session_id: r.session_id
+                    }};
+                }}
+                promptMap[pKey].count += 1;
+                promptMap[pKey].tokens += r.total_tokens;
+                promptMap[pKey].cost += r.cost;
+            }});
+
+            const topPrompts = Object.values(promptMap).sort((a,b) => b.cost - a.cost).slice(0, 15);
+            let tableHtml = '';
+            topPrompts.forEach((p, idx) => {{
+                const credits = (p.cost / 0.20).toFixed(2);
+                const sidShort = (p.session_id && p.session_id !== 'N/A') ? p.session_id.substring(0, 8) : 'N/A';
+                
+                let badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+                if (p.decision.includes('TERRA') || p.decision.includes('SOL')) {{
+                    badgeClass = p.decision.includes('MEDIUM') ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+                }}
+
+                tableHtml += `
+                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
+                    <td class="px-4 py-3 text-slate-400 font-mono text-sm">${{idx + 1}}</td>
+                    <td class="px-4 py-3 font-mono text-xs text-sky-400" title="${{p.session_id}}">${{sidShort}}</td>
+                    <td class="px-4 py-3 text-slate-200 font-medium max-w-md truncate" title="${{p.prompt}}">${{p.prompt}}</td>
+                    <td class="px-4 py-3 text-right text-slate-300">${{p.count.toLocaleString()}}회</td>
+                    <td class="px-4 py-3 text-right text-sky-400 font-mono">${{p.tokens.toLocaleString()}}</td>
+                    <td class="px-4 py-3 text-right text-indigo-300 font-mono font-semibold">$${{p.cost.toFixed(4)}}</td>
+                    <td class="px-4 py-3 text-right text-emerald-400 font-mono font-bold">${{credits}} Cr</td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="px-2.5 py-1 text-xs font-semibold rounded-full border ${{badgeClass}}">
+                            ${{p.decision}}
+                        </span>
+                    </td>
+                </tr>
+                `;
+            }});
+
+            document.getElementById('promptTableBody').innerHTML = tableHtml;
+        }}
+
+        function onMonthChange(val) {{
+            renderDashboard(val);
+        }}
+
         function filterTable() {{
             const input = document.getElementById('searchInput').value.toLowerCase();
             const rows = document.querySelectorAll('#promptTable tbody tr');
@@ -314,6 +425,12 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
                 row.style.display = text.includes(input) ? '' : 'none';
             }});
         }}
+
+        // 초기 대시보드 렌더링
+        window.onload = function() {{
+            const initialMonth = document.getElementById('monthSelect').value;
+            renderDashboard(initialMonth);
+        }};
     </script>
 </body>
 </html>
@@ -321,7 +438,7 @@ def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, 
     with open(html_filename, "w", encoding="utf-8") as f:
         f.write(html_content)
     
-    print(f"✅ [Kibana Visual Dashboard] 성공적으로 생성되었습니다: {os.path.abspath(html_filename)}")
+    print(f"✅ [Kibana Dynamic Month Dashboard] 성공적으로 생성되었습니다: {os.path.abspath(html_filename)}")
     return html_filename
 
 def analyze(log_filepath, target_date=None, target_month=None, target_session=None, generate_html=False, open_browser=True):
@@ -336,6 +453,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
     )
 
+    all_raw_records = []
     records = []
     prompt_history = []
     
@@ -370,14 +488,6 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                     except ValueError:
                         pass
                 
-                # 날짜/월/세션 필터링 적용
-                if target_date and date_key != target_date:
-                    continue
-                if target_month and month_key != target_month:
-                    continue
-                if target_session and target_session.lower() not in sid_str.lower():
-                    continue
-
                 decision = u_match.group("decision")
                 model = u_match.group("model")
                 in_tok = int(u_match.group("in_tok"))
@@ -392,7 +502,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                     if sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
                         sid_str = prompt_history[-1]["sid"]
 
-                records.append({
+                item = {
                     "datetime": dt,
                     "date": date_key,
                     "month": month_key,
@@ -405,7 +515,19 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                     "total_tokens": in_tok + out_tok,
                     "loc": loc_val,
                     "cost": cost
-                })
+                }
+
+                all_raw_records.append(item)
+
+                # 날짜/월/세션 필터링 적용 (CLI용)
+                if target_date and date_key != target_date:
+                    continue
+                if target_month and month_key != target_month:
+                    continue
+                if target_session and target_session.lower() not in sid_str.lower():
+                    continue
+
+                records.append(item)
 
     if not records:
         filter_msg = []
@@ -529,7 +651,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     print("====================================================================================================\n")
 
     if generate_html:
-        html_file = generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date, target_month, target_session)
+        html_file = generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date, target_month, target_session)
         if open_browser:
             webbrowser.open("file://" + os.path.abspath(html_file))
 
