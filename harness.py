@@ -171,6 +171,15 @@ async def route_harness(request: Request):
 
     # CLI 실행 시점에 요청된 모델 식별 (e.g. gpt-5.6-sol, gpt-5.6-terra, high-power)
     requested_model = raw_body.get("model", "")
+    
+    # 세션 ID 추출 (conversation_id 또는 session_id 탐색)
+    session_id = (
+        raw_body.get("conversation_id")
+        or raw_body.get("session_id")
+        or orig_headers.get("x-conversation-id")
+        or orig_headers.get("conversation-id")
+        or ""
+    )
 
     # 5. 프롬프트 텍스트 및 분류기를 이용한 난이도/라우터 선택
     user_prompt, is_new_user_turn, substep_prompt = Router.extract_user_prompt_and_turn_status(unified_req)
@@ -182,7 +191,8 @@ async def route_harness(request: Request):
         auth_token=enterprise_token,
         enterprise_api_url=ENTERPRISE_API_URL,
         account_id=get_latest_enterprise_account_id(),
-        requested_model=requested_model
+        requested_model=requested_model,
+        session_id=session_id
     )
 
     # 6. 타겟 백엔드 벤더 매핑
@@ -323,11 +333,11 @@ async def route_harness(request: Request):
                                 yield transpiled_chunk
                             
                     # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적 (Zero-Drop guarantee)
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text)
+                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id)
                 except Exception as e:
                     print(f"[Error] Stream routing exception: {e}")
                     # 스트림 에러 예외 발생 시에도 턴 추적 누락을 방지하기 위해 폴백 추적 실행
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text)
+                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id)
                     err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
                     yield f"data: {err_msg}\n\n".encode("utf-8")
 
@@ -346,7 +356,7 @@ async def route_harness(request: Request):
                 if not in_tok and not out_tok:
                     in_tok = max(100, int(len(raw_prompt_text) * 0.35))
                     out_tok = 150
-                global_tracker.track_request(target_model, decision, in_tok, out_tok)
+                global_tracker.track_request(target_model, decision, in_tok, out_tok, session_id=session_id)
             return res
         except Exception as e:
             return PlainTextResponse(f"Proxy connection failed: {e}", status_code=500)

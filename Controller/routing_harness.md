@@ -70,9 +70,10 @@ This document defines the dynamic routing strategy designed to optimize credits 
 * Under `--oss` mode, the client does not send auth headers. The proxy dynamically harvests the active `access_token` from `~/.codex/auth.json` on every request. This ensures that token refreshes handled by the native ChatGPT login flow are transparently captured by the proxy.
 * **Zero-Drop USAGE & Sub-step Cost Auto-scaling Policy**:
   1. **`/responses` Payload Sanitization**: Strips incompatible parameters like `stream_options` to prevent WAF / 400 Bad Request (`unknown_parameter`) errors from ChatGPT Enterprise backend API.
-  2. **Sub-step Prompt Extraction (서브 스텝 비용 오토 스케일링)**: For intermediate agent relays (Turn 2+ tool-call steps), the proxy extracts the latest action/context prompt rather than recycling the initial turn prompt. This automatically downgrades simple sub-task steps (e.g. file editing, reading, command outputs) to **`LUNA:LOW`**, saving up to 30-50% additional credits.
-  3. **Multi-layer SSE Event Parser**: Extracts usage across diverse SSE response schemas (`response.usage`, `event.usage`, `prompt_tokens`, `input_tokens`).
-  4. **Prompt-based Token Estimation Fallback**: If upstream SSE chunks omit usage or return 0 tokens (e.g. during specific tool-call steps), the proxy estimates input token count based on request payload text length, ensuring **100% of DECISION events are logged with valid USAGE records**.
+  2. **Session ID Tracking (세션 ID 구분 로깅)**: Extracts `conversation_id` / `session_id` from incoming request headers or payload and embeds `[sid: <session_id>]` tag in all `[DECISION]` and `[USAGE]` log entries to enable precise per-session credit auditing.
+  3. **Sub-step Prompt Extraction (서브 스텝 비용 오토 스케일링)**: For intermediate agent relays (Turn 2+ tool-call steps), the proxy extracts the latest action/context prompt rather than recycling the initial turn prompt. This automatically downgrades simple sub-task steps (e.g. file editing, reading, command outputs) to **`LUNA:LOW`**, saving up to 30-50% additional credits.
+  4. **Multi-layer SSE Event Parser**: Extracts usage across diverse SSE response schemas (`response.usage`, `event.usage`, `prompt_tokens`, `input_tokens`).
+  5. **Prompt-based Token Estimation Fallback**: If upstream SSE chunks omit usage or return 0 tokens (e.g. during specific tool-call steps), the proxy estimates input token count based on request payload text length, ensuring **100% of DECISION events are logged with valid USAGE records**.
 
 ## 4. Local Mock Verification Plan
 * `/v1/models` route exposes `gpt-5.4-mini`, `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, `4tier`, and `super`.
