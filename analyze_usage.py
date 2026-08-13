@@ -722,6 +722,13 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                     if sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
                         sid_str = prompt_history[-1]["sid"]
 
+                if sid_str == "N/A" and associated_prompt:
+                    import hashlib
+                    prompt_hash = hashlib.md5(associated_prompt.encode("utf-8")).hexdigest()[:8]
+                    sid_str = f"sess_{prompt_hash}"
+                elif sid_str == "N/A":
+                    sid_str = "sess_legacy"
+
                 item = {
                     "datetime": dt,
                     "date": date_key,

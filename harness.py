@@ -203,6 +203,13 @@ async def get_dashboard_stats():
                     if prompt_history and sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
                         sid_str = prompt_history[-1]["sid"]
 
+                    if sid_str == "N/A" and associated_prompt:
+                        import hashlib
+                        prompt_hash = hashlib.md5(associated_prompt.encode("utf-8")).hexdigest()[:8]
+                        sid_str = f"sess_{prompt_hash}"
+                    elif sid_str == "N/A":
+                        sid_str = "sess_legacy"
+
                     records.append({
                         "date": date_key,
                         "month": month_key,
@@ -260,14 +267,38 @@ async def route_harness(request: Request):
     # CLI 실행 시점에 요청된 모델 식별 (e.g. gpt-5.6-sol, gpt-5.6-terra, high-power)
     requested_model = raw_body.get("model", "")
     
-    # 세션 ID 추출 (conversation_id 또는 session_id 탐색)
-    session_id = (
-        raw_body.get("conversation_id")
-        or raw_body.get("session_id")
-        or orig_headers.get("x-conversation-id")
-        or orig_headers.get("conversation-id")
-        or ""
-    )
+    # 세션 ID 정밀 추출 (conversation_id, session_id, x-conversation-id 또는 첫 질문 프롬프트 해시 기반 Fallback)
+    session_id = ""
+    if isinstance(raw_body, dict):
+        session_id = (
+            raw_body.get("conversation_id")
+            or raw_body.get("session_id")
+            or raw_body.get("chat_id")
+        )
+        if not session_id and isinstance(raw_body.get("metadata"), dict):
+            session_id = raw_body["metadata"].get("conversation_id") or raw_body["metadata"].get("session_id")
+
+    if not session_id and isinstance(orig_headers, dict):
+        for k, v in orig_headers.items():
+            k_lower = str(k).lower()
+            if k_lower in ("x-conversation-id", "x-session-id", "conversation-id", "session-id", "conversation_id", "session_id", "chat-id"):
+                if v and str(v).strip():
+                    session_id = str(v).strip()
+                    break
+
+    if not session_id and unified_req and unified_req.messages:
+        for msg in unified_req.messages:
+            if msg.role == "user" and msg.content.strip():
+                import hashlib
+                prompt_hash = hashlib.md5(msg.content.strip().encode("utf-8")).hexdigest()[:8]
+                session_id = f"sess_{prompt_hash}"
+                break
+
+    if not session_id and isinstance(raw_body, dict) and raw_body.get("user"):
+        session_id = str(raw_body.get("user")).strip()
+
+    if not session_id:
+        session_id = "sess_main"
 
     # 5. 프롬프트 텍스트 및 분류기를 이용한 난이도/라우터 선택
     user_prompt, is_new_user_turn, substep_prompt = Router.extract_user_prompt_and_turn_status(unified_req)
