@@ -134,6 +134,28 @@ async def get_usage():
     """ 실시간으로 세션 누적 사용량 및 예상 비용(USD) 조회 """
     return global_tracker.get_summary()
 
+from src.tierbridge.healing_engine import HealingEngine
+
+@app.get("/v1/models/healing-status")
+async def get_healing_status():
+    """ 힐링 모듈 상태, 신규 모델 발견 여부 및 비용 비교표 조회 """
+    return HealingEngine.get_healing_status()
+
+@app.post("/v1/models/heal")
+async def apply_healing():
+    """ 신규 저비용/고출력 모델 스냅샷을 핫패치 릴리즈 적용 """
+    return HealingEngine.apply_healing()
+
+@app.post("/v1/models/version/switch")
+async def switch_model_version(request: Request):
+    """ 특정 모델 버전(e.g., v1.0.0, latest)으로 라우팅 롤백/복원 """
+    try:
+        body = await request.json()
+        version_id = body.get("version_id", "latest")
+    except Exception:
+        version_id = "latest"
+    return HealingEngine.switch_version(version_id)
+
 # ==========================================
 # 핵심 라우팅 하네스 엔드포인트
 # ==========================================

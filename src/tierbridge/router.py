@@ -183,24 +183,28 @@ class Router:
         else:
             display_prompt = f"[Substep] {target_eval_prompt.replace('\n', ' ').strip()}"
 
-        # 등급 판정 및 라우터 모드(3-Tier vs 4-Tier Sol)에 따른 매핑
-        if "LUNA:LOW" in verdict or "MINI" in verdict:
-            final_decision, final_model, final_effort = "LUNA:LOW", "gpt-5.6-luna", "low"
+        # 등급 판정 및 라우터 모드(3-Tier vs 4-Tier Sol)에 따른 매핑 (ModelRegistry 핫패치 수신)
+        from src.tierbridge.model_registry import registry
+        active_mapping = registry.get_active_mapping()
+
+        if "SOL:EXTRA_HIGH" in verdict or ("EXTRA_HIGH" in verdict and is_4tier_sol_mode):
+            tier_info = active_mapping.get("SOL:EXTRA_HIGH", {"model": "gpt-5.6-sol", "effort": "xhigh"})
+            final_decision, final_model, final_effort = "SOL:EXTRA_HIGH", tier_info.get("model", "gpt-5.6-sol"), tier_info.get("effort", "xhigh")
+        elif "TERRA:EXTRA_HIGH" in verdict or "EXTRA_HIGH" in verdict:
+            tier_info = active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"})
+            final_decision, final_model, final_effort = "TERRA:EXTRA_HIGH", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
+        elif "TERRA:HIGH" in verdict or "HIGH" in verdict:
+            tier_info = active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"})
+            final_decision, final_model, final_effort = "TERRA:HIGH", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
+        elif "TERRA:MEDIUM" in verdict or "TERRA" in verdict:
+            tier_info = active_mapping.get("TERRA:MEDIUM", {"model": "gpt-5.6-terra", "effort": "medium"})
+            final_decision, final_model, final_effort = "TERRA:MEDIUM", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "medium")
         elif "LUNA:MEDIUM" in verdict:
-            final_decision, final_model, final_effort = "LUNA:MEDIUM", "gpt-5.6-luna", "medium"
-        elif "TERRA:MEDIUM" in verdict:
-            final_decision, final_model, final_effort = "TERRA:MEDIUM", "gpt-5.6-terra", "medium"
-        elif "TERRA:HIGH" in verdict:
-            final_decision, final_model, final_effort = "TERRA:HIGH", "gpt-5.6-terra", "high"
-        elif any(k in verdict for k in ["EXTRA_HIGH", "XHIGH", "MAX", "SOL"]):
-            if is_4tier_sol_mode:
-                # 4-Tier Sol 라우터 모드: 최상위 gpt-5.6-sol 모델로 라우팅
-                final_decision, final_model, final_effort = "SOL:EXTRA_HIGH", "gpt-5.6-sol", "extra_high"
-            else:
-                # 기존 3-Tier 라우터 모드: gpt-5.6-terra 모델로 상한선 Capping
-                final_decision, final_model, final_effort = "TERRA:EXTRA_HIGH", "gpt-5.6-terra", "extra_high"
+            tier_info = active_mapping.get("LUNA:MEDIUM", {"model": "gpt-5.6-luna", "effort": "medium"})
+            final_decision, final_model, final_effort = "LUNA:MEDIUM", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "medium")
         else:
-            final_decision, final_model, final_effort = "LUNA:LOW", "gpt-5.6-luna", "low"
+            tier_info = active_mapping.get("LUNA:LOW", {"model": "gpt-5.6-luna", "effort": "low"})
+            final_decision, final_model, final_effort = "LUNA:LOW", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "low")
 
         mode_tag = "4-TIER SOL ROUTER" if is_4tier_sol_mode else "STANDARD 3-TIER ROUTER"
         sid_tag = f" [sid: {session_id}]" if session_id else ""
