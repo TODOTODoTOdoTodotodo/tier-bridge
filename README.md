@@ -27,8 +27,12 @@
 - **Zero-Drop USAGE & Session ID (`[sid]`) Tracking**:
   - 업스트림 backend SSE 파서 강화 및 Prompt-based Fallback Token Estimator를 적용하여 backend 사용량 정보 유실 시에도 ** usage 기록 누락 0건 (Zero-Drop)**을 보장합니다.
   - 로그 라인마다 세션 ID 태그(`[sid: <session_id>]`)를 기록하여 대화 세션별 정밀 크레딧 오디팅이 가능합니다.
-- **Kibana-Style Interactive Web Analytics Dashboard (`./analyze_usage.py --html`)**:
-  - `analyze_usage.py` 실행 시 CLI 리치 표 보고서뿐만 아니라, 반응형 그래프(Chart.js)와 **동적 월 선택 Dropdown UI**가 포함된 **Kibana 다크테마 시각화 웹 대시보드 (`usage_dashboard.html`)**를 자동 생성하여 브라우저에 엽니다.
+- **Model Healing Factor & Dynamic Version Management (모델 힐링팩터 및 버전 롤백)**:
+  - 신규 모델 릴리즈 및 토큰 단가 인하 자동 감지 엔진 (`HealingEngine`).
+  - 대시보드 상에서 단가 비교표 확인 및 **원클릭 무중단 핫패치 (`POST /v1/models/heal`)** 지원.
+  - 저장소 내 스냅샷 버전을 관리하여, 최신 힐링 적용 후 언제든지 과거 안정된 버전으로 복원하는 **원클릭 롤백 스위칭 (`POST /v1/models/version/switch`, `config/model_versions.json`)**.
+- **Real-time Live Auto-Sync Web Dashboard (3초 자동 라이브 갱신)**:
+  - 하네스 프록시의 `GET /v1/dashboard/stats` API와 연동하여 브라우저를 켜두기만 해도 3초 주기로 새로운 대화/토큰/크레딧 및 힐링 상태가 새로고침 없이 실시간으로 라이브 갱신됩니다.
 
 ---
 
@@ -98,6 +102,31 @@
 
 ---
 
+## 🩹 Model Healing Factor System & 동적 버전 관리 (Version Rollback)
+
+OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 추가되거나 토큰 단가가 인하되었을 때, 하네스는 무중단 핫패치와 롤백 스냅샷 버전 관리를 지원합니다.
+
+```
+[업스트림 신규 릴리즈 감지] ➔ [대시보드 단가 비교표] ➔ [원클릭 핫패치 POST /v1/models/heal] ➔ [config/model_versions.json 버저닝]
+                                                                                            └── [원클릭 롤백 스위칭]
+```
+
+1. **실시간 신규 모델 감지 (`has_new_healing`)**:
+   * 업스트림 API 탐색 결과 신규 모델 및 단가 절약 패치가 감지되면 대시보드 상단에 **`[ 💡 실제 신규 모델 감지됨! ]`** 알림 배너가 자동 활성화됩니다.
+2. **단가 & 성능 비교표 모달 및 데모 테스트 (`[ 🧪 힐링 핫패치 데모 샘플 ]`)**:
+   * 대시보드 우측 상단 데모 버튼을 클릭하여 현재 활성 모델 매핑 단가 vs 힐링 추천 모델 단가 비교표를 모달로 즉시 확인할 수 있습니다.
+3. **무중단 원클릭 핫패치 (Hot-patching)**:
+   * **[Apply Model Healing]** 버튼 클릭 시 하네스 서버 재부팅 없이 신규 스냅샷 버전(`v1.1.0-healing`)이 저장소에 등록되고 핫패치 라우팅이 즉시 가동됩니다.
+4. **버전 관리 및 원클릭 롤백 (Version Snapshot & Rollback)**:
+   * 대시보드 상단 **`[모델 버전: v1.0.0 (Active)]`** 드롭다운을 통해 언제든지 이전 버전 스냅샷으로 1초 만에 롤백/복원할 수 있습니다.
+
+### 힐링 REST API 명세:
+* `GET /v1/models/healing-status` : 힐링 감지 상태, 버전 목록 및 단가 비교표 반환
+* `POST /v1/models/heal` : 힐링 신규 스냅샷 생성 및 무중단 핫패치 적용
+* `POST /v1/models/version/switch` : 지정된 버전 ID(e.g., `v1.0.0`, `latest`)로 라우팅 롤백/복원
+
+---
+
 ## 🚀 실행 및 연동 (원스텝 자동화)
 
 포트 충돌 해제, 백그라운드 프록시 가동, 인증 패치, 환경 변수 주입까지 단 하나의 스크립트로 처리됩니다:
@@ -143,6 +172,7 @@ codex --oss --local-provider=ollama --model super chat
 ```
 명령 실행 시 Kibana 풍의 다크테마 웹페이지 (**`usage_dashboard.html`**)가 자동 생성되어 브라우저에 엽니다.
 
+* **3초 실시간 라이브 갱신 (Live Auto-Sync)**: `GET /v1/dashboard/stats` API와 자동 연동되어 브라우저를 열어두기만 해도 수치와 차트가 새로고침 없이 실시간 갱신됩니다.
 * **동적 월 선택 Dropdown UI**: 상단 드롭다운에서 월(`전체 월`, `2026-08`, `2026-07` 등)을 전환하면 KPI 카드, 일자별 추이 차트, 등급 분포 파이 차트, 프롬프트 인사이트 표가 실시간으로 동적 필터링됩니다.
 * **KPI Metric Cards**: Total Credits (1 Credit = $0.20 USD), Estimated Value ($), Total Tokens, Unique Sessions, LUNA Auto-scaling Savings ($ / Credits).
 * **Top Credit Consuming Prompts**: 가장 많은 크레딧을 소모한 프롬프트/릴레이 턴 TOP 15 목록 및 등급 배치 인사이트.
@@ -151,15 +181,19 @@ codex --oss --local-provider=ollama --model super chat
 
 ## 📁 프로젝트 주요 구성 (Directory & Files)
 
-- `harness.py` : 하네스 프록시 메인 서버 (FastAPI/Uvicorn, 모델 스왑 & 엔터프라이즈 JWT 헤더 주입)
-- `analyze_usage.py` : 로그 파싱, 크레딧 집계, 월별/세션별 분석 및 Kibana 웹 대시보드 리포터
+- `harness.py` : 하네스 프록시 메인 서버 (FastAPI/Uvicorn, 모델 스왑, 힐링 API & 엔터프라이즈 JWT 헤더 주입)
+- `analyze_usage.py` : 로그 파싱, 크레딧 집계, 월별/세션별 분석 및 Kibana 3초 라이브 웹 대시보드 리포터
+- `config/model_versions.json` : 모델 버전 관리 스냅샷 저장소 및 active_version 포인터
 - `run_harness.sh` : 프록시 원스텝 가동 및 터미널 환경변수 자동 주입 스크립트
 - `src/tierbridge/` :
   - `router.py` : `substep_prompt` extraction, 3-Tier / 4-Tier Sol classification & dynamic effort mapping
+  - `model_registry.py` : 모델 스냅샷 버저닝, 저장소 입출력 및 롤백 엔진
+  - `healing_engine.py` : 신규 모델 감지, 단가 비교 매트릭스 도출 및 핫패치 릴리즈 엔진
   - `usage_tracker.py` : Zero-Drop token parser, LOC extractor & `[sid]` session logging
   - `stream_transpiler.py` : SSE 스트림 실시간 트랜스파일러
 - `Controller/` :
   - `routing_harness.md` : 동적 라우팅 알고리즘 & 하네스 설계 명세 문서 (Documentation First)
+  - `model_healing_factor.md` : Model Healing Factor & 버전 관리 스펙 명세 문서 (Documentation First)
   - `analyze_usage.md` : 사용량 통계, 크레딧 산출, Kibana 대시보드 & 오디팅 가이드 문서 (Documentation First)
 
 ---
