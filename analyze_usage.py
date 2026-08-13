@@ -56,6 +56,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         selected_attr = 'selected' if target_month == m else ''
         month_options_html += f'<option value="{m}" {selected_attr}>{m}</option>'
 
+    # 동적 세션 선택 드롭다운 옵션 구성
+    available_sessions = sorted(list(set(r["session_id"] for r in all_raw_records if r["session_id"] and r["session_id"] != "N/A")))
+    session_options_html = '<option value="ALL" ' + ('selected' if not target_session else '') + '>전체 세션 (All Sessions)</option>'
+    for s in available_sessions:
+        s_short = s[:8] if len(s) > 8 else s
+        selected_attr = 'selected' if target_session == s else ''
+        session_options_html += f'<option value="{s}" {selected_attr}>{s} ({s_short})</option>'
+
     # Client-side JavaScript 처리를 위한 원본 JSON 데이터 구성
     client_records = []
     for r in all_raw_records:
@@ -103,19 +111,29 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 </h1>
             </div>
             <p class="text-slate-400 text-sm pl-12">
-                Codex Enterprise 토큰 소모량, 힐링팩터 모델 핫패치 & 3초 실시간 라이브 대시보드
+                Codex Enterprise 토큰 소모량, 힐링팩터 모델 핫패치 & 세션별 정밀 필터링 라이브 대시보드
             </p>
         </div>
         
-        <!-- Controls: Dynamic Month Selector, Model Version Selector, Live Indicator & Sample Test Button -->
+        <!-- Controls: Dynamic Month & Session Selectors, Model Version Selector, Live Indicator & Sample Test Button -->
         <div class="mt-4 md:mt-0 flex flex-wrap items-center gap-3">
             <!-- Dynamic Month Dropdown Selector -->
             <div class="flex items-center gap-2 bg-slate-800/90 border border-indigo-500/40 px-3 py-1.5 rounded-xl shadow-lg">
                 <i class="fa-solid fa-calendar-check text-indigo-400 text-sm"></i>
-                <span class="text-xs font-semibold text-slate-300">조회 월:</span>
-                <select id="monthSelect" onchange="onMonthChange(this.value)" 
+                <span class="text-xs font-semibold text-slate-300">월:</span>
+                <select id="monthSelect" onchange="onFilterChange()" 
                         class="bg-slate-900 text-emerald-400 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-indigo-400 cursor-pointer">
                     {month_options_html}
+                </select>
+            </div>
+
+            <!-- Dynamic Session Dropdown Selector -->
+            <div class="flex items-center gap-2 bg-slate-800/90 border border-sky-500/40 px-3 py-1.5 rounded-xl shadow-lg">
+                <i class="fa-solid fa-layer-group text-sky-400 text-sm"></i>
+                <span class="text-xs font-semibold text-slate-300">세션 ID:</span>
+                <select id="sessionSelect" onchange="onFilterChange()" 
+                        class="bg-slate-900 text-sky-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-sky-400 cursor-pointer max-w-[180px] truncate">
+                    {session_options_html}
                 </select>
             </div>
 
@@ -135,7 +153,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <span>Live Sync (3s)</span>
             </div>
 
-            <!-- Demo Sample Test Button (원할 때 클릭하여 핫패치/롤백 기능 테스트) -->
+            <!-- Demo Sample Test Button -->
             <button onclick="openHealingModal()"
                     class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
                 <i class="fa-solid fa-flask text-indigo-400"></i>
@@ -151,7 +169,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
     </header>
 
-    <!-- Healing Factor Banner (Visible ONLY when REAL new model detected) -->
+    <!-- Healing Factor Banner -->
     <div id="healingBanner" class="hidden mb-8 p-4 rounded-2xl glass-card border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-3">
             <span class="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-xl text-xl">
@@ -250,13 +268,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
                 <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-fire text-amber-400"></i> Top 크레딧 소모 프롬프트 턴 & 인사이트 (Prompt Insights)
+                    <i class="fa-solid fa-fire text-amber-400"></i> Top 크레딧 소모 프롬프트 턴 & 세션 인사이트
                 </h2>
-                <p class="text-xs text-slate-400 mt-1">선택한 월/기간 내 가장 많은 크레딧과 토큰을 소모한 턴별 프롬프트 및 라우팅 등급 인사이트</p>
+                <p class="text-xs text-slate-400 mt-1" id="promptTableSubTitle">
+                    기본 Top 15 표시 • 세션 검색 시 해당 세션 내 전용 랭킹 및 프롬프트 턴을 표시합니다.
+                </p>
             </div>
             <div class="relative">
-                <input type="text" id="searchInput" placeholder="프롬프트/세션ID 검색..." onkeyup="filterTable()" 
-                       class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2 pl-9 focus:outline-none focus:border-indigo-500 w-64">
+                <input type="text" id="searchInput" placeholder="프롬프트/풀 세션ID/축약ID 검색..." onkeyup="filterTable()" 
+                       class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2 pl-9 focus:outline-none focus:border-indigo-500 w-72">
                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
             </div>
         </div>
@@ -265,7 +285,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             <table class="w-full text-left border-collapse" id="promptTable">
                 <thead>
                     <tr class="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
-                        <th class="px-4 py-3 rounded-tl-xl">Rank</th>
+                        <th class="px-4 py-3 rounded-tl-xl" id="rankColHeader">Rank</th>
                         <th class="px-4 py-3">Session ID</th>
                         <th class="px-4 py-3">Prompt Content / Step Context</th>
                         <th class="px-4 py-3 text-right">요청 횟수</th>
@@ -279,6 +299,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     <!-- Dynamic JavaScript Table Insertion -->
                 </tbody>
             </table>
+        </div>
+
+        <!-- Load More Button -->
+        <div class="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+            <span class="text-xs text-slate-400" id="promptDisplayCountInfo">표시 중: Top 15개 턴</span>
+            <button id="loadMoreBtn" onclick="loadMorePrompts()"
+                    class="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5">
+                <i class="fa-solid fa-chevron-down text-xs"></i> 🔽 더보기 (15개 더 로드)
+            </button>
         </div>
     </div>
 
@@ -343,6 +372,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         let healingData = {healing_status_json};
         let dailyChart = null;
         let decisionChart = null;
+        let currentPromptLimit = 15; // 기본 노출 15개
 
         function initVersionSelector() {{
             const select = document.getElementById('versionSelect');
@@ -359,7 +389,6 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 select.appendChild(opt);
             }});
 
-            // Check REAL New Model Healing Notice Banner (True only when real model detected)
             if (healingData.has_new_healing) {{
                 document.getElementById('healingNoticeBtn').classList.remove('hidden');
                 document.getElementById('healingBanner').classList.remove('hidden');
@@ -427,10 +456,23 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
         }}
 
-        function renderDashboard(targetMonth) {{
-            const filteredRecords = (targetMonth === 'ALL' || !targetMonth) 
-                ? allRecords 
-                : allRecords.filter(r => r.month === targetMonth);
+        function loadMorePrompts() {{
+            currentPromptLimit += 15;
+            const currentMonth = document.getElementById('monthSelect').value;
+            const currentSession = document.getElementById('sessionSelect').value;
+            renderDashboard(currentMonth, currentSession);
+        }}
+
+        function renderDashboard(targetMonth, targetSession) {{
+            let filteredRecords = allRecords;
+
+            if (targetMonth && targetMonth !== 'ALL') {{
+                filteredRecords = filteredRecords.filter(r => r.month === targetMonth);
+            }}
+
+            if (targetSession && targetSession !== 'ALL') {{
+                filteredRecords = filteredRecords.filter(r => r.session_id === targetSession || r.session_id.includes(targetSession));
+            }}
 
             if (filteredRecords.length === 0) {{
                 document.getElementById('kpiCredits').innerText = '0.00 Cr';
@@ -441,7 +483,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 document.getElementById('kpiSessions').innerHTML = '0 <span class="text-sm font-normal text-slate-400">sessions</span>';
                 document.getElementById('kpiSavingsUsd').innerText = '$0.00';
                 document.getElementById('kpiSavingsCredits').innerText = '약 0.0 Cr 크레딧 아낌';
-                document.getElementById('promptTableBody').innerHTML = '<tr><td colspan="8" class="text-center py-6 text-slate-500">해당 월에 데이터가 없습니다.</td></tr>';
+                document.getElementById('promptTableBody').innerHTML = '<tr><td colspan="8" class="text-center py-6 text-slate-500">해당 조건에 맞는 데이터가 없습니다.</td></tr>';
+                document.getElementById('loadMoreBtn').classList.add('hidden');
+                document.getElementById('promptDisplayCountInfo').innerText = '표시 중: 0개';
                 return;
             }}
 
@@ -567,6 +611,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }});
             }}
 
+            // 프롬프트 그룹화 및 세션 랭킹 수합
             const promptMap = {{}};
             filteredRecords.forEach(r => {{
                 const pKey = r.prompt ? r.prompt : "(서브 스텝 / 연속 릴레이)";
@@ -585,11 +630,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 promptMap[pKey].cost += r.cost;
             }});
 
-            const topPrompts = Object.values(promptMap).sort((a,b) => b.cost - a.cost).slice(0, 15);
+            const allSortedPrompts = Object.values(promptMap).sort((a,b) => b.cost - a.cost);
+            const totalPromptsCount = allSortedPrompts.length;
+
+            const visiblePrompts = allSortedPrompts.slice(0, currentPromptLimit);
             let tableHtml = '';
-            topPrompts.forEach((p, idx) => {{
+            
+            visiblePrompts.forEach((p, idx) => {{
                 const credits = (p.cost / 0.20).toFixed(2);
-                const sidShort = (p.session_id && p.session_id !== 'N/A') ? p.session_id.substring(0, 8) : 'N/A';
+                const sidFull = p.session_id || 'N/A';
+                const sidShort = (sidFull !== 'N/A' && sidFull.length > 8) ? sidFull.substring(0, 8) : sidFull;
                 
                 let badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
                 if (p.decision.includes('TERRA') || p.decision.includes('SOL')) {{
@@ -599,9 +649,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const safePrompt = p.prompt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
                 tableHtml += `
-                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
-                    <td class="px-4 py-3 text-slate-400 font-mono text-sm">${{idx + 1}}</td>
-                    <td class="px-4 py-3 font-mono text-xs text-sky-400" title="${{p.session_id}}">${{sidShort}}</td>
+                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80" data-session-id="${{sidFull}}" data-session-short="${{sidShort}}">
+                    <td class="px-4 py-3 text-slate-400 font-mono text-sm font-bold">${{idx + 1}}</td>
+                    <td class="px-4 py-3 font-mono text-xs text-sky-400" title="${{sidFull}}">${{sidShort}}</td>
                     <td class="px-4 py-3 text-slate-200 font-medium max-w-md truncate" title="${{safePrompt}}">${{safePrompt}}</td>
                     <td class="px-4 py-3 text-right text-slate-300">${{p.count.toLocaleString()}}회</td>
                     <td class="px-4 py-3 text-right text-sky-400 font-mono">${{p.tokens.toLocaleString()}}</td>
@@ -617,18 +667,50 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }});
 
             document.getElementById('promptTableBody').innerHTML = tableHtml;
+
+            // Load More 버튼 제어
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            const countInfo = document.getElementById('promptDisplayCountInfo');
+
+            if (currentPromptLimit >= totalPromptsCount) {{
+                loadMoreBtn.classList.add('hidden');
+                countInfo.innerText = `전체 ${{totalPromptsCount.toLocaleString()}}개 표시 완료`;
+            }} else {{
+                loadMoreBtn.classList.remove('hidden');
+                countInfo.innerText = `표시 중: Top ${{visiblePrompts.length.toLocaleString()}} / 전체 ${{totalPromptsCount.toLocaleString()}}개`;
+            }}
+
+            // 필터링 적용 시 테이블 검색도 즉시 연동
+            filterTable();
         }}
 
-        function onMonthChange(val) {{
-            renderDashboard(val);
+        function onFilterChange() {{
+            currentPromptLimit = 15; // 필터 조작 시 15개 기본 초기화
+            const targetMonth = document.getElementById('monthSelect').value;
+            const targetSession = document.getElementById('sessionSelect').value;
+            renderDashboard(targetMonth, targetSession);
         }}
 
         function filterTable() {{
-            const input = document.getElementById('searchInput').value.toLowerCase();
+            const input = document.getElementById('searchInput').value.toLowerCase().trim();
             const rows = document.querySelectorAll('#promptTable tbody tr');
-            rows.forEach(row => {{
+            let visibleCount = 0;
+
+            rows.forEach((row, idx) => {{
                 const text = row.innerText.toLowerCase();
-                row.style.display = text.includes(input) ? '' : 'none';
+                const fullSid = (row.getAttribute('data-session-id') || '').toLowerCase();
+                const shortSid = (row.getAttribute('data-session-short') || '').toLowerCase();
+
+                const isMatch = !input || text.includes(input) || fullSid.includes(input) || shortSid.includes(input);
+                row.style.display = isMatch ? '' : 'none';
+
+                if (isMatch) {{
+                    visibleCount++;
+                    // 세션 ID 검색 시 세션 전용 랭크 (Session Rank 1, 2, 3...) 로 재계산
+                    if (input.includes('sess_') || input.length >= 6) {{
+                        row.querySelector('td').innerText = visibleCount;
+                    }}
+                }}
             }});
         }}
 
@@ -646,7 +728,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         initVersionSelector();
                     }}
                     const currentMonth = document.getElementById('monthSelect').value;
-                    renderDashboard(currentMonth);
+                    const currentSession = document.getElementById('sessionSelect').value;
+                    renderDashboard(currentMonth, currentSession);
                 }}
             }} catch(e) {{
                 // Proxy server offline or starting
@@ -656,8 +739,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         window.onload = function() {{
             initVersionSelector();
             const initialMonth = document.getElementById('monthSelect').value;
-            renderDashboard(initialMonth);
-            // 3초 주기로 실시간 자동 폴링 가동
+            const initialSession = document.getElementById('sessionSelect').value;
+            renderDashboard(initialMonth, initialSession);
             setInterval(fetchLiveDashboardStats, 3000);
         }};
     </script>

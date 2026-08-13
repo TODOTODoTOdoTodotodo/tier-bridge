@@ -172,8 +172,8 @@ codex --oss --local-provider=ollama --model super chat
 ```
 명령 실행 시 Kibana 풍의 다크테마 웹페이지 (**`usage_dashboard.html`**)가 자동 생성되어 브라우저에 엽니다.
 
-* **3초 실시간 라이브 갱신 (Live Auto-Sync)**: `GET /v1/dashboard/stats` API와 자동 연동되어 브라우저를 열어두기만 해도 수치와 차트가 새로고침 없이 실시간 갱신됩니다.
-* **동적 월 선택 Dropdown UI**: 상단 드롭다운에서 월(`전체 월`, `2026-08`, `2026-07` 등)을 전환하면 KPI 카드, 일자별 추이 차트, 등급 분포 파이 차트, 프롬프트 인사이트 표가 실시간으로 동적 필터링됩니다.
+* **세션 ID 동적 선택 드롭다운 UI & 세션 전용 랭킹 검색**: 대시보드 상단 세션 선택기(`sess_...`) 또는 검색창에 세션 ID 키워드를 입력하면, 해당 세션 내에서의 1, 2, 3위 **전용 랭크(Session-local Rank)**와 턴 기록이 즉시 필터링됩니다.
+* **무제한 더보기 (Load More)**: 기본 Top 15개 턴이 노출되며, 하단 **`[ 🔽 더보기 ]`** 버튼을 눌러 15개 단위(16~30위...)로 전체 프롬프트를 확장하여 이어서 조회할 수 있습니다.
 * **KPI Metric Cards**: Total Credits (1 Credit = $0.20 USD), Estimated Value ($), Total Tokens, Unique Sessions, LUNA Auto-scaling Savings ($ / Credits).
 * **Top Credit Consuming Prompts**: 가장 많은 크레딧을 소모한 프롬프트/릴레이 턴 TOP 15 목록 및 등급 배치 인사이트.
 
