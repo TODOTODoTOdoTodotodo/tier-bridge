@@ -17,13 +17,13 @@ class Router:
             )
         return cls._client
     @staticmethod
-    def extract_user_prompt_and_turn_status(unified_request: UnifiedRequest) -> Tuple[str, bool]:
+    def extract_user_prompt_and_turn_status(unified_request: UnifiedRequest) -> Tuple[str, bool, str]:
         """
-        가장 최근의 사용자 질의 및 신규 유저 턴 여부를 추출합니다.
-        Returns: (user_prompt, is_new_user_turn)
+        가장 최근의 사용자 질의, 신규 유저 턴 여부, 및 서브 스텝 작업 텍스트를 추출합니다.
+        Returns: (user_prompt, is_new_user_turn, substep_prompt)
         """
         if not unified_request.messages:
-            return "", False
+            return "", False, ""
 
         # 가장 최근 메시지가 유저 역할이고 내용이 있는 경우 신규 유저 입력 턴으로 판단
         last_msg = unified_request.messages[-1]
@@ -35,7 +35,18 @@ class Router:
             if msg.role == "user" and msg.content.strip():
                 user_prompt = msg.content.strip()
                 break
-        return user_prompt, is_new_user_turn
+
+        # 서브 스텝 오토스케일링용 텍스트 추출:
+        # 신규 유저 턴인 경우 유저 프롬프트를 사용하고, 내부 릴레이 스텝인 경우 가장 최근의 서브 액션 텍스트 추출
+        substep_prompt = user_prompt
+        if not is_new_user_turn and unified_request.messages:
+            for msg in reversed(unified_request.messages):
+                txt = msg.content.strip()
+                if txt and not ("너는 비용 절감용 라우터다" in txt or "LUNA:LOW" in txt):
+                    substep_prompt = txt
+                    break
+
+        return user_prompt, is_new_user_turn, substep_prompt
 
     @classmethod
     async def classify_request(
@@ -50,7 +61,7 @@ class Router:
         요청 난이도를 판정하여 3-Tier (luna->terra) 또는 4-Tier (luna->terra->sol) 라우팅을 수행합니다.
         requested_model: Codex CLI 시점에 지정된 모델명 (e.g. gpt-5.6-sol, 4tier)
         """
-        user_prompt, is_new_user_turn = cls.extract_user_prompt_and_turn_status(unified_request)
+        user_prompt, is_new_user_turn, substep_prompt = cls.extract_user_prompt_and_turn_status(unified_request)
         
         # CLI 실행 시점에 4-Tier Sol 라우터 활성화 여부 판별 (--model super, --model gpt-5.6-sol, --model 4tier)
         req_clean = (requested_model or unified_request.model or "").lower()
@@ -60,7 +71,9 @@ class Router:
             or os.getenv("HIGH_POWER_MODE", "").lower() == "true"
         )
 
-        if not user_prompt:
+        # 평가 대상 프롬프트: 턴의 첫 요청은 user_prompt, 내부 릴레이 서브 스텝은 substep_prompt 사용
+        target_eval_prompt = user_prompt if is_new_user_turn else substep_prompt
+        if not target_eval_prompt:
             return "LUNA:LOW", "gpt-5.6-luna", "low"
             
         headers = {
@@ -72,23 +85,23 @@ class Router:
         if account_id:
             headers["chatgpt-account-id"] = account_id
 
-        # 지능형 라우터 프롬프트 설정
+        # 지능형 라우터 프롬프트 설정 (서브 스텝 자동 강하 지침 포함)
         payload = {
             "model": "gpt-5.6-luna",
             "store": False,
             "stream": True,
             "reasoning": {"effort": "low"},
             "instructions": (
-                "너는 비용 절감용 라우터다. 유저 요청을 가장 낮은 적절한 등급으로 정확하게 분류해라.\n"
+                "너는 비용 절감용 라우터다. 유저 요청 및 에이전트 서브 스텝을 가장 낮은 적절한 등급으로 정확하게 분류해라.\n"
                 "반드시 아래 규칙을 지켜라.\n"
                 "1) 명확한 근거가 없으면 더 낮은 등급을 선택한다.\n"
-                "2) 단순 오타, 가벼운 수정, 단순 설명은 LUNA:LOW로 분류한다.\n"
+                "2) 단순 오타, 가벼운 수정, 파일 읽기/조회, 단순 서브 스텝 및 단순 설명은 LUNA:LOW로 분류한다.\n"
                 "3) 표준적인 비즈니스 로직 단위 구현 및 리팩토링은 LUNA:MEDIUM으로 분류한다.\n"
                 "4) 중간 이상의 복잡도, 아키텍처 변경, 복수 파일/컴포넌트 연동 수정은 TERRA:MEDIUM으로 승격한다.\n"
                 "5) 다중 모듈 알고리즘 작성 및 하이레벨 아키텍처 설계는 TERRA:HIGH로 분류한다.\n"
                 "6) 심층 최적화, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 EXTRA_HIGH로 분류한다.\n"
                 "7) 오직 한 단어만 출력한다. 다른 설명은 절대 금지한다.\n\n"
-                "- LUNA:LOW : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드, 단순 스크립트 작성\n"
+                "- LUNA:LOW : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드, 단순 스크립트 작성, 서브 스텝 툴 액션\n"
                 "- LUNA:MEDIUM : 일반적인 비즈니스 로직 단위 업무 구현, 표준적인 리팩토링, 단일 파일 디버깅\n"
                 "- TERRA:MEDIUM : 중간 수준 아키텍처 변경, 복수 컴포넌트 간 연동 수정, 중간 난이도 디버깅\n"
                 "- TERRA:HIGH : 복잡한 알고리즘 작성, 다중 컴포넌트 아키텍처 분석 및 시스템 설계\n"
@@ -101,7 +114,7 @@ class Router:
                     "content": [
                         {
                             "type": "input_text",
-                            "text": user_prompt
+                            "text": target_eval_prompt
                         }
                     ]
                 }
@@ -167,7 +180,7 @@ class Router:
         if is_new_user_turn and user_prompt:
             display_prompt = user_prompt.replace("\n", " ").strip()
         else:
-            display_prompt = ""
+            display_prompt = f"[Substep] {target_eval_prompt.replace('\n', ' ').strip()}"
 
         # 등급 판정 및 라우터 모드(3-Tier vs 4-Tier Sol)에 따른 매핑
         if "LUNA:LOW" in verdict or "MINI" in verdict:
