@@ -1,17 +1,12 @@
-# 🩹 Model Healing Factor & Dynamic Version Management
-
-이 문서는 TierBridge 하네스에 신규 모델 및 단가 인하 버전이 등장했을 때, 이를 대시보드에서 시각적으로 감지하고 원클릭 핫패치(Hot-patch) 및 롤백(Rollback) 버전 관리 기능을 제공하는 **`Model Healing Factor System`**의 명세 문서입니다.
-
----
-
 ## 1. 개요 및 목적 (Background & Objectives)
 
-LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 모델(e.g., `gpt-5.7`, `gpt-5.6-luna-v2`)이 추가되거나 입력/출력 토큰 단가 인하 패치가 이루어집니다.
+LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 모델(e.g., `gpt-5.7`, `gpt-5.6-luna-2026-08`)이 추가되거나 입력/출력 토큰 단가 인하 패치가 이루어집니다.
 
 `Model Healing Factor System`은 다음을 목적으로 설계되었습니다:
-1. **신규 모델 및 비용 절감 찬스 자동 감지**: 최신 모델 라인업 정보 및 비용 단가를 대시보드에서 즉시 탐지 및 비교.
-2. **원클릭 하네스 모델 교체 (Healing Hot-patch)**: 사용자가 대시보드 상에서 버튼 클릭 시 하네스를 재부팅하지 않고 라우팅 모델 매핑을 즉시 업데이트.
-3. **버전 이력 관리 및 원클릭 롤백 (Version Snapshot & Rollback)**: 덮어쓰지 않고 `latest`, `v1.1.0`, `v1.0.0` 등 버전 이력을 저장하여 언제든지 과거 안정된 모델 매핑 버전으로 복원 가능.
+1. **실제 신규 모델 및 단가 인하 실시간 감지**: 실제 업스트림 API에서 신규 모델이 릴리즈되었을 때만 대시보드 상단 알림 배너(`has_new_healing: true`) 자동 트리거.
+2. **데모 샘플 테스트 버튼 (`[ 🧪 힐링 핫패치 데모 샘플 ]`)**: 핫패치 및 롤백 기능 동작을 검증할 수 있는 샘플 테스트 모달 별도 분리 제공.
+3. **원클릭 하네스 모델 교체 (Healing Hot-patch)**: 사용자가 대시보드 상에서 버튼 클릭 시 하네스를 재부팅하지 않고 라우팅 모델 매핑을 즉시 업데이트.
+4. **버전 이력 관리 및 원클릭 롤백 (Version Snapshot & Rollback)**: 덮어쓰지 않고 `latest`, `v1.1.0`, `v1.0.0` 등 버전 이력을 저장하여 언제든지 과거 안정된 모델 매핑 버전으로 복원 가능.
 
 ---
 

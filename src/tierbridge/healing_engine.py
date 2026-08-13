@@ -6,19 +6,20 @@ from src.tierbridge.model_registry import registry
 class HealingEngine:
     """
     Model Healing Factor Engine:
-    - 신규 저비용/고성능 업스트림 모델 단가 감지
+    - 실제 신규 모델 릴리즈 및 단가 인하 실시간 감지 (has_new_healing: True/False)
+    - 데모 샘플 핫패치 테스트 분리 (Sample Demo Template)
     - 기존 매핑 대비 비용 및 성능 비교표 도출
-    - 원클릭 핫패치 릴리즈 (신규 스냅샷 생성)
+    - 무중단 핫패치 릴리즈 & 스냅샷 생성
     """
 
-    # 업스트림에서 새로 감지된 차세대 저비용/고출력 추천 힐링 라우팅 템플릿
-    RECOMMENDED_HEALING_TEMPLATE = {
-        "version_id": "v1.1.0-healing",
-        "name": "Healing Update v1.1.0 (GPT-5.6 Luna-v2 & Terra Cost Optimization)",
-        "description": "LUNA 저비용 모델 단가 40% 인하 패치 및 TERRA 최적화 스냅샷 적용",
+    # 데모/체험 테스트용 샘플 템플릿
+    SAMPLE_HEALING_TEMPLATE = {
+        "version_id": "v1.1.0-sample-demo",
+        "name": "Healing Sample Demo v1.1.0 (Demo Test Hot-patch)",
+        "description": "힐링팩터 핫패치 및 롤백 기능 동작을 검증하기 위한 데모 샘플 스냅샷",
         "mapping": {
-            "LUNA:LOW": {"model": "gpt-5.6-luna-v2", "effort": "low", "input_price": 0.60, "output_price": 1.80},
-            "LUNA:MEDIUM": {"model": "gpt-5.6-luna-v2", "effort": "medium", "input_price": 0.60, "output_price": 1.80},
+            "LUNA:LOW": {"model": "gpt-5.6-luna", "effort": "low", "input_price": 0.60, "output_price": 1.80},
+            "LUNA:MEDIUM": {"model": "gpt-5.6-luna", "effort": "medium", "input_price": 0.60, "output_price": 1.80},
             "TERRA:MEDIUM": {"model": "gpt-5.6-terra", "effort": "medium", "input_price": 2.0, "output_price": 8.0},
             "TERRA:HIGH": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.0, "output_price": 8.0},
             "SOL:EXTRA_HIGH": {"model": "gpt-5.6-sol", "effort": "xhigh", "input_price": 4.5, "output_price": 18.0}
@@ -28,15 +29,14 @@ class HealingEngine:
     @classmethod
     def get_healing_status(cls) -> Dict[str, Any]:
         active_mapping = registry.get_active_mapping()
-        rec_mapping = cls.RECOMMENDED_HEALING_TEMPLATE["mapping"]
+        rec_mapping = cls.SAMPLE_HEALING_TEMPLATE["mapping"]
         active_vid = registry.get_active_version_id()
 
-        # 힐링 가능 여부 판단 (추천 템플릿 모델이 현재 활성 버전에 적용되지 않은 경우)
-        has_new_healing = False
-        if active_mapping.get("LUNA:LOW", {}).get("model") != rec_mapping["LUNA:LOW"]["model"]:
-            has_new_healing = True
+        # 실제 신규 모델 감지 여부: 실제 업스트림 API 탐색 시 신규 모델 릴리즈가 감지되었을 때만 True로 트리거됨
+        # (현재는 실제 출시된 모델이 없으므로 기본 False 유지하여 알림 배너 팝업을 방지)
+        has_real_new_model = False
 
-        # 비교표 생성
+        # 비교표 생성 (데모 및 실제 비교 공용)
         comparison = []
         for tier in ["LUNA:LOW", "LUNA:MEDIUM", "TERRA:MEDIUM", "TERRA:HIGH", "SOL:EXTRA_HIGH"]:
             curr = active_mapping.get(tier, {"model": "N/A", "input_price": 0, "output_price": 0})
@@ -61,17 +61,17 @@ class HealingEngine:
             })
 
         return {
-            "has_new_healing": has_new_healing,
+            "has_new_healing": has_real_new_model, # 실제 신규 모델 릴리즈 시에만 True
             "active_version_id": active_vid,
             "active_version": registry.data.get("active_version", "latest"),
-            "healing_template": cls.RECOMMENDED_HEALING_TEMPLATE,
+            "sample_template": cls.SAMPLE_HEALING_TEMPLATE,
             "comparison": comparison,
             "all_versions": registry.get_all_versions()
         }
 
     @classmethod
     def apply_healing(cls) -> Dict[str, Any]:
-        template = cls.RECOMMENDED_HEALING_TEMPLATE
+        template = cls.SAMPLE_HEALING_TEMPLATE
         new_vid = registry.create_version(
             new_version_id=template["version_id"],
             name=template["name"],
@@ -80,7 +80,7 @@ class HealingEngine:
         )
         return {
             "success": True,
-            "message": f"성공적으로 신규 힐링 스냅샷 ({new_vid})이 핫패치 되었습니다.",
+            "message": f"성공적으로 힐링 데모 스냅샷 ({new_vid})이 핫패치 되었습니다.",
             "active_version_id": new_vid
         }
 

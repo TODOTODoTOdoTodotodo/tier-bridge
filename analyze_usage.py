@@ -27,17 +27,17 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         healing_status = HealingEngine.get_healing_status()
     except Exception:
         healing_status = {
-            "has_new_healing": True,
+            "has_new_healing": False,
             "active_version_id": "v1.0.0",
             "active_version": "latest",
-            "healing_template": {
-                "version_id": "v1.1.0-healing",
-                "name": "Healing Update v1.1.0 (GPT-5.6 Luna-v2 & Terra Cost Optimization)",
-                "description": "LUNA 저비용 모델 단가 40% 인하 패치 및 TERRA 최적화 스냅샷 적용"
+            "sample_template": {
+                "version_id": "v1.1.0-sample-demo",
+                "name": "Healing Sample Demo v1.1.0 (Demo Test Hot-patch)",
+                "description": "힐링팩터 핫패치 및 롤백 기능 동작을 검증하기 위한 데모 샘플 스냅샷"
             },
             "comparison": [
-                {"tier": "LUNA:LOW", "current_model": "gpt-5.6-luna", "current_in_price": 1.0, "current_out_price": 3.0, "healing_model": "gpt-5.6-luna-v2", "healing_in_price": 0.6, "healing_out_price": 1.8, "savings_pct": 40.0},
-                {"tier": "LUNA:MEDIUM", "current_model": "gpt-5.6-luna", "current_in_price": 1.0, "current_out_price": 3.0, "healing_model": "gpt-5.6-luna-v2", "healing_in_price": 0.6, "healing_out_price": 1.8, "savings_pct": 40.0},
+                {"tier": "LUNA:LOW", "current_model": "gpt-5.6-luna", "current_in_price": 1.0, "current_out_price": 3.0, "healing_model": "gpt-5.6-luna", "healing_in_price": 0.6, "healing_out_price": 1.8, "savings_pct": 40.0},
+                {"tier": "LUNA:MEDIUM", "current_model": "gpt-5.6-luna", "current_in_price": 1.0, "current_out_price": 3.0, "healing_model": "gpt-5.6-luna", "healing_in_price": 0.6, "healing_out_price": 1.8, "savings_pct": 40.0},
                 {"tier": "TERRA:MEDIUM", "current_model": "gpt-5.6-terra", "current_in_price": 2.5, "current_out_price": 10.0, "healing_model": "gpt-5.6-terra", "healing_in_price": 2.0, "healing_out_price": 8.0, "savings_pct": 20.0},
                 {"tier": "TERRA:HIGH", "current_model": "gpt-5.6-terra", "current_in_price": 2.5, "current_out_price": 10.0, "healing_model": "gpt-5.6-terra", "healing_in_price": 2.0, "healing_out_price": 8.0, "savings_pct": 20.0},
                 {"tier": "SOL:EXTRA_HIGH", "current_model": "gpt-5.6-sol", "current_in_price": 5.0, "current_out_price": 20.0, "healing_model": "gpt-5.6-sol", "healing_in_price": 4.5, "healing_out_price": 18.0, "savings_pct": 10.0}
@@ -107,7 +107,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </p>
         </div>
         
-        <!-- Controls: Dynamic Month Selector, Model Version Selector & Live Indicator -->
+        <!-- Controls: Dynamic Month Selector, Model Version Selector, Live Indicator & Sample Test Button -->
         <div class="mt-4 md:mt-0 flex flex-wrap items-center gap-3">
             <!-- Dynamic Month Dropdown Selector -->
             <div class="flex items-center gap-2 bg-slate-800/90 border border-indigo-500/40 px-3 py-1.5 rounded-xl shadow-lg">
@@ -130,21 +130,28 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
 
             <!-- Real-time Live Auto-Sync Status Badge -->
-            <div class="px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg">
+            <div class="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
                 <span>Live Sync (3s)</span>
             </div>
 
-            <!-- Healing Factor Notification Button -->
+            <!-- Demo Sample Test Button (원할 때 클릭하여 핫패치/롤백 기능 테스트) -->
+            <button onclick="openHealingModal()"
+                    class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-flask text-indigo-400"></i>
+                <span>🧪 힐링 핫패치 데모 샘플</span>
+            </button>
+
+            <!-- Healing Notice Button (Visible ONLY when REAL new model detected) -->
             <button id="healingNoticeBtn" onclick="openHealingModal()"
                     class="hidden px-3.5 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl shadow-lg hover:bg-emerald-500/30 transition-all flex items-center gap-2">
                 <i class="fa-solid fa-kit-medical text-emerald-400"></i>
-                <span>💡 신규 모델 발견 & 단가 비교</span>
+                <span>💡 실제 신규 모델 감지됨!</span>
             </button>
         </div>
     </header>
 
-    <!-- Healing Factor Banner (Visible if new healing available) -->
+    <!-- Healing Factor Banner (Visible ONLY when REAL new model detected) -->
     <div id="healingBanner" class="hidden mb-8 p-4 rounded-2xl glass-card border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-3">
             <span class="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-xl text-xl">
@@ -152,10 +159,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </span>
             <div>
                 <h3 class="text-sm font-bold text-emerald-300 flex items-center gap-2">
-                    Model Healing Factor Detected! <span class="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full font-mono">Cost Saver</span>
+                    Real Upstream Model Released! <span class="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full font-mono">Cost Saver</span>
                 </h3>
                 <p class="text-xs text-slate-300 mt-0.5" id="healingBannerDesc">
-                    더 저렴하고 강력한 신규 라우팅 모델(GPT-5.6 Luna-v2)이 감지되었습니다. 단가 비교표를 확인하고 원클릭 핫패치를 적용하세요.
+                    실제 업스트림 API에서 신규 릴리즈 모델 및 단가 절약 패치가 감지되었습니다. 원클릭 핫패치를 적용하세요.
                 </p>
             </div>
         </div>
@@ -287,7 +294,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 </span>
                 <div>
                     <h2 class="text-lg font-bold text-slate-100">Model Healing Factor: 비용 & 성능 비교표</h2>
-                    <p class="text-xs text-slate-400">현재 활성 모델 매핑 단가 vs 감지된 신규 추천 모델 단가 비교</p>
+                    <p class="text-xs text-slate-400">현재 활성 모델 매핑 단가 vs 힐링 추천 모델 단가 비교 (데모 테스트 / 실제 릴리즈)</p>
                 </div>
             </div>
 
@@ -298,8 +305,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             <th class="p-3">Tier</th>
                             <th class="p-3">현재 매핑 모델</th>
                             <th class="p-3 text-right">현재 단가 (In/Out)</th>
-                            <th class="p-3 font-bold text-emerald-400">신규 힐링 추천 모델</th>
-                            <th class="p-3 text-right font-bold text-emerald-400">신규 단가 (In/Out)</th>
+                            <th class="p-3 font-bold text-emerald-400">추천 힐링 모델</th>
+                            <th class="p-3 text-right font-bold text-emerald-400">추천 단가 (In/Out)</th>
                             <th class="p-3 text-right font-bold text-indigo-400">예상 단가 절감율</th>
                         </tr>
                     </thead>
@@ -352,7 +359,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 select.appendChild(opt);
             }});
 
-            // Check Healing Notice Banner
+            // Check REAL New Model Healing Notice Banner (True only when real model detected)
             if (healingData.has_new_healing) {{
                 document.getElementById('healingNoticeBtn').classList.remove('hidden');
                 document.getElementById('healingBanner').classList.remove('hidden');
@@ -412,9 +419,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const data = await res.json();
                 if (data.success) {{
                     alert('✅ 모델 버전 스위칭 완료');
+                    location.reload();
                 }}
             }} catch(e) {{
-                alert('ℹ️ 모델 버전이 설정되었습니다.');
+                alert('ℹ️ 모델 버전 설정 완료');
+                location.reload();
             }}
         }}
 
