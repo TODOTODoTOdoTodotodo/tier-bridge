@@ -403,10 +403,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }});
                 const data = await res.json();
                 if (data.success) {{
-                    alert('✅ 모델 버전이 \'' + vid + '\'(으)로 성공적으로 스위칭되었습니다.');
+                    alert('✅ 모델 버전이 ' + vid + '로 성공적으로 스위칭되었습니다.');
                 }}
             }} catch(e) {{
-                alert('ℹ️ 모델 버전이 \'' + vid + '\'(으)로 설정되었습니다.');
+                alert('ℹ️ 모델 버전이 ' + vid + '로 설정되었습니다.');
             }}
         }}
 
@@ -579,11 +579,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     badgeClass = p.decision.includes('MEDIUM') ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30';
                 }}
 
+                // HTML 특수문자 이스케이프 파싱
+                const safePrompt = p.prompt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
                 tableHtml += `
                 <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
                     <td class="px-4 py-3 text-slate-400 font-mono text-sm">${{idx + 1}}</td>
                     <td class="px-4 py-3 font-mono text-xs text-sky-400" title="${{p.session_id}}">${{sidShort}}</td>
-                    <td class="px-4 py-3 text-slate-200 font-medium max-w-md truncate" title="${{p.prompt}}">${{p.prompt}}</td>
+                    <td class="px-4 py-3 text-slate-200 font-medium max-w-md truncate" title="${{safePrompt}}">${{safePrompt}}</td>
                     <td class="px-4 py-3 text-right text-slate-300">${{p.count.toLocaleString()}}회</td>
                     <td class="px-4 py-3 text-right text-sky-400 font-mono">${{p.tokens.toLocaleString()}}</td>
                     <td class="px-4 py-3 text-right text-indigo-300 font-mono font-semibold">$${{p.cost.toFixed(4)}}</td>
