@@ -29,27 +29,37 @@ Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=ollama`)로
 * **유연한 날짜 필터링**: `--date YYYY-MM-DD` 옵션을 통해 특정 일자의 사용량만 선택하여 정밀 모니터링할 수 있습니다.
 * **하위 호환성 유지**: 타임스탬프 또는 LOC 필드가 없는 구형 로그 형식도 예외 없이 호환하여 유실 없이 파싱합니다.
 * **엔터프라이즈 크레딧(Enterprise Credits) 자동 산출**: 달러 비용(`cost_usd`)을 기반으로 Codex Enterprise 크레딧 환산 단가(`1 Credit = $0.20 USD`)를 적용하여 예상 차감 크레딧 수치를 일자별/등급별로 함께 리포팅합니다.
+* **Kibana 스타일 시각화 웹 대시보드 리포트 생성 (`--html`)**: `--html` 옵션으로 명령 실행 시 Kibana 스타일의 다크테마 대시보드 웹페이지 (`usage_dashboard.html`)를 자동 생성하여 반응형 그래프(Chart.js) 및 실시간 KPI 카드로 일자별 추이를 시각적으로 제공합니다.
+* **프롬프트별 인사이트 (Top Credit Consuming Prompts)**: `[DECISION]`과 `[USAGE]` 라인을 실시간으로 정밀 매칭하여 가장 많은 크레딧과 토큰을 소모한 프롬프트 턴 TOP 10을 파악하고 최적화 팁 및 인사이트를 제공합니다.
 * **3-Tier / 4-Tier 동적 등급 소모 분포 제공**: `LUNA:LOW`, `LUNA:MEDIUM`, `TERRA:MEDIUM`, `TERRA:HIGH`, `TERRA:EXTRA_HIGH`, `SOL:EXTRA_HIGH` 등 등급별 소모 비용, 토큰 비율 및 작성 LOC를 명확하게 구분해 표시합니다.
 
 ---
 
 ## 3. 사용 방법 (Command Usage)
 
-### 3.1. 기본 전체 사용량 분석
-프로젝트 루트 디렉토리에서 기본 `harness.log` 파일의 전체 누적 통계를 조회합니다.
+### 3.1. 기본 전체 사용량 분석 (CLI 리치 보고서)
+프로젝트 루트 디렉토리에서 기본 `harness.log` 파일의 전체 누적 통계 및 프롬프트 인사이트를 조회합니다.
 
 ```bash
 ./analyze_usage.py
 ```
 *(또는 `python3 analyze_usage.py`)*
 
-### 3.2. 특정 날짜 필터링 조회 (`--date` / `-d`)
-원하는 특정 날짜(예: `2026-07-27`)의 소모량 및 등급 분포만 추출하여 조회합니다.
+### 3.2. Kibana 스타일 웹 대시보드 생성 및 열기 (`--html` / `-w`)
+Kibana 풍의 아름다운 반응형 다크테마 시각화 리포트 웹페이지 (`usage_dashboard.html`)를 생성하고 자동으로 브라우저에 엽니다.
 
 ```bash
-./analyze_usage.py --date 2026-07-27
-# 축약형
-./analyze_usage.py -d 2026-07-27
+./analyze_usage.py --html
+# 축약형 (웹 모드)
+./analyze_usage.py -w
+```
+
+### 3.3. 특정 날짜 필터링 조회 (`--date` / `-d`)
+원하는 특정 날짜(예: `2026-08-03`)의 소모량 및 등급 분포만 추출하여 조회하거나 HTML 대시보드로 생성합니다.
+
+```bash
+./analyze_usage.py --date 2026-08-03
+./analyze_usage.py --date 2026-08-03 --html
 ```
 
 ### 3.3. 특정 로그 파일 지정 분석
