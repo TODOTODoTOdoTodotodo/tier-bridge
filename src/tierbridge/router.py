@@ -55,7 +55,8 @@ class Router:
         auth_token: str, 
         enterprise_api_url: str,
         account_id: str = None,
-        requested_model: str = ""
+        requested_model: str = "",
+        session_id: str = ""
     ) -> Tuple[str, str, str]:
         """
         요청 난이도를 판정하여 3-Tier (luna->terra) 또는 4-Tier (luna->terra->sol) 라우팅을 수행합니다.
@@ -202,5 +203,6 @@ class Router:
             final_decision, final_model, final_effort = "LUNA:LOW", "gpt-5.6-luna", "low"
 
         mode_tag = "4-TIER SOL ROUTER" if is_4tier_sol_mode else "STANDARD 3-TIER ROUTER"
-        print(f"[{now_str}] ➔ [DECISION: {mode_tag}] {final_decision} ({final_model}:{final_effort}) | \"{display_prompt}\"", flush=True)
+        sid_tag = f" [sid: {session_id}]" if session_id else ""
+        print(f"[{now_str}]{sid_tag} ➔ [DECISION: {mode_tag}] {final_decision} ({final_model}:{final_effort}) | \"{display_prompt}\"", flush=True)
         return final_decision, final_model, final_effort

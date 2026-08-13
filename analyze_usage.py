@@ -9,14 +9,16 @@ from collections import defaultdict
 from datetime import datetime
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="TierBridge 로그 기반 Kibana풍 USAGE 및 프롬프트 인사이트 분석기")
+    parser = argparse.ArgumentParser(description="TierBridge 로그 기반 Kibana풍 USAGE 및 월별/세션별 통계 분석기")
     parser.add_argument("log_file", nargs="?", default="harness.log", help="분석할 로그 파일 경로 (기본: harness.log)")
     parser.add_argument("--date", "-d", type=str, help="특정 날짜 필터 (형식: YYYY-MM-DD)")
+    parser.add_argument("--month", "-m", type=str, help="특정 월 필터 (형식: YYYY-MM)")
+    parser.add_argument("--session", "-s", type=str, help="특정 세션 ID 필터 (예: 5eb61a1e)")
     parser.add_argument("--html", "-w", action="store_true", help="Kibana 스타일 시각화 웹 대시보드(usage_dashboard.html) 생성 및 브라우저 열기")
     parser.add_argument("--no-open", action="store_true", help="HTML 대시보드 생성 후 브라우저 자동 오픈 금지")
     return parser.parse_args()
 
-def generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None):
+def generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None):
     html_filename = "usage_dashboard.html"
     
     # 일자별 차트 데이터 구성
@@ -37,6 +39,9 @@ def generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, 
     for idx, p in enumerate(top_prompts, 1):
         prompt_txt = p["prompt"] if p["prompt"] else "(서브 스텝 / 연속 릴레이 스텝)"
         credits = round(p["cost"] / 0.20, 3)
+        sid_txt = p.get("session_id", "N/A")
+        sid_short = sid_txt[:8] if sid_txt != "N/A" else "N/A"
+        
         badge_class = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
         if "TERRA" in p["decision"] or "SOL" in p["decision"]:
             badge_class = "bg-amber-500/20 text-amber-300 border-amber-500/30" if "MEDIUM" in p["decision"] else "bg-rose-500/20 text-rose-300 border-rose-500/30"
@@ -44,6 +49,7 @@ def generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, 
         prompt_rows_html += f"""
         <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
             <td class="px-4 py-3 text-slate-400 font-mono text-sm">{idx}</td>
+            <td class="px-4 py-3 font-mono text-xs text-sky-400" title="{sid_txt}">{sid_short}</td>
             <td class="px-4 py-3 text-slate-200 font-medium max-w-md truncate" title="{prompt_txt}">{prompt_txt}</td>
             <td class="px-4 py-3 text-right text-slate-300">{p['count']:,}회</td>
             <td class="px-4 py-3 text-right text-sky-400 font-mono">{p['in_tok'] + p['out_tok']:,}</td>
@@ -63,6 +69,12 @@ def generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, 
     saved_usd = (luna_count * 0.12) - luna_cost if luna_count else 0.0
     saved_usd = max(0.0, saved_usd)
     saved_credits = saved_usd / 0.20
+
+    filter_info = []
+    if target_month: filter_info.append(f"월: {target_month}")
+    if target_date: filter_info.append(f"일자: {target_date}")
+    if target_session: filter_info.append(f"세션ID: {target_session}")
+    filter_desc = ", ".join(filter_info) if filter_info else "전체 누적 통계"
 
     html_content = f"""<!DOCTYPE html>
 <html lang="ko" class="dark">
@@ -93,13 +105,13 @@ def generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, 
                 </h1>
             </div>
             <p class="text-slate-400 text-sm pl-12">
-                Codex Enterprise 토큰 소모량, 차감 크레딧 & 프롬프트 인사이트 실시간 시각화 대시보드
+                Codex Enterprise 토큰 소모량, 차감 크레딧, 월별/세션별 & 프롬프트 인사이트 시각화 대시보드
             </p>
         </div>
         <div class="mt-4 md:mt-0 flex items-center gap-3">
             <span class="px-3.5 py-1.5 bg-slate-800/80 border border-slate-700 text-slate-300 text-xs font-mono rounded-lg">
                 <i class="fa-regular fa-calendar mr-1.5 text-indigo-400"></i>
-                {target_date if target_date else "전체 기간 누적 통계"}
+                {filter_desc}
             </span>
             <span class="px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold rounded-lg flex items-center gap-1.5">
                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Live Log Parser Active
@@ -133,12 +145,12 @@ def generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, 
             <div class="absolute -right-3 -bottom-3 text-sky-500/10 text-6xl"><i class="fa-solid fa-cubes"></i></div>
         </div>
 
-        <!-- Card 4: Total LOC -->
+        <!-- Card 4: Total Sessions -->
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
-            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Generated Code (LOC)</div>
-            <div class="text-3xl font-extrabold text-purple-400 font-mono mb-1">{total_loc:,} <span class="text-sm font-normal text-slate-400">lines</span></div>
-            <div class="text-xs text-slate-400">마크다운 코드 블록 작성 라인</div>
-            <div class="absolute -right-3 -bottom-3 text-purple-500/10 text-6xl"><i class="fa-solid fa-code"></i></div>
+            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Unique Sessions</div>
+            <div class="text-3xl font-extrabold text-purple-400 font-mono mb-1">{len(session_stats):,} <span class="text-sm font-normal text-slate-400">sessions</span></div>
+            <div class="text-xs text-slate-400">식별된 대화 세션 ID 수</div>
+            <div class="absolute -right-3 -bottom-3 text-purple-500/10 text-6xl"><i class="fa-solid fa-layer-group"></i></div>
         </div>
 
         <!-- Card 5: Savings -->
@@ -189,7 +201,7 @@ def generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, 
                 <p class="text-xs text-slate-400 mt-1">가장 많은 크레딧과 토큰을 소모한 턴별 프롬프트 및 라우팅 등급 인사이트</p>
             </div>
             <div class="relative">
-                <input type="text" id="searchInput" placeholder="프롬프트 검색..." onkeyup="filterTable()" 
+                <input type="text" id="searchInput" placeholder="프롬프트/세션ID 검색..." onkeyup="filterTable()" 
                        class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2 pl-9 focus:outline-none focus:border-indigo-500 w-64">
                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
             </div>
@@ -200,6 +212,7 @@ def generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, 
                 <thead>
                     <tr class="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
                         <th class="px-4 py-3 rounded-tl-xl">Rank</th>
+                        <th class="px-4 py-3">Session ID</th>
                         <th class="px-4 py-3">Prompt Content / Step Context</th>
                         <th class="px-4 py-3 text-right">요청 횟수</th>
                         <th class="px-4 py-3 text-right">총 토큰</th>
@@ -311,16 +324,16 @@ def generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, 
     print(f"✅ [Kibana Visual Dashboard] 성공적으로 생성되었습니다: {os.path.abspath(html_filename)}")
     return html_filename
 
-def analyze(log_filepath, target_date=None, generate_html=False, open_browser=True):
+def analyze(log_filepath, target_date=None, target_month=None, target_session=None, generate_html=False, open_browser=True):
     if not os.path.exists(log_filepath):
         print(f"❌ Error: 로그 파일을 찾을 수 없습니다: {log_filepath}")
         sys.exit(1)
 
     usage_pattern = re.compile(
-        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[USAGE\] (?P<decision>[^\s]+) \((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE\] (?P<decision>[^\s]+) \((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
     )
     decision_pattern = re.compile(
-        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
     )
 
     records = []
@@ -335,6 +348,7 @@ def analyze(log_filepath, target_date=None, generate_html=False, open_browser=Tr
             if d_match:
                 prompt_history.append({
                     "timestamp": d_match.group("timestamp"),
+                    "sid": d_match.group("sid") or "N/A",
                     "decision": d_match.group("decision"),
                     "prompt": d_match.group("prompt")
                 })
@@ -344,17 +358,24 @@ def analyze(log_filepath, target_date=None, generate_html=False, open_browser=Tr
             u_match = usage_pattern.search(line)
             if u_match:
                 ts_str = u_match.group("timestamp")
+                sid_str = u_match.group("sid") or "N/A"
                 dt = None
                 date_key = "Unknown Date"
+                month_key = "Unknown Month"
                 if ts_str:
                     try:
                         dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
                         date_key = dt.strftime("%Y-%m-%d")
+                        month_key = dt.strftime("%Y-%m")
                     except ValueError:
                         pass
                 
-                # 날짜 필터링 적용
+                # 날짜/월/세션 필터링 적용
                 if target_date and date_key != target_date:
+                    continue
+                if target_month and month_key != target_month:
+                    continue
+                if target_session and target_session.lower() not in sid_str.lower():
                     continue
 
                 decision = u_match.group("decision")
@@ -368,10 +389,14 @@ def analyze(log_filepath, target_date=None, generate_html=False, open_browser=Tr
                 associated_prompt = ""
                 if prompt_history:
                     associated_prompt = prompt_history[-1]["prompt"]
+                    if sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
+                        sid_str = prompt_history[-1]["sid"]
 
                 records.append({
                     "datetime": dt,
                     "date": date_key,
+                    "month": month_key,
+                    "session_id": sid_str,
                     "decision": decision,
                     "model": model,
                     "prompt": associated_prompt,
@@ -383,8 +408,12 @@ def analyze(log_filepath, target_date=None, generate_html=False, open_browser=Tr
                 })
 
     if not records:
-        filter_msg = f" (날짜: {target_date})" if target_date else ""
-        print(f"⚠️  분석할 [USAGE] 로그 레코드가 없습니다.{filter_msg}")
+        filter_msg = []
+        if target_month: filter_msg.append(f"월: {target_month}")
+        if target_date: filter_msg.append(f"일자: {target_date}")
+        if target_session: filter_msg.append(f"세션ID: {target_session}")
+        desc = ", ".join(filter_msg) if filter_msg else ""
+        print(f"⚠️  분석할 [USAGE] 로그 레코드가 없습니다. ({desc})")
         return
 
     # 요약 집계
@@ -398,11 +427,15 @@ def analyze(log_filepath, target_date=None, generate_html=False, open_browser=Tr
 
     decision_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
     daily_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
-    prompt_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "cost": 0.0, "prompt": "", "decision": ""})
+    monthly_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
+    session_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
+    prompt_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "cost": 0.0, "prompt": "", "decision": "", "session_id": ""})
 
     for r in records:
         d = r["decision"]
         dt_key = r["date"]
+        m_key = r["month"]
+        s_key = r["session_id"]
         p_key = r["prompt"] if r["prompt"] else "(서브 스텝 / 연속 릴레이)"
         
         decision_stats[d]["count"] += 1
@@ -417,18 +450,32 @@ def analyze(log_filepath, target_date=None, generate_html=False, open_browser=Tr
         daily_stats[dt_key]["loc"] += r["loc"]
         daily_stats[dt_key]["cost"] += r["cost"]
 
+        monthly_stats[m_key]["count"] += 1
+        monthly_stats[m_key]["in_tok"] += r["input_tokens"]
+        monthly_stats[m_key]["out_tok"] += r["output_tokens"]
+        monthly_stats[m_key]["loc"] += r["loc"]
+        monthly_stats[m_key]["cost"] += r["cost"]
+
+        session_stats[s_key]["count"] += 1
+        session_stats[s_key]["in_tok"] += r["input_tokens"]
+        session_stats[s_key]["out_tok"] += r["output_tokens"]
+        session_stats[s_key]["loc"] += r["loc"]
+        session_stats[s_key]["cost"] += r["cost"]
+
         prompt_stats[p_key]["count"] += 1
         prompt_stats[p_key]["in_tok"] += r["input_tokens"]
         prompt_stats[p_key]["out_tok"] += r["output_tokens"]
         prompt_stats[p_key]["cost"] += r["cost"]
         prompt_stats[p_key]["prompt"] = p_key
         prompt_stats[p_key]["decision"] = d
+        prompt_stats[p_key]["session_id"] = s_key
 
     print("\n====================================================================================================")
-    print("📊 [TierBridge Kibana AI 사용량, 크레딧 & 프롬프트 인사이트 통계 보고서]")
+    print("📊 [TierBridge Kibana AI 사용량, 크레딧, 월별/세션별 인사이트 보고서]")
     print("====================================================================================================")
-    if target_date:
-        print(f"🗓️  조회 대상 날짜: {target_date}")
+    if target_month: print(f"🗓️  조회 대상 월: {target_month}")
+    if target_date: print(f"🗓️  조회 대상 일자: {target_date}")
+    if target_session: print(f"🔀 조회 대상 세션 ID: {target_session}")
     print(f"📁 대상 로그 파일: {log_filepath}")
     print(f"📈 총 성공 요청 수 (Requests) : {total_reqs:,} 회")
     print(f"📥 총 Input 토큰 수          : {total_in:,} tokens")
@@ -453,7 +500,23 @@ def analyze(log_filepath, target_date=None, generate_html=False, open_browser=Tr
         credits = s['cost'] / 0.20
         print(f"{date_str:<12} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
 
-    print("\n[3] 💡 Top 크레딧 소모 프롬프트 턴 인사이트 (Top Prompt Insights)")
+    print("\n[3] 🗓️  월별(Monthly) 소모 요약")
+    print(f"{'년-월':<12} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12} | {'예상 크레딧 (Credits)':<20}")
+    print("-" * 95)
+    for month_str, s in sorted(monthly_stats.items()):
+        credits = s['cost'] / 0.20
+        print(f"{month_str:<12} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
+
+    print("\n[4] 🔀 세션(Session ID)별 소모 요약 (Top 10)")
+    print(f"{'Session ID':<38} | {'요청 수':<8} | {'소모 토큰':<12} | {'비용 (USD)':<12} | {'소모 크레딧 (Credits)'}")
+    print("-" * 95)
+    top_sessions = sorted(session_stats.items(), key=lambda x: x[1]["cost"], reverse=True)[:10]
+    for sid, s in top_sessions:
+        credits = s['cost'] / 0.20
+        tok_total = s['in_tok'] + s['out_tok']
+        print(f"{sid:<38} | {s['count']:<8,} | {tok_total:<12,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
+
+    print("\n[5] 💡 Top 크레딧 소모 프롬프트 턴 인사이트 (Top Prompt Insights)")
     print(f"{'Rank':<4} | {'소모 크레딧':<12} | {'소모 토큰':<10} | {'등급':<14} | {'프롬프트 요약'}")
     print("-" * 95)
     top_p = sorted(prompt_stats.values(), key=lambda x: x["cost"], reverse=True)[:5]
@@ -466,10 +529,10 @@ def analyze(log_filepath, target_date=None, generate_html=False, open_browser=Tr
     print("====================================================================================================\n")
 
     if generate_html:
-        html_file = generate_html_dashboard(records, daily_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date)
+        html_file = generate_html_dashboard(records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date, target_month, target_session)
         if open_browser:
             webbrowser.open("file://" + os.path.abspath(html_file))
 
 if __name__ == "__main__":
     args = parse_args()
-    analyze(args.log_file, args.date, generate_html=args.html, open_browser=not args.no_open)
+    analyze(args.log_file, target_date=args.date, target_month=args.month, target_session=args.session, generate_html=args.html, open_browser=not args.no_open)
