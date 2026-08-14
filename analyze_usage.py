@@ -24,11 +24,14 @@ def parse_args():
 def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None):
     html_filename = "usage_dashboard.html"
     
-    # Healing Engine 상태 가져오기
+    # Healing Engine 상태 가져오기 (Smart Import)
     try:
-        from src.tierbridge.healing_engine import HealingEngine
+        try:
+            from tierbridge.healing_engine import HealingEngine
+        except ImportError:
+            from src.tierbridge.healing_engine import HealingEngine
         healing_status = HealingEngine.get_healing_status()
-    except Exception:
+    except Exception as e:
         healing_status = {
             "has_new_healing": False,
             "active_version_id": "v1.0.0",
@@ -84,6 +87,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             "cost": r["cost"]
         })
     client_records_json = json.dumps(client_records)
+    
+    has_healing_banner = healing_status.get("has_new_healing", False)
+    banner_hidden_class = "" if has_healing_banner else "hidden"
 
     html_content = f"""<!DOCTYPE html>
 <html lang="ko" class="dark">
@@ -130,42 +136,42 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 </select>
             </div>
 
-            <!-- Dynamic Session Dropdown Selector -->
-            <div class="flex items-center gap-2 bg-slate-800/90 border border-sky-500/40 px-3 py-1.5 rounded-xl shadow-lg">
-                <i class="fa-solid fa-layer-group text-sky-400 text-sm"></i>
-                <span class="text-xs font-semibold text-slate-300">세션 ID:</span>
+            <!-- Dynamic Session ID Dropdown Selector -->
+            <div class="flex items-center gap-2 bg-slate-800/90 border border-purple-500/40 px-3 py-1.5 rounded-xl shadow-lg">
+                <i class="fa-solid fa-network-wired text-purple-400 text-sm"></i>
+                <span class="text-xs font-semibold text-slate-300">세션:</span>
                 <select id="sessionSelect" onchange="onFilterChange()" 
-                        class="bg-slate-900 text-sky-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-sky-400 cursor-pointer max-w-[180px] truncate">
+                        class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer max-w-[180px] truncate">
                     {session_options_html}
                 </select>
             </div>
 
-            <!-- Model Version Manager Dropdown -->
-            <div class="flex items-center gap-2 bg-slate-800/90 border border-purple-500/40 px-3 py-1.5 rounded-xl shadow-lg">
-                <i class="fa-solid fa-code-branch text-purple-400 text-sm"></i>
+            <!-- Model Version Selector -->
+            <div class="flex items-center gap-2 bg-slate-800/90 border border-sky-500/40 px-3 py-1.5 rounded-xl shadow-lg">
+                <i class="fa-solid fa-code-branch text-sky-400 text-sm"></i>
                 <span class="text-xs font-semibold text-slate-300">모델 버전:</span>
-                <select id="versionSelect" onchange="switchModelVersion(this.value)"
-                        class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer">
-                    <!-- Populated dynamically via JS -->
+                <select id="modelVersionSelect" onchange="switchModelVersion(this.value)"
+                        class="bg-slate-900 text-sky-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-sky-400 cursor-pointer">
+                    <option value="latest">Latest ({healing_status.get('active_version_id', 'v1.0.0')})</option>
                 </select>
             </div>
 
-            <!-- Real-time Live Auto-Sync Status Badge -->
-            <div class="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>Live Sync (3s)</span>
+            <!-- 3s Live Sync Badge -->
+            <div id="liveSyncBadge" class="flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg text-emerald-400 text-xs font-bold animate-pulse">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>3s Live Auto-Sync</span>
             </div>
 
-            <!-- Demo Sample Test Button -->
+            <!-- Healing Factor Demo Sample Test Button -->
             <button onclick="openHealingModal()"
-                    class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
-                <i class="fa-solid fa-flask text-indigo-400"></i>
+                    class="px-3.5 py-1.5 bg-gradient-to-r from-purple-600/30 to-indigo-600/30 border border-purple-400/50 text-purple-200 text-xs font-bold rounded-xl shadow-lg hover:bg-purple-600/40 transition-all flex items-center gap-2">
+                <i class="fa-solid fa-vial-circle-check text-purple-300"></i>
                 <span>🧪 힐링 핫패치 데모 샘플</span>
             </button>
 
             <!-- Healing Notice Button (Visible ONLY when REAL new model detected) -->
             <button id="healingNoticeBtn" onclick="openHealingModal()"
-                    class="hidden px-3.5 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl shadow-lg hover:bg-emerald-500/30 transition-all flex items-center gap-2">
+                    class="{banner_hidden_class} px-3.5 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl shadow-lg hover:bg-emerald-500/30 transition-all flex items-center gap-2">
                 <i class="fa-solid fa-kit-medical text-emerald-400"></i>
                 <span>💡 실제 신규 모델 감지됨!</span>
             </button>
@@ -173,7 +179,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     </header>
 
     <!-- Healing Factor Banner -->
-    <div id="healingBanner" class="hidden mb-8 p-4 rounded-2xl glass-card border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div id="healingBanner" class="{banner_hidden_class} mb-8 p-4 rounded-2xl glass-card border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-3">
             <span class="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-xl text-xl">
                 <i class="fa-solid fa-wand-magic-sparkles"></i>
