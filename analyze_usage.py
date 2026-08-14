@@ -150,7 +150,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             <div class="flex items-center gap-2 bg-slate-800/90 border border-sky-500/40 px-3 py-1.5 rounded-xl shadow-lg">
                 <i class="fa-solid fa-code-branch text-sky-400 text-sm"></i>
                 <span class="text-xs font-semibold text-slate-300">모델 버전:</span>
-                <select id="modelVersionSelect" onchange="switchModelVersion(this.value)"
+                <select id="versionSelect" onchange="switchModelVersion(this.value)"
                         class="bg-slate-900 text-sky-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-sky-400 cursor-pointer">
                     <option value="latest">Latest ({healing_status.get('active_version_id', 'v1.0.0')})</option>
                 </select>
@@ -385,6 +385,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         function initVersionSelector() {{
             const select = document.getElementById('versionSelect');
+            if (!select) return;
             select.innerHTML = '';
 
             const allVersions = healingData.all_versions || [];
