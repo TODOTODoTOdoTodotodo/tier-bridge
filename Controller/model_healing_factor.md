@@ -52,8 +52,8 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 기본 배포 및 런타임 활성 버전(`active_version`)은 최신 표준 모델 스냅샷인 **`v1.0.0`**으로 유지되며, 사용자가 핫패치 검증을 위해 `v0.9.0-test-legacy` 스냅샷으로 전환했을 때만 `HealingEngine`이 `has_new_healing: true` 알림 배너를 트리거합니다.
 
 - **원클릭 핫패칭 릴리즈 적용 및 배포 영구 보존 (Dual-Sink Persistence & Deployment Preservation)**:
-  - `apply_healing()` 또는 버전 전환(`switch_version()`) 호출 시 런타임 저장소(`~/.tierbridge/live/config/model_versions.json`)뿐만 아니라 **개발 레포 저장소(`config/model_versions.json`)에도 Active 버전 및 신규 릴리즈 스냅샷을 동시에 동기화 저장**합니다.
-  - 배포 스크립트(`deploy.sh`)의 `rsync` 실행 시 `config/model_versions.json` 설정을 `--exclude` 대상으로 지정하여, 런타임의 최신 Active 모델 버전 및 핫패치 릴리즈 설정이 배포 시 덮어씌워지지 않고 100% 영구 보존되도록 보호합니다.
+  - `ModelRegistry.get_config_path()`는 라이브 런타임의 설정 파일(`~/.tierbridge/live/config/model_versions.json`)을 1순위로 탐색하여 참조합니다.
+  - 사용자가 핫패칭을 적용하거나 드롭다운으로 변경한 `active_version` 런타임 상태는 `deploy.sh` 동기화 시 `--exclude='config/model_versions.json'` 규칙과 라이브 경로 1순위 참조 정책에 의해, **배포(`deploy.sh`)를 몇 번 가동하더라도 활성화된 모델 버전(Active Version) 상태가 리셋되지 않고 100% 지속 유지**됩니다.
   - 핫패치가 완료되면 `has_new_healing`은 `false`로 닫히고, 대시보드 버전 선택 드롭다운과 하단 타임라인에 `v1.1.0-healing-hotpatch`가 이력으로 남게 됩니다.
 
 - **단가 절감율 표출 규격 (Dynamic `savings_pct`)**:

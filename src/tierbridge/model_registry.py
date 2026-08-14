@@ -8,17 +8,18 @@ def get_config_path() -> str:
     if env_path and os.path.exists(env_path):
         return env_path
     
-    # 개발 레포 / 런타임 디렉토리 상위 탐색
+    # 1. 런타임 활성화 상태(Active Version) 보존을 위해 라이브 저장소 경로를 최우선 탐색
+    live_path = os.path.expanduser("~/.tierbridge/live/config/model_versions.json")
+    if os.path.exists(live_path):
+        return live_path
+
+    # 2. 개발 레포 디렉토리 참조
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     dev_path = os.path.join(base_dir, "config", "model_versions.json")
     if os.path.exists(dev_path):
         return dev_path
 
-    live_path = os.path.expanduser("~/.tierbridge/live/config/model_versions.json")
-    if os.path.exists(live_path):
-        return live_path
-
-    return dev_path
+    return live_path
 
 class ModelRegistry:
     _instance = None
