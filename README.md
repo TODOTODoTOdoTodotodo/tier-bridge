@@ -6,10 +6,10 @@
 
 ## 💡 개요 및 목적
 
-* 단순한 작업(명령어 안내, 단순 오타 수정, 파일 읽기/조회 스텝)은 저비용 저추론 모델(`LUNA:LOW`)로 보냅니다.
-* 표준적인 비즈니스 로직 단위 구현 및 리팩토링은 `LUNA:MEDIUM`으로 처리합니다.
-* 중간 이상의 복잡도 및 아키텍처 연동 작업은 `TERRA:MEDIUM` / `TERRA:HIGH` 단계로 라우팅합니다.
-* 초대규모 분석, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 최상위 `SOL:EXTRA_HIGH` (`gpt-5.6-sol`)로 승격합니다.
+* 단순한 작업(명령어 안내, 단순 오타 수정, 파일 읽기/조회 스텝)은 저비용 랭크(`BRONZE`)로 보냅니다.
+* 표준적인 비즈니스 로직 단위 구현 및 리팩토링은 `SILVER`로 처리합니다.
+* 중간 이상의 복잡도 및 아키텍처 연동 작업은 `GOLD` / `PLATINUM` 단계로 라우팅합니다.
+* 초대규모 분석, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 최상위 `CHALLENGER` (`gpt-5.6-sol`)로 승격합니다.
 * 로컬 인증 정보는 `~/.codex/auth.json`에서 자동으로 읽어 투명하게 엔터프라이즈 JWT 토큰을 주입합니다.
 
 ---
@@ -21,7 +21,7 @@
   - 환경 변수 가로채기(`OPENAI_BASE_URL` 등)를 통해 투명하게 작동하므로, 에이전트 고유의 프롬프트 흐름이나 툴 사용(MCP) 제어 로직을 100% 무손상 상태로 이식합니다.
 - **Sub-step Cost Auto-scaling (서브 스텝 단위 비용 자동 강하)**:
   - 사용자 턴 내에서 에이전트가 툴(Tool Call)을 실행하고 코드를 편집/조회하는 릴레이 스텝(Turn 2+) 시 최신 서브 작업 텍스트(`substep_prompt`)를 정밀 추출하여 난이도를 재판정합니다.
-  - 가벼운 서브 작업(파일 수정, 조회, 단순 스크립트 실행) 단계는 자동으로 **`LUNA:LOW`**로 강하되어 **추가 크레딧 절약율 30~50%를 제공**합니다.
+  - 가벼운 서브 작업(파일 수정, 조회, 단순 스크립트 실행) 단계는 자동으로 **`BRONZE`**로 강하되어 **추가 크레딧 절약율 30~50%를 제공**합니다.
 - **Seamless Session Continuation (세션 컨텍스트 완벽 보존)**:
   - 하네스가 매 스텝마다 실시간으로 모델 ID를 교체(예: `gpt-5.6-luna` ➔ `gpt-5.6-terra`)하여 릴레이하더라도, 백엔드 레벨에서 동일한 대화 세션 ID(`conversation_id`)와 이전 누적 대화 기록이 완벽하게 보존됩니다.
 - **Zero-Drop USAGE & Session ID (`[sid]`) Tracking**:
@@ -61,10 +61,10 @@
                            │
              ┌─────────────┼──────────────┬──────────────┐
              ▼             ▼              ▼              ▼
-       [LUNA:LOW/MID] [TERRA:MEDIUM]  [TERRA:HIGH] [SOL:EXTRA_HIGH]
+          [BRONZE]      [SILVER]       [GOLD]       [CHALLENGER]
              │             │              │              │
-       gpt-5.6-luna   gpt-5.6-terra  gpt-5.6-terra   gpt-5.6-sol
-         (low/med)       (medium)        (high)     (extra_high: 4-Tier만)
+       gpt-5.6-luna   gpt-5.6-luna  gpt-5.6-terra   gpt-5.6-sol
+         (low)         (medium)       (medium)     (extra_high: 4-Tier만)
              └─────────────┴──────────────┴──────────────┘
                            │
                            ▼ Forward with Injected JWT Auth Header
@@ -79,26 +79,26 @@
 
 1. **기존 3-Tier 라우터 (Standard 3-Tier Router - 기본 실행)**:
    * **CLI 실행 명령**: `codex --oss --local-provider=localai`
-   * **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (extra_high)
-   * **특징**: `sol` 모델을 소비하지 않고 `terra` 계열 상한선으로 캡핑하여 크레딧을 보존합니다.
+   * **라우팅 범위**: `BRONZE` (low) ~ `DIAMOND` (extra_high)
+   * **특징**: `CHALLENGER` (`sol`) 모델을 소비하지 않고 `DIAMOND` (`terra`) 계열 상한선으로 캡핑하여 크레딧을 보존합니다.
 
 2. **4-Tier Sol 라우터 (4-Tier Sol Router - `--model super` 단축 인자)**:
    * **CLI 실행 명령**: `codex --oss --local-provider=localai --model super` *(또는 `--model gpt-5.6-sol`)*
-   * **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (high) ~ 최상위 **`gpt-5.6-sol` (extra_high / API: `xhigh`)**
-   * **특징**: 저난도 스텝은 `luna`로 크레딧을 절약하고, 메모리 누수/데드락 디버깅 등 최상위 고난도 작업 시 `gpt-5.6-sol`까지 라우팅 영역을 확장합니다.
+   * **라우팅 범위**: `BRONZE` (low) ~ `PLATINUM` (high) ~ 최상위 **`CHALLENGER` (`gpt-5.6-sol` / extra_high)**
+   * **특징**: 저난도 스텝은 `BRONZE` / `SILVER`로 크레딧을 절약하고, 메모리 누수/데드락 디버깅 등 최상위 고난도 작업 시 `CHALLENGER`까지 라우팅 영역을 확장합니다.
 
 ---
 
-## 📊 등급 체계 및 분류 기준 (Tier Classification)
+## 📊 등급 체계 및 게이밍 랭크 분류 기준 (Gaming RPG Rank Classification)
 
-| Router Mode | Classification | Destination Model | Reasoning Effort | Description / Typical Use Cases |
+| Router Mode | Gaming RPG Rank | Destination Model | Reasoning Effort | Description / Typical Use Cases |
 | :--- | :--- | :--- | :--- | :--- |
-| **Common (1/4 & 2/4)** | **LUNA:LOW** | `gpt-5.6-luna` | `"low"` | Simple grammar, minor typos, file read/edit sub-steps |
-| **Common (1/4 & 2/4)** | **LUNA:MEDIUM** | `gpt-5.6-luna` | `"medium"` | Standard business logic, single-file refactoring |
-| **Common (2/4 & 3/4)** | **TERRA:MEDIUM** | `gpt-5.6-terra` | `"medium"` | Medium complexity, multi-component refactoring |
-| **Common (2/4 & 3/4)** | **TERRA:HIGH** | `gpt-5.6-terra` | `"high"` | Complex algorithms, multi-component architecture |
-| **3-Tier Max** | **TERRA:EXTRA_HIGH** | `gpt-5.6-terra` | `"extra_high"` | Deep debugging & tuning (3-Tier Mode Max Capped) |
-| **4-Tier Max** | **SOL:EXTRA_HIGH** | `gpt-5.6-sol` | `"extra_high"` | Deadlock debugging, memory leak detection (4-Tier Sol Max) |
+| **Common (1/4 & 2/4)** | 🥉 **BRONZE** | `gpt-5.6-luna` | `"low"` | Simple grammar, minor typos, file read/edit sub-steps |
+| **Common (1/4 & 2/4)** | 🥈 **SILVER** | `gpt-5.6-luna` | `"medium"` | Standard business logic, single-file refactoring |
+| **Common (2/4 & 3/4)** | 🥇 **GOLD** | `gpt-5.6-terra` | `"medium"` | Medium complexity, multi-component refactoring |
+| **Common (2/4 & 3/4)** | 💎 **PLATINUM** | `gpt-5.6-terra` | `"high"` | Complex algorithms, multi-component architecture |
+| **3-Tier Max** | 🔷 **DIAMOND** | `gpt-5.6-terra` | `"extra_high"` | Deep debugging & tuning (3-Tier Mode Max Capped) |
+| **4-Tier Max** | 🏆 **CHALLENGER** | `gpt-5.6-sol` | `"extra_high"` | Deadlock debugging, memory leak detection (4-Tier Sol Max) |
 
 ---
 

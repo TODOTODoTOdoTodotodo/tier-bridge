@@ -84,22 +84,22 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
       "name": "Standard 3-Tier v1.0",
       "updated_at": "2026-07-31T00:00:00",
       "mapping": {
-        "LUNA:LOW": {"model": "gpt-5.6-luna", "effort": "low"},
-        "LUNA:MEDIUM": {"model": "gpt-5.6-luna", "effort": "medium"},
-        "TERRA:MEDIUM": {"model": "gpt-5.6-terra", "effort": "medium"},
-        "TERRA:HIGH": {"model": "gpt-5.6-terra", "effort": "high"},
-        "SOL:EXTRA_HIGH": {"model": "gpt-5.6-sol", "effort": "xhigh"}
+        "BRONZE": {"model": "gpt-5.6-luna", "effort": "low"},
+        "SILVER": {"model": "gpt-5.6-luna", "effort": "medium"},
+        "GOLD": {"model": "gpt-5.6-terra", "effort": "medium"},
+        "PLATINUM": {"model": "gpt-5.6-terra", "effort": "high"},
+        "CHALLENGER": {"model": "gpt-5.6-sol", "effort": "xhigh"}
       }
     },
     "v1.1.0": {
       "name": "Healing Update: LUNA-v2 Cost Reduction",
       "updated_at": "2026-08-13T14:00:00",
       "mapping": {
-        "LUNA:LOW": {"model": "gpt-5.6-luna-v2", "effort": "low"},
-        "LUNA:MEDIUM": {"model": "gpt-5.6-luna-v2", "effort": "medium"},
-        "TERRA:MEDIUM": {"model": "gpt-5.6-terra", "effort": "medium"},
-        "TERRA:HIGH": {"model": "gpt-5.6-terra", "effort": "high"},
-        "SOL:EXTRA_HIGH": {"model": "gpt-5.6-sol", "effort": "xhigh"}
+        "BRONZE": {"model": "gpt-5.6-luna-v2", "effort": "low"},
+        "SILVER": {"model": "gpt-5.6-luna-v2", "effort": "medium"},
+        "GOLD": {"model": "gpt-5.6-terra", "effort": "medium"},
+        "PLATINUM": {"model": "gpt-5.6-terra", "effort": "high"},
+        "CHALLENGER": {"model": "gpt-5.6-sol", "effort": "xhigh"}
       }
     }
   }

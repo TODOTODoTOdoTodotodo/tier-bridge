@@ -29,7 +29,7 @@ OpenAI 및 ChatGPT Enterprise 백엔드 API 응답 메타데이터에는 토큰 
    * 계산된 `loc` (Lines of Code) 수치를 `UsageTracker.track_request`에 전달합니다.
    * `harness.log` 출력 예시:
      ```text
-     [2026-07-27 11:08:25] ➔ [USAGE] LUNA:LOW (gpt-5.6-luna) | input=21 output=365 tokens | loc=42 lines | cost=$0.001116 USD
+     [2026-07-27 11:08:25] ➔ [USAGE] BRONZE (gpt-5.6-luna) | input=21 output=365 tokens | loc=42 lines | cost=$0.001116 USD
      ```
    * `/usage` API 응답 및 `analyze_usage.py` 리포트에 총 LOC 및 평균 LOC 표기.
 
@@ -40,4 +40,4 @@ OpenAI 및 ChatGPT Enterprise 백엔드 API 응답 메타데이터에는 토큰 
 `analyze_usage.py` 실행 시:
 * **총 작성 코드 라인 수 (Total Code LOC)**
 * **요청당 평균 작성 코드 라인 수 (Avg LOC / Request)**
-* **Decision 등급별 LOC 분포** (`LUNA:MEDIUM` 등에서 작성된 소스코드 라인 수)
+* **Decision 등급별 LOC 분포** (`SILVER` 등에서 작성된 소스코드 라인 수)

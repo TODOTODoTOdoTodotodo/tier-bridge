@@ -9,7 +9,7 @@
 - **하이브리드 아키텍처 (Hybrid Dual Architecture)**:
   1. **하네스 비동기 수집 (Direct Module In-process 5ms)**: 하네스 내부에서는 MCP HTTP 오버헤드 없이 `sub_memory.service.MemoryService` 파이썬 모듈을 직접 호출하여 5ms 이내 비동기 인메모리/DB 직접 수집.
   2. **MCP 인터페이스 유지**: 에이전트 자율 툴 호출 및 `sub-memory-web` UI 연동을 위해 MCP Protocol(Port 8766)도 듀얼 노출.
-- **노이즈 방지 (Selective Ingestion Gating)**: 단순 파일 조회나 단문 스크립트 실행 스텝(`LUNA:LOW`)은 수집에서 제외하고, 의미 있는 비즈니스 턴(`LUNA:MEDIUM` 이상 또는 사용자 첫 턴)만 선별 수집.
+- **노이즈 방지 (Selective Ingestion Gating)**: 단순 파일 조회나 단문 스크립트 실행 스텝(`BRONZE`)은 수집에서 제외하고, 의미 있는 비즈니스 턴(`SILVER` 이상 또는 사용자 첫 턴)만 선별 수집.
 
 ---
 
@@ -23,7 +23,7 @@
           └───► asyncio.create_task(MemoryIngestionWorker.process_log_event(...))
                       │
                       ▼ [Quality Gate Filter]
-                      │ - Check decision != 'LUNA:LOW' or is_user_turn_1
+                      │ - Check decision != 'BRONZE' or is_user_turn_1
                       ▼
                [Direct In-process Python Import: MemoryService.store_memory()]
                       │
@@ -50,8 +50,8 @@ class MemoryIngestionWorker:
         Direct Module In-process Store (Non-blocking <5ms)
         """
         decision = event.get("decision", "")
-        # LUNA:LOW 단순 스텝은 저장 제외 (노이즈 방지)
-        if decision == "LUNA:LOW" and not event.get("is_first_turn", False):
+        # BRONZE 단순 스텝은 저장 제외 (노이즈 방지)
+        if decision == "BRONZE" and not event.get("is_first_turn", False):
             return
 
         session_id = event.get("session_id", "sess_default")
@@ -86,7 +86,7 @@ class MemoryIngestionWorker:
 
 1. **Direct In-process 파이썬 임포트 테스트**:
    ```bash
-   python -c "import asyncio; from src.tierbridge.memory_ingestion_worker import MemoryIngestionWorker; asyncio.run(MemoryIngestionWorker.process_log_event({'session_id': 'sess_test1', 'prompt': '테스트 지식 저장', 'decision': 'TERRA:MEDIUM', 'cost': 0.12, 'is_first_turn': True}))"
+   python -c "import asyncio; from src.tierbridge.memory_ingestion_worker import MemoryIngestionWorker; asyncio.run(MemoryIngestionWorker.process_log_event({'session_id': 'sess_test1', 'prompt': '테스트 지식 저장', 'decision': 'GOLD', 'cost': 0.12, 'is_first_turn': True}))"
    ```
 2. **하네스 실시간 연동 테스트**:
    * `run_harness.sh` 가동 후 Codex CLI로 프롬프트 전송.
