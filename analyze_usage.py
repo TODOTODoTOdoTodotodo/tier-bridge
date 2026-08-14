@@ -462,6 +462,43 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }});
         }}
 
+        function updateMonthSelector() {{
+            const select = document.getElementById('monthSelect');
+            if (!select) return;
+            const currentVal = select.value || 'ALL';
+            
+            const months = Array.from(new Set(allRecords.map(r => r.month).filter(m => m && m !== 'Unknown Month'))).sort().reverse();
+            
+            select.innerHTML = '<option value="ALL">전체 기간 (All Months)</option>';
+            months.forEach(m => {{
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.text = m;
+                if (m === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            }});
+            if (currentVal === 'ALL') select.value = 'ALL';
+        }}
+
+        function updateSessionSelector() {{
+            const select = document.getElementById('sessionSelect');
+            if (!select) return;
+            const currentVal = select.value || 'ALL';
+            
+            const sessions = Array.from(new Set(allRecords.map(r => r.session_id).filter(s => s && s !== 'N/A'))).sort();
+            
+            select.innerHTML = '<option value="ALL">전체 세션 (All Sessions)</option>';
+            sessions.forEach(s => {{
+                const opt = document.createElement('option');
+                opt.value = s;
+                const sShort = s.length > 8 ? s.substring(0, 8) : s;
+                opt.text = `${{s}} (${{sShort}})`;
+                if (s === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            }});
+            if (currentVal === 'ALL') select.value = 'ALL';
+        }}
+
         function initVersionSelector() {{
             const select = document.getElementById('versionSelect');
             if (!select) return;
@@ -856,6 +893,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const data = await res.json();
                 if (data.records && data.records.length > 0) {{
                     allRecords = data.records;
+                    updateMonthSelector();
+                    updateSessionSelector();
                 }}
                 if (data.healing_status) {{
                     healingData = data.healing_status;
