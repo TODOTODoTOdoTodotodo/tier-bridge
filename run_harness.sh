@@ -19,10 +19,11 @@ if ! curl -s http://localhost:$PORT/v1/models >/dev/null 2>&1; then
     fi
 fi
 
-# 2. CLI 프록시 가로채기 환경변수 주입 (Full Environment Variables)
+# 2. CLI 프록시 가로채기 환경변수 주입 (Full Multi-Provider Environment Variables)
 export OPENAI_BASE_URL="http://localhost:18080/v1"
 export CODEX_API_BASE="http://localhost:18080/v1"
 export OLLAMA_HOST="http://localhost:18080"
+export LOCALAI_URL="http://localhost:18080"
 export CODEX_OSS_PORT="18080"
 export HARNESS_PORT="18080"
 
@@ -30,3 +31,4 @@ echo "✅ [TierBridge Agent Ready] 하네스 프록시 세션 환경변수가 �
 echo "   • OPENAI_BASE_URL = $OPENAI_BASE_URL"
 echo "   • CODEX_API_BASE  = $CODEX_API_BASE"
 echo "   • OLLAMA_HOST     = $OLLAMA_HOST"
+echo "   • LOCALAI_URL     = $LOCALAI_URL"

@@ -545,19 +545,19 @@ async def mock_enterprise_completions(request: Request):
             break
             
     if is_classification:
-        verdict = "LUNA:MEDIUM"
+        verdict = "SILVER"
         if "오타" in last_prompt or "명령어 오타" in last_prompt:
-            verdict = "LUNA:LOW"
+            verdict = "BRONZE"
         elif "리팩토링" in last_prompt or "단순" in last_prompt:
-            verdict = "LUNA:MEDIUM"
+            verdict = "SILVER"
         elif "호출 흐름" in last_prompt or "중간 난이도" in last_prompt:
-            verdict = "TERRA:MEDIUM"
+            verdict = "GOLD"
         elif "복잡한 알고리즘" in last_prompt or "다중 컴포넌트" in last_prompt:
-            verdict = "TERRA:HIGH"
+            verdict = "PLATINUM"
         elif "최적화" in last_prompt or "메모리 누수" in last_prompt or "분산 락" in last_prompt or "데드락" in last_prompt:
-            verdict = "SOL:EXTRA_HIGH"
+            verdict = "CHALLENGER"
             
-        print(f"[Mock Classifier] 4-Tier verdict for prompt -> {verdict}")
+        print(f"[Mock Classifier] Gaming RPG Rank verdict for prompt -> {verdict}")
         
         return {
             "choices": [

@@ -40,7 +40,7 @@
 
 ```
 [Codex Enterprise CLI]
- (e.g. codex --oss --local-provider=ollama [--model super])
+ (e.g. codex --oss --local-provider=localai [--model super])
              │
              │ 1. GET /v1/models (Health check & Model discovery)
              │ 2. POST /v1/chat/completions or /v1/responses (Payload contains 'model')
@@ -78,12 +78,12 @@
 하네스 서버는 별도 프롬프트나 서버 모드 전환 없이 항시 백그라운드에서 실행되며, **Codex CLI 실행 명령어의 `--model` 인자**에 따라 라우터 동작 방식이 동적으로 선택됩니다.
 
 1. **기존 3-Tier 라우터 (Standard 3-Tier Router - 기본 실행)**:
-   * **CLI 실행 명령**: `codex --oss --local-provider=ollama`
+   * **CLI 실행 명령**: `codex --oss --local-provider=localai`
    * **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (extra_high)
    * **특징**: `sol` 모델을 소비하지 않고 `terra` 계열 상한선으로 캡핑하여 크레딧을 보존합니다.
 
 2. **4-Tier Sol 라우터 (4-Tier Sol Router - `--model super` 단축 인자)**:
-   * **CLI 실행 명령**: `codex --oss --local-provider=ollama --model super` *(또는 `--model gpt-5.6-sol`)*
+   * **CLI 실행 명령**: `codex --oss --local-provider=localai --model super` *(또는 `--model gpt-5.6-sol`)*
    * **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (high) ~ 최상위 **`gpt-5.6-sol` (extra_high / API: `xhigh`)**
    * **특징**: 저난도 스텝은 `luna`로 크레딧을 절약하고, 메모리 누수/데드락 디버깅 등 최상위 고난도 작업 시 `gpt-5.6-sol`까지 라우팅 영역을 확장합니다.
 
@@ -159,10 +159,10 @@ source run_harness.sh
 
 ```bash
 # 기본 3-Tier 모드 가동
-codex --oss --local-provider=ollama chat
+codex --oss --local-provider=localai chat
 
 # 4-Tier Sol 라우팅 모드 가동 (단축 인자 --model super 사용)
-codex --oss --local-provider=ollama --model super chat
+codex --oss --local-provider=localai --model super chat
 ```
 
 ---
@@ -175,7 +175,8 @@ TierBridge 하네스 및 연동 엔진에서 사용하는 전체 환경변수 �
 | :--- | :--- | :--- |
 | **`OPENAI_BASE_URL`** | `http://localhost:18080/v1` | Codex CLI가 하네스 프록시를 타도록 가로채는 인바운드 BASE URL |
 | **`CODEX_API_BASE`** | `http://localhost:18080/v1` | Codex Enterprise 연동용 API 엔드포인트 BASE |
-| **`OLLAMA_HOST`** | `http://localhost:18080` | Codex `--local-provider=ollama` 호스트 가로채기 |
+| **`LOCALAI_URL`** | `http://localhost:18080` | Codex `--local-provider=localai` 호스트 가로채기 |
+| **`OLLAMA_HOST`** | `http://localhost:18080` | Codex 로컬 공급자 수신 포트 가로채기 |
 | **`CODEX_OSS_PORT`** | `18080` | Codex 로컬 공급자 수신 포트 |
 | **`ENTERPRISE_API_URL`** | `https://chatgpt.com/backend-api/codex/responses` | 업스트림 OpenAI Enterprise 백엔드 API 엔드포인트 |
 | **`HARNESS_PORT`** | `18080` | 하네스 프록시가 바인딩하여 수신하는 로컬 포트 |

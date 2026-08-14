@@ -75,7 +75,7 @@ class Router:
         # 평가 대상 프롬프트: 턴의 첫 요청은 user_prompt, 내부 릴레이 서브 스텝은 substep_prompt 사용
         target_eval_prompt = user_prompt if is_new_user_turn else substep_prompt
         if not target_eval_prompt:
-            return "LUNA:LOW", "gpt-5.6-luna", "low"
+            return "BRONZE", "gpt-5.6-luna", "low"
             
         headers = {
             "Authorization": auth_token,
@@ -93,20 +93,20 @@ class Router:
             "stream": True,
             "reasoning": {"effort": "low"},
             "instructions": (
-                "너는 비용 절감용 라우터다. 유저 요청 및 에이전트 서브 스텝을 가장 낮은 적절한 등급으로 정확하게 분류해라.\n"
+                "너는 비용 절감용 라우터다. 유저 요청 및 에이전트 서브 스텝을 가장 적절한 게이밍 랭크 티어로 정확하게 분류해라.\n"
                 "반드시 아래 규칙을 지켜라.\n"
-                "1) 명확한 근거가 없으면 더 낮은 등급을 선택한다.\n"
-                "2) 단순 오타, 가벼운 수정, 파일 읽기/조회, 단순 서브 스텝 및 단순 설명은 LUNA:LOW로 분류한다.\n"
-                "3) 표준적인 비즈니스 로직 단위 구현 및 리팩토링은 LUNA:MEDIUM으로 분류한다.\n"
-                "4) 중간 이상의 복잡도, 아키텍처 변경, 복수 파일/컴포넌트 연동 수정은 TERRA:MEDIUM으로 승격한다.\n"
-                "5) 다중 모듈 알고리즘 작성 및 하이레벨 아키텍처 설계는 TERRA:HIGH로 분류한다.\n"
-                "6) 심층 최적화, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 EXTRA_HIGH로 분류한다.\n"
-                "7) 오직 한 단어만 출력한다. 다른 설명은 절대 금지한다.\n\n"
-                "- LUNA:LOW : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드, 단순 스크립트 작성, 서브 스텝 툴 액션\n"
-                "- LUNA:MEDIUM : 일반적인 비즈니스 로직 단위 업무 구현, 표준적인 리팩토링, 단일 파일 디버깅\n"
-                "- TERRA:MEDIUM : 중간 수준 아키텍처 변경, 복수 컴포넌트 간 연동 수정, 중간 난이도 디버깅\n"
-                "- TERRA:HIGH : 복잡한 알고리즘 작성, 다중 컴포넌트 아키텍처 분석 및 시스템 설계\n"
-                "- EXTRA_HIGH : 고성능 튜닝 및 성능 분석, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅 (최고 난이도)"
+                "1) 명확한 근거가 없으면 더 낮은 랭크 등급(BRONZE)을 선택한다.\n"
+                "2) 단순 오타, 가벼운 수정, 파일 읽기/조회, 단순 서브 스텝 및 단순 설명은 BRONZE로 분류한다.\n"
+                "3) 표준적인 비즈니스 로직 단위 구현 및 단일 파일 리팩토링은 SILVER로 분류한다.\n"
+                "4) 중간 이상의 복잡도, 아키텍처 변경, 복수 파일/컴포넌트 연동 수정은 GOLD로 승격한다.\n"
+                "5) 다중 모듈 알고리즘 작성 및 하이레벨 아키텍처 설계는 PLATINUM으로 분류한다.\n"
+                "6) 심층 최적화, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 CHALLENGER 또는 DIAMOND로 분류한다.\n"
+                "7) 오직 한 단어만 출력한다. (BRONZE, SILVER, GOLD, PLATINUM, DIAMOND, CHALLENGER). 다른 설명은 절대 금지한다.\n\n"
+                "- BRONZE : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드, 단순 스크립트 작성, 서브 스텝 툴 액션\n"
+                "- SILVER : 일반적인 비즈니스 로직 단위 업무 구현, 표준적인 리팩토링, 단일 파일 디버깅\n"
+                "- GOLD : 중간 수준 아키텍처 변경, 복수 컴포넌트 간 연동 수정, 중간 난이도 디버깅\n"
+                "- PLATINUM : 복잡한 알고리즘 작성, 다중 컴포넌트 아키텍처 분석 및 시스템 설계\n"
+                "- DIAMOND / CHALLENGER : 고성능 튜닝 및 성능 분석, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅 (최고 난이도)"
             ),
             "input": [
                 {
@@ -172,8 +172,8 @@ class Router:
                 print(f"➔ [RETRY] 0.5초 후 분류기 재시도 발송... ({attempt+1}/{max_retries})")
                 await asyncio.sleep(retry_delay)
             else:
-                print(f"[Warning] All classifier retries failed. Falling back to LUNA:LOW.")
-                return "LUNA:LOW", "gpt-5.6-luna", "low"
+                print(f"[Warning] All classifier retries failed. Falling back to BRONZE.")
+                return "BRONZE", "gpt-5.6-luna", "low"
 
         verdict = verdict_text.strip().upper()
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -187,24 +187,24 @@ class Router:
         from src.tierbridge.model_registry import registry
         active_mapping = registry.get_active_mapping()
 
-        if "SOL:EXTRA_HIGH" in verdict or ("EXTRA_HIGH" in verdict and is_4tier_sol_mode):
-            tier_info = active_mapping.get("SOL:EXTRA_HIGH", {"model": "gpt-5.6-sol", "effort": "xhigh"})
-            final_decision, final_model, final_effort = "SOL:EXTRA_HIGH", tier_info.get("model", "gpt-5.6-sol"), tier_info.get("effort", "xhigh")
-        elif "TERRA:EXTRA_HIGH" in verdict or "EXTRA_HIGH" in verdict:
-            tier_info = active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"})
-            final_decision, final_model, final_effort = "TERRA:EXTRA_HIGH", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
-        elif "TERRA:HIGH" in verdict or "HIGH" in verdict:
-            tier_info = active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"})
-            final_decision, final_model, final_effort = "TERRA:HIGH", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
-        elif "TERRA:MEDIUM" in verdict or "TERRA" in verdict:
-            tier_info = active_mapping.get("TERRA:MEDIUM", {"model": "gpt-5.6-terra", "effort": "medium"})
-            final_decision, final_model, final_effort = "TERRA:MEDIUM", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "medium")
-        elif "LUNA:MEDIUM" in verdict:
-            tier_info = active_mapping.get("LUNA:MEDIUM", {"model": "gpt-5.6-luna", "effort": "medium"})
-            final_decision, final_model, final_effort = "LUNA:MEDIUM", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "medium")
+        if "CHALLENGER" in verdict or "SOL:EXTRA_HIGH" in verdict or ("EXTRA_HIGH" in verdict and is_4tier_sol_mode):
+            tier_info = active_mapping.get("CHALLENGER", active_mapping.get("SOL:EXTRA_HIGH", {"model": "gpt-5.6-sol", "effort": "xhigh"}))
+            final_decision, final_model, final_effort = "CHALLENGER", tier_info.get("model", "gpt-5.6-sol"), tier_info.get("effort", "xhigh")
+        elif "DIAMOND" in verdict or "TERRA:EXTRA_HIGH" in verdict:
+            tier_info = active_mapping.get("DIAMOND", active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"}))
+            final_decision, final_model, final_effort = "DIAMOND", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
+        elif "PLATINUM" in verdict or "TERRA:HIGH" in verdict or "HIGH" in verdict:
+            tier_info = active_mapping.get("PLATINUM", active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"}))
+            final_decision, final_model, final_effort = "PLATINUM", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
+        elif "GOLD" in verdict or "TERRA:MEDIUM" in verdict or "TERRA" in verdict:
+            tier_info = active_mapping.get("GOLD", active_mapping.get("TERRA:MEDIUM", {"model": "gpt-5.6-terra", "effort": "medium"}))
+            final_decision, final_model, final_effort = "GOLD", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "medium")
+        elif "SILVER" in verdict or "LUNA:MEDIUM" in verdict:
+            tier_info = active_mapping.get("SILVER", active_mapping.get("LUNA:MEDIUM", {"model": "gpt-5.6-luna", "effort": "medium"}))
+            final_decision, final_model, final_effort = "SILVER", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "medium")
         else:
-            tier_info = active_mapping.get("LUNA:LOW", {"model": "gpt-5.6-luna", "effort": "low"})
-            final_decision, final_model, final_effort = "LUNA:LOW", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "low")
+            tier_info = active_mapping.get("BRONZE", active_mapping.get("LUNA:LOW", {"model": "gpt-5.6-luna", "effort": "low"}))
+            final_decision, final_model, final_effort = "BRONZE", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "low")
 
         mode_tag = "4-TIER SOL ROUTER" if is_4tier_sol_mode else "STANDARD 3-TIER ROUTER"
         sid_tag = f" [sid: {session_id}]" if session_id else ""
@@ -213,8 +213,8 @@ class Router:
         # 분류기(Classifier) 자체 소모 토큰 및 비용 트래킹 로깅 (전용 크레딧 산출용)
         clf_in_tok = max(100, int(len(target_eval_prompt) * 0.35)) + 150
         clf_out_tok = max(5, int(len(verdict_text) * 0.5))
-        clf_in_price = active_mapping.get("LUNA:LOW", {}).get("input_price", 1.0)
-        clf_out_price = active_mapping.get("LUNA:LOW", {}).get("output_price", 3.0)
+        clf_in_price = tier_info.get("input_price", 1.0)
+        clf_out_price = tier_info.get("output_price", 3.0)
         clf_cost = (clf_in_tok / 1000000.0) * clf_in_price + (clf_out_tok / 1000000.0) * clf_out_price
         print(f"[{now_str}]{sid_tag} ➔ [USAGE] CLASSIFIER (gpt-5.6-luna) | input={clf_in_tok} output={clf_out_tok} tokens | loc=0 lines | cost=${clf_cost:.6f} USD", flush=True)
 

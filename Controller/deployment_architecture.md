@@ -36,9 +36,10 @@ TierBridge 시스템 및 연동 모듈에서 사용하는 전체 환경변수 �
 
 | 환경변수 (Environment Variable) | 기본값 (Default) | 설명 (Description) |
 | :--- | :--- | :--- |
-| **`OPENAI_BASE_URL`** | `http://localhost:18080/v1` | Codex CLI가 하네스 프록시를 타도록 가로채는 인바운드 URL |
+| **`OPENAI_BASE_URL`** | `http://localhost:18080/v1` | Codex CLI 및 OpenAI/vLLM 호환 가로채기 URL |
 | **`CODEX_API_BASE`** | `http://localhost:18080/v1` | Codex Enterprise 연동용 API 엔드포인트 BASE |
-| **`OLLAMA_HOST`** | `http://localhost:18080` | Codex `--local-provider=ollama` 호스트 가로채기 |
+| **`LOCALAI_URL`** | `http://localhost:18080` | Codex `--local-provider=localai` 호스트 가로채기 |
+| **`OLLAMA_HOST`** | `http://localhost:18080` | Codex 로컬 프로바이더 호스트 가로채기 |
 | **`CODEX_OSS_PORT`** | `18080` | Codex 로컬 공급자 수신 포트 |
 | **`ENTERPRISE_API_URL`** | `https://chatgpt.com/backend-api/codex/responses` | 업스트림 OpenAI Enterprise 백엔드 API 엔드포인트 |
 | **`HARNESS_PORT`** | `18080` | 하네스 프록시가 바인딩하여 수신하는 로컬 포트 |

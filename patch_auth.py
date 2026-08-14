@@ -47,9 +47,10 @@ def patch():
     print("Now run the following in your terminal session to start using the routing harness:\n")
     print("  export OPENAI_BASE_URL=\"http://localhost:18080/v1\"")
     print("  export CODEX_API_BASE=\"http://localhost:18080/v1\"")
+    print("  export LOCALAI_URL=\"http://127.0.0.1:18080\"")
     print("  export OLLAMA_HOST=\"http://127.0.0.1:18080\"")
     print("  export CODEX_OSS_PORT=18080")
-    print("  codex --oss --local-provider=ollama")
+    print("  codex --oss --local-provider=localai")
 
 if __name__ == "__main__":
     patch()

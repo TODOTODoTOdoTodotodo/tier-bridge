@@ -18,11 +18,12 @@ class HealingEngine:
         "name": "Healing Sample Demo v1.1.0 (Demo Test Hot-patch)",
         "description": "힐링팩터 핫패치 및 롤백 기능 동작을 검증하기 위한 데모 샘플 스냅샷",
         "mapping": {
-            "LUNA:LOW": {"model": "gpt-5.6-luna", "effort": "low", "input_price": 0.60, "output_price": 1.80},
-            "LUNA:MEDIUM": {"model": "gpt-5.6-luna", "effort": "medium", "input_price": 0.60, "output_price": 1.80},
-            "TERRA:MEDIUM": {"model": "gpt-5.6-terra", "effort": "medium", "input_price": 2.0, "output_price": 8.0},
-            "TERRA:HIGH": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.0, "output_price": 8.0},
-            "SOL:EXTRA_HIGH": {"model": "gpt-5.6-sol", "effort": "xhigh", "input_price": 4.5, "output_price": 18.0}
+            "BRONZE": {"model": "gpt-5.6-luna", "effort": "low", "input_price": 0.60, "output_price": 1.80},
+            "SILVER": {"model": "gpt-5.6-luna", "effort": "medium", "input_price": 0.60, "output_price": 1.80},
+            "GOLD": {"model": "gpt-5.6-terra", "effort": "medium", "input_price": 2.0, "output_price": 8.0},
+            "PLATINUM": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.0, "output_price": 8.0},
+            "DIAMOND": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.0, "output_price": 8.0},
+            "CHALLENGER": {"model": "gpt-5.6-sol", "effort": "xhigh", "input_price": 4.5, "output_price": 18.0}
         }
     }
 
@@ -41,7 +42,7 @@ class HealingEngine:
 
         # 비교표 생성 (데모 및 실제 비교 공용)
         comparison = []
-        for tier in ["LUNA:LOW", "LUNA:MEDIUM", "TERRA:MEDIUM", "TERRA:HIGH", "SOL:EXTRA_HIGH"]:
+        for tier in ["BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "CHALLENGER"]:
             curr = active_mapping.get(tier, {"model": "N/A", "input_price": 0, "output_price": 0})
             rec = rec_mapping.get(tier, {"model": "N/A", "input_price": 0, "output_price": 0})
             
