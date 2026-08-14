@@ -127,6 +127,26 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 추가되거나 토큰 �
 
 ---
 
+## 🏗️ 개발 저장소 ✕ 프로덕션 런타임 분리 아키텍처 & 배포 (`deploy.sh`)
+
+개발자 개개인의 개발 저장소 위치가 어디든 상관없이, 실제 구동되는 하네스 프록시는 홈 디렉토리 하위의 독립 런타임 경로(**`$HOME/.tierbridge/live`**)에 격리 배포되어 가동됩니다. 개발 레포에서 소스코드를 편집하거나 브랜치를 교체하더라도 **현재 가동 중인 서비스 프록시에는 0% 영향**을 줍니다.
+
+```
+[개발 저장소 (Dev Workspace)]                  [실제 서비스 런타임 (Production Live)]
+/path/to/any/agent-cli                         ~/.tierbridge/live/
+ ├─ 소스코드 편집 & 단위 테스트                  ├─ harness.py (Port 18080 가동)
+ ├─ 브랜치 전환 & 자유로운 실험                   ├─ harness.log (독립 수집)
+ └─ ./deploy.sh 실행 ─── (안전 동기화 & 핫패치) ─► └─ harness.pid (프로세스 관리)
+```
+
+### 편리한 터미널 글로벌 단축키 (Shell Aliases)
+`./deploy.sh` 실행 시 `~/.zshrc`에 아래 단축키가 자동 등록되어, 어느 폴더에서든 자유롭게 입력하실 수 있습니다:
+* **`tierbridge`** : 런타임 하네스 가동 및 현재 터미널 세션에 환경 변수 연결
+* **`tierbridge-log`** : 라이브 프록시 가동 로그 실시간 모니터링 (`tail -f`)
+* **`tierbridge-dash`** : Kibana 3초 라이브 대시보드 웹페이지 열기
+
+---
+
 ## 🚀 실행 및 연동 (원스텝 자동화)
 
 포트 충돌 해제, 백그라운드 프록시 가동, 인증 패치, 환경 변수 주입까지 단 하나의 스크립트로 처리됩니다:
@@ -135,7 +155,7 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 추가되거나 토큰 �
 source run_harness.sh
 ```
 
-`source` 명령어 실행 시 환경 변수 4개(`OPENAI_BASE_URL`, `CODEX_API_BASE`, `OLLAMA_HOST`, `CODEX_OSS_PORT`)가 현재 터미널 세션에 자동으로 즉시 주입됩니다. 수동 설정 필요 없이 즉시 아래 명령어로 실행하실 수 있습니다.
+`source` 명령어 실행 시 환경 변수(`OPENAI_BASE_URL`, `CODEX_API_BASE`, `OLLAMA_HOST`, `CODEX_OSS_PORT` 등)가 현재 터미널 세션에 자동으로 즉시 주입됩니다. 수동 설정 필요 없이 즉시 아래 명령어로 실행하실 수 있습니다.
 
 ```bash
 # 기본 3-Tier 모드 가동
@@ -144,6 +164,24 @@ codex --oss --local-provider=ollama chat
 # 4-Tier Sol 라우팅 모드 가동 (단축 인자 --model super 사용)
 codex --oss --local-provider=ollama --model super chat
 ```
+
+---
+
+## ⚙️ 종합 환경변수 및 숨겨진 설정 레퍼런스 (Environment Variables)
+
+TierBridge 하네스 및 연동 엔진에서 사용하는 전체 환경변수 및 숨겨진 설정 목록입니다:
+
+| 환경변수 (Environment Variable) | 기본값 (Default) | 설명 (Description) |
+| :--- | :--- | :--- |
+| **`OPENAI_BASE_URL`** | `http://localhost:18080/v1` | Codex CLI가 하네스 프록시를 타도록 가로채는 인바운드 BASE URL |
+| **`CODEX_API_BASE`** | `http://localhost:18080/v1` | Codex Enterprise 연동용 API 엔드포인트 BASE |
+| **`OLLAMA_HOST`** | `http://localhost:18080` | Codex `--local-provider=ollama` 호스트 가로채기 |
+| **`CODEX_OSS_PORT`** | `18080` | Codex 로컬 공급자 수신 포트 |
+| **`ENTERPRISE_API_URL`** | `https://chatgpt.com/backend-api/codex/responses` | 업스트림 OpenAI Enterprise 백엔드 API 엔드포인트 |
+| **`HARNESS_PORT`** | `18080` | 하네스 프록시가 바인딩하여 수신하는 로컬 포트 |
+| **`AUTH_FILE_PATH`** | `~/.codex/auth.json` | 엔터프라이즈 JWT 인증 토큰 자동 파싱 경로 |
+| **`SQLITE_VEC_PATH`** | `""` (자동 탐색) | `sub-memory-bootstrap` 벡터 확장 모듈 경로 |
+| **`METRICS_LOG_PATH`** | `.sub-memory/metrics.jsonl` | 기억 회수 기여도 및 메트릭 수집 경로 |
 
 ---
 
@@ -172,8 +210,8 @@ codex --oss --local-provider=ollama --model super chat
 ```
 명령 실행 시 Kibana 풍의 다크테마 웹페이지 (**`usage_dashboard.html`**)가 자동 생성되어 브라우저에 엽니다.
 
-* **3초 실시간 라이브 갱신 (Live Auto-Sync)**: `GET /v1/dashboard/stats` API와 자동 연동되어 브라우저를 열어두기만 해도 수치와 차트가 새로고침 없이 실시간 갱신됩니다.
-* **동적 월 선택 Dropdown UI**: 상단 드롭다운에서 월(`전체 월`, `2026-08`, `2026-07` 등)을 전환하면 KPI 카드, 일자별 추이 차트, 등급 분포 파이 차트, 프롬프트 인사이트 표가 실시간으로 동적 필터링됩니다.
+* **세션 ID 동적 선택 드롭다운 UI & 세션 전용 랭킹 검색**: 대시보드 상단 세션 선택기(`sess_...`) 또는 검색창에 세션 ID 키워드를 입력하면, 해당 세션 내에서의 1, 2, 3위 **전용 랭크(Session-local Rank)**와 턴 기록이 즉시 필터링됩니다.
+* **무제한 더보기 (Load More)**: 기본 Top 15개 턴이 노출되며, 하단 **`[ 🔽 더보기 ]`** 버튼을 눌러 15개 단위(16~30위...)로 전체 프롬프트를 확장하여 이어서 조회할 수 있습니다.
 * **KPI Metric Cards**: Total Credits (1 Credit = $0.20 USD), Estimated Value ($), Total Tokens, Unique Sessions, LUNA Auto-scaling Savings ($ / Credits).
 * **Top Credit Consuming Prompts**: 가장 많은 크레딧을 소모한 프롬프트/릴레이 턴 TOP 15 목록 및 등급 배치 인사이트.
 

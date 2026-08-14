@@ -15,9 +15,29 @@ from tierbridge.router import Router
 from tierbridge.auth_manager import AuthManager
 from tierbridge.usage_tracker import UsageTracker
 
+import logging
+
+# 시스템 로깅 레벨 WARNING 상향 설정 (잡다한 INFO 로그 차단)
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("uvicorn").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+log = logging.getLogger("harness")
+
+from fastapi.middleware.cors import CORSMiddleware
+
 load_dotenv()
 
 app = FastAPI(title="TierBridge")
+
+# 브라우저 대시보드 3초 라이브 오토싱크 및 AJAX 요청용 CORS 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 싱글톤 세션 사용량 트래커 초기화
 global_tracker = UsageTracker()
@@ -30,13 +50,9 @@ ENTERPRISE_API_URL = os.getenv(
 MOCK_MODE = os.getenv("MOCK_TEST_MODE", "false").lower() == "true" or ENTERPRISE_API_URL in ("mock", "test")
 ROUTING_MODE = os.getenv("ROUTING_MODE", "standard").lower()
 HIGH_POWER_MODE = os.getenv("HIGH_POWER_MODE", "false").lower() == "true" or ROUTING_MODE in ("high_power", "high", "power")
-effective_mode = "HIGH_POWER (고출력 모드 - TERRA 직송)" if HIGH_POWER_MODE else "STANDARD (일반 모드 - 동적 3-Tier 라우팅)"
-print(f"[Debug System Config] MOCK_TEST_MODE: {os.getenv('MOCK_TEST_MODE')}, ENTERPRISE_API_URL: {ENTERPRISE_API_URL}, Final MOCK_MODE: {MOCK_MODE}")
-print(f"[Debug System Config] Active Routing Mode: {effective_mode}")
 
 # Mock 모드 활성화 시 로컬 모크 엔드포인트로 우회
 if MOCK_MODE:
-    print("[Info] Running in MOCK test mode. Rewriting ENTERPRISE_API_URL to local mock endpoint.")
     ENTERPRISE_API_URL = "http://localhost:18080/mock/enterprise/chat/completions"
 
 def get_latest_enterprise_token() -> str:
@@ -146,7 +162,11 @@ async def get_healing_status():
 @app.post("/v1/models/heal")
 async def apply_healing():
     """ 신규 저비용/고출력 모델 스냅샷을 핫패치 릴리즈 적용 """
-    return HealingEngine.apply_healing()
+    res = HealingEngine.apply_healing()
+    msg = f"➔ [HEALING] Hot-patch applied | active_version_id={res.get('active_version_id')} | message={res.get('message')}"
+    print(msg, flush=True)
+    log.warning(msg)
+    return res
 
 @app.post("/v1/models/version/switch")
 async def switch_model_version(request: Request):
@@ -156,7 +176,11 @@ async def switch_model_version(request: Request):
         version_id = body.get("version_id", "latest")
     except Exception:
         version_id = "latest"
-    return HealingEngine.switch_version(version_id)
+    res = HealingEngine.switch_version(version_id)
+    msg = f"➔ [VERSION_SWITCH] Switched model version | version_id={version_id} | active_version_id={res.get('active_version_id')}"
+    print(msg, flush=True)
+    log.warning(msg)
+    return res
 
 @app.get("/v1/dashboard/stats")
 async def get_dashboard_stats():
@@ -172,9 +196,21 @@ async def get_dashboard_stats():
         decision_pattern = re.compile(
             r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
         )
+        healing_pattern = re.compile(
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[(?P<event_type>HEALING|VERSION_SWITCH)\] (?P<details>.*)$'
+        )
+        healing_history = []
         with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 line = line.strip()
+                h_match = healing_pattern.search(line)
+                if h_match:
+                    healing_history.append({
+                        "timestamp": h_match.group("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "event_type": h_match.group("event_type"),
+                        "details": h_match.group("details")
+                    })
+                    continue
                 d_match = decision_pattern.search(line)
                 if d_match:
                     prompt_history.append({
@@ -228,7 +264,8 @@ async def get_dashboard_stats():
 
     return {
         "records": records,
-        "healing_status": HealingEngine.get_healing_status()
+        "healing_status": HealingEngine.get_healing_status(),
+        "healing_history": list(reversed(healing_history))
     }
 
 # ==========================================

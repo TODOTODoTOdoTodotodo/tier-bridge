@@ -32,9 +32,12 @@ class HealingEngine:
         rec_mapping = cls.SAMPLE_HEALING_TEMPLATE["mapping"]
         active_vid = registry.get_active_version_id()
 
-        # 실제 신규 모델 감지 여부: 실제 업스트림 API 탐색 시 신규 모델 릴리즈가 감지되었을 때만 True로 트리거됨
-        # (현재는 실제 출시된 모델이 없으므로 기본 False 유지하여 알림 배너 팝업을 방지)
-        has_real_new_model = False
+        # 핫패치가 이미 적용되었거나(hotpatch) 최신 상태인 경우 감지 닫음, 구형 모델일 때만 True 활성화
+        is_already_hotpatched = "hotpatch" in active_vid or active_vid == "v1.1.0-healing-hotpatch"
+        has_real_new_model = (not is_already_hotpatched) and (
+            any(m.get("model") in ["gpt-5.4-mini", "gpt-5.5"] for m in active_mapping.values())
+            or "test" in active_vid or "legacy" in active_vid
+        )
 
         # 비교표 생성 (데모 및 실제 비교 공용)
         comparison = []
@@ -72,15 +75,17 @@ class HealingEngine:
     @classmethod
     def apply_healing(cls) -> Dict[str, Any]:
         template = cls.SAMPLE_HEALING_TEMPLATE
-        new_vid = registry.create_version(
-            new_version_id=template["version_id"],
-            name=template["name"],
-            description=template["description"],
+        new_vid = "v1.1.0-healing-hotpatch"
+        registry.create_version(
+            new_version_id=new_vid,
+            name="GPT-5.6 Lineup (Healing Hot-Patch Release v1.1.0)",
+            description="힐링 엔진 자동 감지 기반 최신 고효율 모델 라우팅 무중단 핫패치 릴리즈",
             mapping=template["mapping"]
         )
+        registry.switch_version(new_vid)
         return {
             "success": True,
-            "message": f"성공적으로 힐링 데모 스냅샷 ({new_vid})이 핫패치 되었습니다.",
+            "message": f"성공적으로 최신 GPT-5.6 모델 핫패치 릴리즈({new_vid})가 즉시 적용되었습니다.",
             "active_version_id": new_vid
         }
 

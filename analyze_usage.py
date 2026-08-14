@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 import sys
 import os
+
+# Auto-inject src directory into sys.path
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_src_dir = os.path.join(_script_dir, "src")
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
 import re
 import argparse
 import webbrowser
@@ -9,8 +18,11 @@ from collections import defaultdict
 from datetime import datetime
 
 def parse_args():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_log = os.path.join(script_dir, "harness.log") if os.path.exists(os.path.join(script_dir, "harness.log")) else "harness.log"
+    
     parser = argparse.ArgumentParser(description="TierBridge 로그 기반 Kibana풍 USAGE 및 힐링팩터 모델 관리 분석기")
-    parser.add_argument("log_file", nargs="?", default="harness.log", help="분석할 로그 파일 경로 (기본: harness.log)")
+    parser.add_argument("log_file", nargs="?", default=default_log, help=f"분석할 로그 파일 경로 (기본: {default_log})")
     parser.add_argument("--date", "-d", type=str, help="특정 날짜 필터 (형식: YYYY-MM-DD)")
     parser.add_argument("--month", "-m", type=str, help="특정 월 필터 (형식: YYYY-MM)")
     parser.add_argument("--session", "-s", type=str, help="특정 세션 ID 필터 (예: 5eb61a1e)")
@@ -18,14 +30,18 @@ def parse_args():
     parser.add_argument("--no-open", action="store_true", help="HTML 대시보드 생성 후 브라우저 자동 오픈 금지")
     return parser.parse_args()
 
-def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None):
-    html_filename = "usage_dashboard.html"
+def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None, healing_history=None):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    html_filename = os.path.join(script_dir, "usage_dashboard.html")
     
-    # Healing Engine 상태 가져오기
+    # Healing Engine 상태 가져오기 (Smart Import)
     try:
-        from src.tierbridge.healing_engine import HealingEngine
+        try:
+            from tierbridge.healing_engine import HealingEngine
+        except ImportError:
+            from src.tierbridge.healing_engine import HealingEngine
         healing_status = HealingEngine.get_healing_status()
-    except Exception:
+    except Exception as e:
         healing_status = {
             "has_new_healing": False,
             "active_version_id": "v1.0.0",
@@ -48,6 +64,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         }
 
     healing_status_json = json.dumps(healing_status)
+    healing_history_json = json.dumps(list(reversed(healing_history)) if healing_history else [])
 
     # 동적 월 선택 드롭다운 옵션 구성 (전체 원본 레코드 기준)
     available_months = sorted(list(set(r["month"] for r in all_raw_records if r["month"] != "Unknown Month")), reverse=True)
@@ -55,6 +72,28 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     for m in available_months:
         selected_attr = 'selected' if target_month == m else ''
         month_options_html += f'<option value="{m}" {selected_attr}>{m}</option>'
+
+    # 동적 세션 선택 드롭다운 옵션 구성
+    available_sessions = sorted(list(set(r["session_id"] for r in all_raw_records if r["session_id"] and r["session_id"] != "N/A")))
+    session_options_html = '<option value="ALL" ' + ('selected' if not target_session else '') + '>전체 세션 (All Sessions)</option>'
+    for s in available_sessions:
+        s_short = s[:8] if len(s) > 8 else s
+        selected_attr = 'selected' if target_session == s else ''
+        session_options_html += f'<option value="{s}" {selected_attr}>{s} ({s_short})</option>'
+
+    # 동적 모델 버전 선택 드롭다운 옵션 구성
+    all_versions = healing_status.get("all_versions", [])
+    version_options_html = ""
+    for v in all_versions:
+        vid = v.get("version_id")
+        vname = v.get("name", "")
+        is_act = v.get("is_active", False)
+        selected_attr = "selected" if is_act else ""
+        active_label = " (Active)" if is_act else ""
+        version_options_html += f'<option value="{vid}" {selected_attr}>{vid} - {vname}{active_label}</option>'
+
+    if not version_options_html:
+        version_options_html = '<option value="v1.0.0" selected>v1.0.0 - Standard Baseline (Active)</option>'
 
     # Client-side JavaScript 처리를 위한 원본 JSON 데이터 구성
     client_records = []
@@ -73,13 +112,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             "cost": r["cost"]
         })
     client_records_json = json.dumps(client_records)
+    
+    has_healing_banner = healing_status.get("has_new_healing", False)
+    banner_hidden_class = "" if has_healing_banner else "hidden"
 
     html_content = f"""<!DOCTYPE html>
 <html lang="ko" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TierBridge Kibana AI Real-time Live Analytics Dashboard</title>
+    <title>TierBridge Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -99,60 +141,70 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     <i class="fa-solid fa-chart-line text-xl"></i>
                 </span>
                 <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-sky-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
-                    TierBridge AI Kibana Analytics
+                    TierBridge Dashboard
                 </h1>
             </div>
             <p class="text-slate-400 text-sm pl-12">
-                Codex Enterprise 토큰 소모량, 힐링팩터 모델 핫패치 & 3초 실시간 라이브 대시보드
+                Codex Enterprise AI 사용량, 토큰 소모 및 모델 관리 대시보드
             </p>
         </div>
         
-        <!-- Controls: Dynamic Month Selector, Model Version Selector, Live Indicator & Sample Test Button -->
+        <!-- Controls: Dynamic Month & Session Selectors, Model Version Selector, Live Indicator & Sample Test Button -->
         <div class="mt-4 md:mt-0 flex flex-wrap items-center gap-3">
             <!-- Dynamic Month Dropdown Selector -->
             <div class="flex items-center gap-2 bg-slate-800/90 border border-indigo-500/40 px-3 py-1.5 rounded-xl shadow-lg">
                 <i class="fa-solid fa-calendar-check text-indigo-400 text-sm"></i>
-                <span class="text-xs font-semibold text-slate-300">조회 월:</span>
-                <select id="monthSelect" onchange="onMonthChange(this.value)" 
+                <span class="text-xs font-semibold text-slate-300">월:</span>
+                <select id="monthSelect" onchange="onFilterChange()" 
                         class="bg-slate-900 text-emerald-400 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-indigo-400 cursor-pointer">
                     {month_options_html}
                 </select>
             </div>
 
-            <!-- Model Version Manager Dropdown -->
+            <!-- Dynamic Session ID Dropdown Selector -->
             <div class="flex items-center gap-2 bg-slate-800/90 border border-purple-500/40 px-3 py-1.5 rounded-xl shadow-lg">
-                <i class="fa-solid fa-code-branch text-purple-400 text-sm"></i>
-                <span class="text-xs font-semibold text-slate-300">모델 버전:</span>
-                <select id="versionSelect" onchange="switchModelVersion(this.value)"
-                        class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer">
-                    <!-- Populated dynamically via JS -->
+                <i class="fa-solid fa-network-wired text-purple-400 text-sm"></i>
+                <span class="text-xs font-semibold text-slate-300">세션:</span>
+                <select id="sessionSelect" onchange="onFilterChange()" 
+                        class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer max-w-[180px] truncate">
+                    {session_options_html}
                 </select>
             </div>
 
-            <!-- Real-time Live Auto-Sync Status Badge -->
-            <div class="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>Live Sync (3s)</span>
+            <!-- Model Version Selector -->
+            <div class="flex items-center gap-2 bg-slate-800/90 border border-sky-500/40 px-3 py-1.5 rounded-xl shadow-lg">
+                <i class="fa-solid fa-code-branch text-sky-400 text-sm"></i>
+                <span class="text-xs font-semibold text-slate-300">모델 버전:</span>
+                <select id="versionSelect" onchange="switchModelVersion(this.value)"
+                        class="bg-slate-900 text-sky-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-sky-400 cursor-pointer">
+                    {version_options_html}
+                </select>
             </div>
 
-            <!-- Demo Sample Test Button (원할 때 클릭하여 핫패치/롤백 기능 테스트) -->
+            <!-- 3s Live Sync Badge -->
+            <div id="liveSyncBadge" class="flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg text-emerald-400 text-xs font-bold animate-pulse">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>3s Live Auto-Sync</span>
+            </div>
+
+            <!-- Healing Factor Demo Sample Test Button -->
             <button onclick="openHealingModal()"
-                    class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
-                <i class="fa-solid fa-flask text-indigo-400"></i>
+                    class="px-3.5 py-1.5 bg-gradient-to-r from-purple-600/30 to-indigo-600/30 border border-purple-400/50 text-purple-200 text-xs font-bold rounded-xl shadow-lg hover:bg-purple-600/40 transition-all flex items-center gap-2">
+                <i class="fa-solid fa-vial-circle-check text-purple-300"></i>
                 <span>🧪 힐링 핫패치 데모 샘플</span>
             </button>
 
             <!-- Healing Notice Button (Visible ONLY when REAL new model detected) -->
             <button id="healingNoticeBtn" onclick="openHealingModal()"
-                    class="hidden px-3.5 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl shadow-lg hover:bg-emerald-500/30 transition-all flex items-center gap-2">
+                    class="{banner_hidden_class} px-3.5 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl shadow-lg hover:bg-emerald-500/30 transition-all flex items-center gap-2">
                 <i class="fa-solid fa-kit-medical text-emerald-400"></i>
                 <span>💡 실제 신규 모델 감지됨!</span>
             </button>
         </div>
     </header>
 
-    <!-- Healing Factor Banner (Visible ONLY when REAL new model detected) -->
-    <div id="healingBanner" class="hidden mb-8 p-4 rounded-2xl glass-card border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
+    <!-- Healing Factor Banner -->
+    <div id="healingBanner" class="{banner_hidden_class} mb-8 p-4 rounded-2xl glass-card border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-3">
             <span class="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-xl text-xl">
                 <i class="fa-solid fa-wand-magic-sparkles"></i>
@@ -179,7 +231,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Total Consumed Credits</div>
             <div class="text-3xl font-extrabold text-emerald-400 font-mono mb-1" id="kpiCredits">0.00 <span class="text-sm font-normal text-slate-400">Cr</span></div>
-            <div class="text-xs text-slate-400">1 Credit = $0.20 USD 기준</div>
+            <div class="text-xs font-mono" id="kpiCreditBreakdown"><span class="text-indigo-300 font-bold">🤖 모델: 0.00 Cr</span> <span class="text-slate-500">|</span> <span class="text-amber-300 font-bold">🔍 분류기: 0.00 Cr</span></div>
             <div class="absolute -right-3 -bottom-3 text-emerald-500/10 text-6xl"><i class="fa-solid fa-credit-card"></i></div>
         </div>
 
@@ -250,13 +302,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
                 <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-fire text-amber-400"></i> Top 크레딧 소모 프롬프트 턴 & 인사이트 (Prompt Insights)
+                    <i class="fa-solid fa-fire text-amber-400"></i> Top 크레딧 소모 프롬프트 턴 & 세션 인사이트
                 </h2>
-                <p class="text-xs text-slate-400 mt-1">선택한 월/기간 내 가장 많은 크레딧과 토큰을 소모한 턴별 프롬프트 및 라우팅 등급 인사이트</p>
+                <p class="text-xs text-slate-400 mt-1" id="promptTableSubTitle">
+                    기본 Top 15 표시 • 세션 검색 시 해당 세션 내 전용 랭킹 및 프롬프트 턴을 표시합니다.
+                </p>
             </div>
             <div class="relative">
-                <input type="text" id="searchInput" placeholder="프롬프트/세션ID 검색..." onkeyup="filterTable()" 
-                       class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2 pl-9 focus:outline-none focus:border-indigo-500 w-64">
+                <input type="text" id="searchInput" placeholder="프롬프트/풀 세션ID/축약ID 검색..." onkeyup="filterTable()" 
+                       class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2 pl-9 focus:outline-none focus:border-indigo-500 w-72">
                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
             </div>
         </div>
@@ -265,7 +319,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             <table class="w-full text-left border-collapse" id="promptTable">
                 <thead>
                     <tr class="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
-                        <th class="px-4 py-3 rounded-tl-xl">Rank</th>
+                        <th class="px-4 py-3 rounded-tl-xl" id="rankColHeader">Rank</th>
                         <th class="px-4 py-3">Session ID</th>
                         <th class="px-4 py-3">Prompt Content / Step Context</th>
                         <th class="px-4 py-3 text-right">요청 횟수</th>
@@ -277,6 +331,44 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 </thead>
                 <tbody class="divide-y divide-slate-800" id="promptTableBody">
                     <!-- Dynamic JavaScript Table Insertion -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Load More Button -->
+        <div class="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+            <span class="text-xs text-slate-400" id="promptDisplayCountInfo">표시 중: Top 15개 턴</span>
+            <button id="loadMoreBtn" onclick="loadMorePrompts()"
+                    class="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5">
+                <i class="fa-solid fa-chevron-down text-xs"></i> 🔽 더보기 (15개 더 로드)
+            </button>
+        </div>
+    </div>
+
+    <!-- Recent Hot-Patch & Version History Card -->
+    <div class="glass-card p-6 rounded-2xl mb-8">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i> 모델 핫패치 & 버전 전환 이력 (Hot-Patch & Version Audit History)
+                </h2>
+                <p class="text-xs text-slate-400 mt-1">
+                    하네스 무중단 핫패칭 및 원클릭 버전 스위칭 이벤트 실시간 기록
+                </p>
+            </div>
+            <span class="text-xs px-2.5 py-1 bg-emerald-500/20 text-emerald-300 font-mono rounded-lg border border-emerald-500/30">Live Audit Log</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                    <tr class="bg-slate-800/80 text-slate-400 uppercase border-b border-slate-700">
+                        <th class="px-4 py-3">타임스탬프</th>
+                        <th class="px-4 py-3">이벤트 유형</th>
+                        <th class="px-4 py-3">상세 기록 / 적용 내역</th>
+                    </tr>
+                </thead>
+                <tbody id="healingHistoryTableBody" class="divide-y divide-slate-800">
+                    <!-- Populated dynamically via JS -->
                 </tbody>
             </table>
         </div>
@@ -341,25 +433,93 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     <script>
         let allRecords = {client_records_json};
         let healingData = {healing_status_json};
+        let healingHistoryData = {healing_history_json};
         let dailyChart = null;
         let decisionChart = null;
+        let currentPromptLimit = 15; // 기본 노출 15개
+
+        function renderHealingHistory(historyList) {{
+            const tbody = document.getElementById('healingHistoryTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            const list = historyList || healingHistoryData || [];
+            if (list.length === 0) {{
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-slate-500">아직 수집된 핫패치/버전 전환 이력이 없습니다.</td></tr>';
+                return;
+            }}
+            list.forEach(item => {{
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/40 transition-colors';
+                let badge = item.event_type === 'HEALING'
+                    ? '<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-md font-bold">🩹 핫패치 적용</span>'
+                    : '<span class="px-2 py-0.5 bg-sky-500/20 text-sky-300 border border-sky-500/40 rounded-md font-bold">🔀 버전 전환</span>';
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-mono text-slate-400">${{item.timestamp || 'N/A'}}</td>
+                    <td class="px-4 py-3">${{badge}}</td>
+                    <td class="px-4 py-3 font-mono text-slate-200">${{item.details || ''}}</td>
+                `;
+                tbody.appendChild(tr);
+            }});
+        }}
+
+        function updateMonthSelector() {{
+            const select = document.getElementById('monthSelect');
+            if (!select) return;
+            const currentVal = select.value || 'ALL';
+            
+            const months = Array.from(new Set(allRecords.map(r => r.month).filter(m => m && m !== 'Unknown Month'))).sort().reverse();
+            
+            select.innerHTML = '<option value="ALL">전체 기간 (All Months)</option>';
+            months.forEach(m => {{
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.text = m;
+                if (m === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            }});
+            if (currentVal === 'ALL') select.value = 'ALL';
+        }}
+
+        function updateSessionSelector() {{
+            const select = document.getElementById('sessionSelect');
+            if (!select) return;
+            const currentVal = select.value || 'ALL';
+            
+            const sessions = Array.from(new Set(allRecords.map(r => r.session_id).filter(s => s && s !== 'N/A'))).sort();
+            
+            select.innerHTML = '<option value="ALL">전체 세션 (All Sessions)</option>';
+            sessions.forEach(s => {{
+                const opt = document.createElement('option');
+                opt.value = s;
+                const sShort = s.length > 8 ? s.substring(0, 8) : s;
+                opt.text = `${{s}} (${{sShort}})`;
+                if (s === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            }});
+            if (currentVal === 'ALL') select.value = 'ALL';
+        }}
 
         function initVersionSelector() {{
             const select = document.getElementById('versionSelect');
-            select.innerHTML = '';
-
+            if (!select) return;
             const allVersions = healingData.all_versions || [];
-            allVersions.forEach(v => {{
-                const opt = document.createElement('option');
-                opt.value = v.version_id;
-                let label = v.version_id + ' - ' + (v.name || '');
-                if (v.is_active) label += ' (Active)';
-                opt.text = label;
-                if (v.is_active) opt.selected = true;
-                select.appendChild(opt);
-            }});
+            const activeVid = healingData.active_version_id;
+            
+            if (allVersions.length > 0) {{
+                select.innerHTML = '';
+                allVersions.forEach(v => {{
+                    const opt = document.createElement('option');
+                    opt.value = v.version_id;
+                    let label = v.version_id + ' - ' + (v.name || '');
+                    if (v.is_active) label += ' (Active)';
+                    opt.text = label;
+                    if (v.is_active || (activeVid && v.version_id === activeVid)) {{
+                        opt.selected = true;
+                    }}
+                    select.appendChild(opt);
+                }});
+            }}
 
-            // Check REAL New Model Healing Notice Banner (True only when real model detected)
             if (healingData.has_new_healing) {{
                 document.getElementById('healingNoticeBtn').classList.remove('hidden');
                 document.getElementById('healingBanner').classList.remove('hidden');
@@ -374,6 +534,19 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             tbody.innerHTML = '';
             const comp = healingData.comparison || [];
             comp.forEach(item => {{
+                let savingsText = '';
+                let savingsClass = '';
+                if (item.savings_pct > 0) {{
+                    savingsText = `+${{item.savings_pct}}% (절감)`;
+                    savingsClass = 'text-emerald-400 font-bold';
+                }} else if (item.savings_pct < 0) {{
+                    savingsText = `${{item.savings_pct}}% (인상)`;
+                    savingsClass = 'text-rose-400 font-bold';
+                }} else {{
+                    savingsText = '0.0% (동일)';
+                    savingsClass = 'text-slate-400 font-semibold';
+                }}
+
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-800/50';
                 tr.innerHTML = `
@@ -382,7 +555,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     <td class="p-3 text-right font-mono text-slate-400">$${{item.current_in_price}} / $${{item.current_out_price}}</td>
                     <td class="p-3 font-mono font-bold text-emerald-400">${{item.healing_model}}</td>
                     <td class="p-3 text-right font-mono font-bold text-emerald-400">$${{item.healing_in_price}} / $${{item.healing_out_price}}</td>
-                    <td class="p-3 text-right font-mono font-bold text-indigo-400">-${{item.savings_pct}}%</td>
+                    <td class="p-3 text-right font-mono ${{savingsClass}}">${{savingsText}}</td>
                 `;
                 tbody.appendChild(tr);
             }});
@@ -394,43 +567,71 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         }}
 
         async function applyHealingPatch() {{
+            let res = null;
             try {{
-                const res = await fetch('http://localhost:18080/v1/models/heal', {{ method: 'POST' }});
+                res = await fetch('http://127.0.0.1:18080/v1/models/heal', {{ method: 'POST' }});
+            }} catch(e) {{
+                try {{
+                    res = await fetch('http://localhost:18080/v1/models/heal', {{ method: 'POST' }});
+                }} catch(e2) {{}}
+            }}
+            if (res && res.ok) {{
                 const data = await res.json();
                 if (data.success) {{
                     alert('✅ ' + data.message);
-                    location.reload();
+                    closeHealingModal();
+                    await fetchLiveDashboardStats();
                 }} else {{
                     alert('❌ 핫패치 실패: ' + JSON.stringify(data));
                 }}
-            }} catch(e) {{
-                alert('⚠️ 핫패치 요청 성공 (서버 릴리즈 반영 완료)');
+            }} else {{
+                alert('⚠️ 핫패치 요청 전송 완료');
                 closeHealingModal();
+                await fetchLiveDashboardStats();
             }}
         }}
 
         async function switchModelVersion(vid) {{
+            let res = null;
             try {{
-                const res = await fetch('http://localhost:18080/v1/models/version/switch', {{
+                res = await fetch('http://127.0.0.1:18080/v1/models/version/switch', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
                     body: JSON.stringify({{ version_id: vid }})
                 }});
-                const data = await res.json();
-                if (data.success) {{
-                    alert('✅ 모델 버전 스위칭 완료');
-                    location.reload();
-                }}
             }} catch(e) {{
-                alert('ℹ️ 모델 버전 설정 완료');
-                location.reload();
+                try {{
+                    res = await fetch('http://localhost:18080/v1/models/version/switch', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ version_id: vid }})
+                    }});
+                }} catch(e2) {{}}
+            }}
+            if (res && res.ok) {{
+                await fetchLiveDashboardStats();
+            }} else {{
+                await fetchLiveDashboardStats();
             }}
         }}
 
-        function renderDashboard(targetMonth) {{
-            const filteredRecords = (targetMonth === 'ALL' || !targetMonth) 
-                ? allRecords 
-                : allRecords.filter(r => r.month === targetMonth);
+        function loadMorePrompts() {{
+            currentPromptLimit += 15;
+            const currentMonth = document.getElementById('monthSelect').value;
+            const currentSession = document.getElementById('sessionSelect').value;
+            renderDashboard(currentMonth, currentSession);
+        }}
+
+        function renderDashboard(targetMonth, targetSession) {{
+            let filteredRecords = allRecords;
+
+            if (targetMonth && targetMonth !== 'ALL') {{
+                filteredRecords = filteredRecords.filter(r => r.month === targetMonth);
+            }}
+
+            if (targetSession && targetSession !== 'ALL') {{
+                filteredRecords = filteredRecords.filter(r => r.session_id === targetSession || r.session_id.includes(targetSession));
+            }}
 
             if (filteredRecords.length === 0) {{
                 document.getElementById('kpiCredits').innerText = '0.00 Cr';
@@ -441,32 +642,46 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 document.getElementById('kpiSessions').innerHTML = '0 <span class="text-sm font-normal text-slate-400">sessions</span>';
                 document.getElementById('kpiSavingsUsd').innerText = '$0.00';
                 document.getElementById('kpiSavingsCredits').innerText = '약 0.0 Cr 크레딧 아낌';
-                document.getElementById('promptTableBody').innerHTML = '<tr><td colspan="8" class="text-center py-6 text-slate-500">해당 월에 데이터가 없습니다.</td></tr>';
+                document.getElementById('promptTableBody').innerHTML = '<tr><td colspan="8" class="text-center py-6 text-slate-500">해당 조건에 맞는 데이터가 없습니다.</td></tr>';
+                document.getElementById('loadMoreBtn').classList.add('hidden');
+                document.getElementById('promptDisplayCountInfo').innerText = '표시 중: 0개';
                 return;
             }}
 
-            const totalCost = filteredRecords.reduce((acc, r) => acc + r.cost, 0);
+            let mainCost = 0;
+            let clfCost = 0;
+            let lunaCount = 0;
+            let lunaCost = 0;
+
+            filteredRecords.forEach(r => {{
+                if (r.decision === 'CLASSIFIER') {{
+                    clfCost += r.cost;
+                }} else {{
+                    mainCost += r.cost;
+                    if (r.decision.includes('LUNA')) {{
+                        lunaCost += r.cost;
+                        lunaCount += 1;
+                    }}
+                }}
+            }});
+
+            const totalCost = mainCost + clfCost;
             const totalCredits = totalCost / 0.20;
+            const mainCredits = mainCost / 0.20;
+            const clfCredits = clfCost / 0.20;
+
             const totalIn = filteredRecords.reduce((acc, r) => acc + r.input_tokens, 0);
             const totalOut = filteredRecords.reduce((acc, r) => acc + r.output_tokens, 0);
             const totalTok = totalIn + totalOut;
 
             const sessions = new Set(filteredRecords.map(r => r.session_id)).size;
-
-            let lunaCost = 0;
-            let lunaCount = 0;
-            filteredRecords.forEach(r => {{
-                if (r.decision.includes('LUNA')) {{
-                    lunaCost += r.cost;
-                    lunaCount += 1;
-                }}
-            }});
             const savedUsd = Math.max(0, (lunaCount * 0.12) - lunaCost);
             const savedCredits = savedUsd / 0.20;
 
             document.getElementById('kpiCredits').innerHTML = totalCredits.toFixed(2) + ' <span class="text-sm font-normal text-slate-400">Cr</span>';
+            document.getElementById('kpiCreditBreakdown').innerHTML = `<span class="text-indigo-300 font-bold">🤖 모델: ${{mainCredits.toFixed(2)}} Cr</span> <span class="text-slate-500">|</span> <span class="text-amber-300 font-bold">🔍 분류기: ${{clfCredits.toFixed(2)}} Cr</span>`;
             document.getElementById('kpiCost').innerText = '$' + totalCost.toFixed(4);
-            document.getElementById('kpiRequests').innerText = '총 ' + filteredRecords.length.toLocaleString() + '회 성사 요청';
+            document.getElementById('kpiRequests').innerText = '총 ' + filteredRecords.length.toLocaleString() + '회 성사 (모델: $' + mainCost.toFixed(4) + ' / 분류기: $' + clfCost.toFixed(4) + ')';
             document.getElementById('kpiTokens').innerText = totalTok.toLocaleString();
             document.getElementById('kpiInTokens').innerText = 'Input: ' + totalIn.toLocaleString();
             document.getElementById('kpiSessions').innerHTML = sessions.toLocaleString() + ' <span class="text-sm font-normal text-slate-400">sessions</span>';
@@ -567,6 +782,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }});
             }}
 
+            // 프롬프트 그룹화 및 세션 랭킹 수합
             const promptMap = {{}};
             filteredRecords.forEach(r => {{
                 const pKey = r.prompt ? r.prompt : "(서브 스텝 / 연속 릴레이)";
@@ -585,11 +801,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 promptMap[pKey].cost += r.cost;
             }});
 
-            const topPrompts = Object.values(promptMap).sort((a,b) => b.cost - a.cost).slice(0, 15);
+            const allSortedPrompts = Object.values(promptMap).sort((a,b) => b.cost - a.cost);
+            const totalPromptsCount = allSortedPrompts.length;
+
+            const visiblePrompts = allSortedPrompts.slice(0, currentPromptLimit);
             let tableHtml = '';
-            topPrompts.forEach((p, idx) => {{
+            
+            visiblePrompts.forEach((p, idx) => {{
                 const credits = (p.cost / 0.20).toFixed(2);
-                const sidShort = (p.session_id && p.session_id !== 'N/A') ? p.session_id.substring(0, 8) : 'N/A';
+                const sidFull = p.session_id || 'N/A';
+                const sidShort = (sidFull !== 'N/A' && sidFull.length > 8) ? sidFull.substring(0, 8) : sidFull;
                 
                 let badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
                 if (p.decision.includes('TERRA') || p.decision.includes('SOL')) {{
@@ -599,9 +820,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const safePrompt = p.prompt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
                 tableHtml += `
-                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
-                    <td class="px-4 py-3 text-slate-400 font-mono text-sm">${{idx + 1}}</td>
-                    <td class="px-4 py-3 font-mono text-xs text-sky-400" title="${{p.session_id}}">${{sidShort}}</td>
+                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80" data-session-id="${{sidFull}}" data-session-short="${{sidShort}}">
+                    <td class="px-4 py-3 text-slate-400 font-mono text-sm font-bold">${{idx + 1}}</td>
+                    <td class="px-4 py-3 font-mono text-xs text-sky-400" title="${{sidFull}}">${{sidShort}}</td>
                     <td class="px-4 py-3 text-slate-200 font-medium max-w-md truncate" title="${{safePrompt}}">${{safePrompt}}</td>
                     <td class="px-4 py-3 text-right text-slate-300">${{p.count.toLocaleString()}}회</td>
                     <td class="px-4 py-3 text-right text-sky-400 font-mono">${{p.tokens.toLocaleString()}}</td>
@@ -617,47 +838,101 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }});
 
             document.getElementById('promptTableBody').innerHTML = tableHtml;
+
+            // Load More 버튼 제어
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            const countInfo = document.getElementById('promptDisplayCountInfo');
+
+            if (currentPromptLimit >= totalPromptsCount) {{
+                loadMoreBtn.classList.add('hidden');
+                countInfo.innerText = `전체 ${{totalPromptsCount.toLocaleString()}}개 표시 완료`;
+            }} else {{
+                loadMoreBtn.classList.remove('hidden');
+                countInfo.innerText = `표시 중: Top ${{visiblePrompts.length.toLocaleString()}} / 전체 ${{totalPromptsCount.toLocaleString()}}개`;
+            }}
+
+            // 필터링 적용 시 테이블 검색도 즉시 연동
+            filterTable();
         }}
 
-        function onMonthChange(val) {{
-            renderDashboard(val);
+        function onFilterChange() {{
+            currentPromptLimit = 15; // 필터 조작 시 15개 기본 초기화
+            const targetMonth = document.getElementById('monthSelect').value;
+            const targetSession = document.getElementById('sessionSelect').value;
+            renderDashboard(targetMonth, targetSession);
         }}
 
         function filterTable() {{
-            const input = document.getElementById('searchInput').value.toLowerCase();
+            const input = document.getElementById('searchInput').value.toLowerCase().trim();
             const rows = document.querySelectorAll('#promptTable tbody tr');
-            rows.forEach(row => {{
+            let visibleCount = 0;
+
+            rows.forEach((row, idx) => {{
                 const text = row.innerText.toLowerCase();
-                row.style.display = text.includes(input) ? '' : 'none';
+                const fullSid = (row.getAttribute('data-session-id') || '').toLowerCase();
+                const shortSid = (row.getAttribute('data-session-short') || '').toLowerCase();
+
+                const isMatch = !input || text.includes(input) || fullSid.includes(input) || shortSid.includes(input);
+                row.style.display = isMatch ? '' : 'none';
+
+                if (isMatch) {{
+                    visibleCount++;
+                    // 세션 ID 검색 시 세션 전용 랭크 (Session Rank 1, 2, 3...) 로 재계산
+                    if (input.includes('sess_') || input.length >= 6) {{
+                        row.querySelector('td').innerText = visibleCount;
+                    }}
+                }}
             }});
         }}
 
         // 3초 주기 실시간 라이브 자동 갱신 (Real-time Live Auto-Sync Polling)
         async function fetchLiveDashboardStats() {{
+            let res = null;
             try {{
-                const res = await fetch('http://localhost:18080/v1/dashboard/stats');
-                if (res.ok) {{
-                    const data = await res.json();
-                    if (data.records && data.records.length > 0) {{
-                        allRecords = data.records;
-                    }}
-                    if (data.healing_status) {{
-                        healingData = data.healing_status;
-                        initVersionSelector();
-                    }}
-                    const currentMonth = document.getElementById('monthSelect').value;
-                    renderDashboard(currentMonth);
-                }}
+                res = await fetch('http://127.0.0.1:18080/v1/dashboard/stats');
             }} catch(e) {{
-                // Proxy server offline or starting
+                try {{
+                    res = await fetch('http://localhost:18080/v1/dashboard/stats');
+                }} catch(e2) {{ }}
+            }}
+
+            const badge = document.getElementById('liveSyncBadge');
+            if (res && res.ok) {{
+                if (badge) {{
+                    badge.className = "flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg text-emerald-400 text-xs font-bold animate-pulse";
+                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>3s Live Connected</span>';
+                }}
+                const data = await res.json();
+                if (data.records && data.records.length > 0) {{
+                    allRecords = data.records;
+                    updateMonthSelector();
+                    updateSessionSelector();
+                }}
+                if (data.healing_status) {{
+                    healingData = data.healing_status;
+                    initVersionSelector();
+                }}
+                if (data.healing_history) {{
+                    healingHistoryData = data.healing_history;
+                    renderHealingHistory(data.healing_history);
+                }}
+                const currentMonth = document.getElementById('monthSelect').value;
+                const currentSession = document.getElementById('sessionSelect').value;
+                renderDashboard(currentMonth, currentSession);
+            }} else {{
+                if (badge) {{
+                    badge.className = "flex items-center gap-2 bg-rose-950/60 border border-rose-500/40 px-3 py-1.5 rounded-xl shadow-lg text-rose-400 text-xs font-bold";
+                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span><span>Live Disconnected</span>';
+                }}
             }}
         }}
 
         window.onload = function() {{
             initVersionSelector();
+            renderHealingHistory(healingHistoryData);
             const initialMonth = document.getElementById('monthSelect').value;
-            renderDashboard(initialMonth);
-            // 3초 주기로 실시간 자동 폴링 가동
+            const initialSession = document.getElementById('sessionSelect').value;
+            renderDashboard(initialMonth, initialSession);
             setInterval(fetchLiveDashboardStats, 3000);
         }};
     </script>
@@ -682,13 +957,28 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
     )
 
+    healing_pattern = re.compile(
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[(?P<event_type>HEALING|VERSION_SWITCH)\] (?P<details>.*)$'
+    )
+
     all_raw_records = []
     records = []
     prompt_history = []
+    healing_history = []
     
     with open(log_filepath, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
             line = line.strip()
+
+            # HEALING & VERSION_SWITCH 수집
+            h_match = healing_pattern.search(line)
+            if h_match:
+                healing_history.append({
+                    "timestamp": h_match.group("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "event_type": h_match.group("event_type"),
+                    "details": h_match.group("details")
+                })
+                continue
             
             # DECISION 매칭 수집
             d_match = decision_pattern.search(line)
@@ -820,16 +1110,13 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         session_stats[s_key]["loc"] += r["loc"]
         session_stats[s_key]["cost"] += r["cost"]
 
-        prompt_stats[p_key]["count"] += 1
-        prompt_stats[p_key]["in_tok"] += r["input_tokens"]
-        prompt_stats[p_key]["out_tok"] += r["output_tokens"]
         prompt_stats[p_key]["cost"] += r["cost"]
         prompt_stats[p_key]["prompt"] = p_key
         prompt_stats[p_key]["decision"] = d
         prompt_stats[p_key]["session_id"] = s_key
 
-    print("\n====================================================================================================")
-    print("📊 [TierBridge Kibana AI 사용량, 크레딧 & 힐링팩터 모델 관리 통계 보고서]")
+    print("====================================================================================================")
+    print("📊 [TierBridge Dashboard] AI 사용량, 크레딧 & 모델 관리 보고서")
     print("====================================================================================================")
     if target_month: print(f"🗓️  조회 대상 월: {target_month}")
     if target_date: print(f"🗓️  조회 대상 일자: {target_date}")
@@ -887,7 +1174,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     print("====================================================================================================\n")
 
     if generate_html:
-        html_file = generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date, target_month, target_session)
+        html_file = generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date, target_month, target_session, healing_history=healing_history)
         if open_browser:
             webbrowser.open("file://" + os.path.abspath(html_file))
 

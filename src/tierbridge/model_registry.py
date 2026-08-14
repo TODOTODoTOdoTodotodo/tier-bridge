@@ -3,7 +3,22 @@ import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "model_versions.json")
+def get_config_path() -> str:
+    env_path = os.getenv("MODEL_VERSIONS_CONFIG_PATH")
+    if env_path and os.path.exists(env_path):
+        return env_path
+    
+    # 개발 레포 / 런타임 디렉토리 상위 탐색
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    dev_path = os.path.join(base_dir, "config", "model_versions.json")
+    if os.path.exists(dev_path):
+        return dev_path
+
+    live_path = os.path.expanduser("~/.tierbridge/live/config/model_versions.json")
+    if os.path.exists(live_path):
+        return live_path
+
+    return dev_path
 
 class ModelRegistry:
     _instance = None
@@ -15,7 +30,7 @@ class ModelRegistry:
         return cls._instance
 
     def _init_registry(self):
-        self.config_path = CONFIG_PATH
+        self.config_path = get_config_path()
         os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
         if not os.path.exists(self.config_path):
             self._write_default_config()
@@ -54,19 +69,36 @@ class ModelRegistry:
             return self._load_config()
 
     def _save_config(self):
+        # 1. Primary config_path 저장
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"[Error] Failed to save model_versions.json: {e}")
 
+        # 2. 배포 시 설정 유지(Deployment Preservation)를 위한 개발 저장소 <-> 런타임 저장소 양방향 영구 저장
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        dev_target = os.path.join(base_dir, "config", "model_versions.json")
+        live_target = os.path.expanduser("~/.tierbridge/live/config/model_versions.json")
+        
+        for target in [dev_target, live_target]:
+            if os.path.abspath(target) != os.path.abspath(self.config_path):
+                try:
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    with open(target, "w", encoding="utf-8") as f:
+                        json.dump(self.data, f, indent=2, ensure_ascii=False)
+                except Exception:
+                    pass
+
     def get_active_version_id(self) -> str:
+        self.data = self._load_config()
         active = self.data.get("active_version", "latest")
         if active == "latest":
             return self.data.get("latest_version_id", "v1.0.0")
         return active
 
     def get_active_mapping(self) -> Dict[str, Any]:
+        self.data = self._load_config()
         version_id = self.get_active_version_id()
         versions = self.data.get("versions", {})
         if version_id in versions:
@@ -76,6 +108,7 @@ class ModelRegistry:
         return versions.get(first_key, {}).get("mapping", {})
 
     def get_all_versions(self) -> List[Dict[str, Any]]:
+        self.data = self._load_config()
         versions_dict = self.data.get("versions", {})
         active = self.data.get("active_version", "latest")
         latest_id = self.data.get("latest_version_id", "v1.0.0")

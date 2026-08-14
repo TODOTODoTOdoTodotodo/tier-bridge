@@ -38,6 +38,42 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 
 ---
 
+## 2.1 모델 스냅샷 버전 테스트 (Legacy Test Snapshot Scenario)
+
+힐링 핫패치 감지 및 무중단 원클릭 핫패칭/롤백 테스트를 위해 구형/테스트 스냅샷 버전을 지원합니다:
+- **`v0.9.0-test-legacy` (테스트 스냅샷)**:
+  - `LUNA` 등급 매핑: `gpt-5.4-mini` (in: $0.15, out: $0.60)
+  - `TERRA` & `SOL` 등급 매핑: `gpt-5.5` (in: $3.00, out: $12.00)
+- **`v1.0.0` (Baseline 표준 스냅샷 백업본)**:
+  - `LUNA` 등급 매핑: `gpt-5.6-luna` (in: $1.00, out: $3.00)
+  - `TERRA` 등급 매핑: `gpt-5.6-terra` (in: $2.50, out: $10.00)
+  - `SOL` 등급 매핑: `gpt-5.6-sol` (in: $5.00, out: $20.00)
+
+`v0.9.0-test-legacy` 스냅샷이 활성화되면 `HealingEngine`이 최신 `gpt-5.6` 라인업과의 단가/성능 차이를 자동 감지하여 `has_new_healing: true` 알림 배너를 트리거합니다.
+
+- **원클릭 핫패칭 릴리즈 적용 및 배포 영구 보존 (Dual-Sink Persistence & Deployment Preservation)**:
+  - `apply_healing()` 또는 버전 전환(`switch_version()`) 호출 시 런타임 저장소(`~/.tierbridge/live/config/model_versions.json`)뿐만 아니라 **개발 레포 저장소(`config/model_versions.json`)에도 Active 버전 및 신규 릴리즈 스냅샷을 동시에 동기화 저장**합니다.
+  - 배포 스크립트(`deploy.sh`)의 `rsync` 실행 시 `config/model_versions.json` 설정을 `--exclude` 대상으로 지정하여, 런타임의 최신 Active 모델 버전 및 핫패치 릴리즈 설정이 배포 시 덮어씌워지지 않고 100% 영구 보존되도록 보호합니다.
+  - 핫패치가 완료되면 `has_new_healing`은 `false`로 닫히고, 대시보드 버전 선택 드롭다운과 하단 타임라인에 `v1.1.0-healing-hotpatch`가 이력으로 남게 됩니다.
+
+- **단가 절감율 표출 규격 (Dynamic `savings_pct`)**:
+  - `savings_pct > 0`: `+33.3% (절감)` (초록색 에메랄드 볼드)
+  - `savings_pct < 0`: `-220.0% (인상)` (빨간색 로즈 볼드)
+  - `savings_pct == 0`: `0.0% (동일)` (슬레이트 세미볼드)
+
+---
+
+## 2.2 핫패치 이력 로그 파싱 & 대시보드 타임라인 (Hot-patch History & Timeline)
+
+핫패칭 적용 및 버전 전환 실행 시 `harness.log`에 구조화된 이벤트를 남기며 대시보드에 실시간 기록됩니다:
+1. **이벤트 로그 규격**:
+   - `➔ [HEALING] Hot-patch applied | new_version_id=v1.1.0-sample-demo | message=...`
+   - `➔ [VERSION_SWITCH] Switched model version | version_id=v1.0.0 | active_version_id=v1.0.0`
+2. **대시보드 시각화 (Kibana Real-time Timeline)**:
+   - `usage_dashboard.html` 하단에 **`🩹 모델 핫패치 & 버전 전환 이력 (Recent Hot-Patch & Version History)`** 타임라인 표를 배치하여 실시간 이력을 표출합니다.
+
+---
+
 ## 3. 버전 관리 규격 (`config/model_versions.json`)
 
 ```json
