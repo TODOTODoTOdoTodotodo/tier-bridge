@@ -35,7 +35,7 @@ Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=localai`)�
 * **Kibana 스타일 시각화 웹 대시보드 리포트 생성 (`--html`)**: `--html` 옵션으로 명령 실행 시 Kibana 스타일의 다크테마 **TierBridge Dashboard**(`usage_dashboard.html`)를 자동 생성하여 반응형 그래프(Chart.js) 및 실시간 KPI 카드로 월별/일자별/세션별 추이를 시각적으로 제공합니다.
 * **프롬프트별 인사이트 (Top Credit Consuming Prompts)**: `[DECISION]`과 `[USAGE]` 라인을 실시간으로 정밀 매칭하여 가장 많은 크레딧과 토큰을 소모한 프롬프트 턴 TOP 10을 파악하고 최적화 팁 및 인사이트를 제공합니다.
 * **크레딧 정밀 분리 집계 (Classifier vs Main Model Credits)**: 라우팅 난이도 판단에 사용된 **분류기 크레딧 (`CLASSIFIER`)**, 실제 코드 생성 답변에 소모된 **메인 모델 크레딧 (`MAIN_MODEL`)**, 그리고 이 둘을 통합한 **전체 크레딧 (`TOTAL_CREDITS`)** 수치를 대시보드 KPI 카드 및 요약표에 구분하여 명확히 산출합니다.
-* **3-Tier / 4-Tier 동적 등급 소모 분포 제공**: `CLASSIFIER`, `LUNA:LOW`, `LUNA:MEDIUM`, `TERRA:MEDIUM`, `TERRA:HIGH`, `TERRA:EXTRA_HIGH`, `SOL:EXTRA_HIGH` 등 등급별 소모 비용, 토큰 비율 및 작성 LOC를 명확하게 구분해 표시합니다.
+* **6단계 게이밍 RPG 랭크 티어 소모 분포 파싱 & 시각화**: `CLASSIFIER`, `BRONZE`, `SILVER`, `GOLD`, `PLATINUM`, `DIAMOND`, `CHALLENGER` 랭크 티어별 소모 비용, 토큰 비율 및 작성 LOC를 정밀하게 파싱하고 대시보드 도넛 차트 및 표에 직관적으로 시각화합니다.
 
 ---
 

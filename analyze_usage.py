@@ -658,7 +658,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     clfCost += r.cost;
                 }} else {{
                     mainCost += r.cost;
-                    if (r.decision.includes('LUNA')) {{
+                    if (r.decision.includes('BRONZE') || r.decision.includes('SILVER') || r.decision.includes('LUNA')) {{
                         lunaCost += r.cost;
                         lunaCount += 1;
                     }}
