@@ -41,15 +41,15 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 ## 2.1 모델 스냅샷 버전 테스트 (Legacy Test Snapshot Scenario)
 
 힐링 핫패치 감지 및 무중단 원클릭 핫패칭/롤백 테스트를 위해 구형/테스트 스냅샷 버전을 지원하며, 기존 모델명 대신 단일화된 게이밍 랭크 티어(`BRONZE`, `SILVER`, `GOLD`, `PLATINUM`, `DIAMOND`, `CHALLENGER`) 매핑을 사용합니다:
-- **`v0.9.0-test-legacy` (테스트 스냅샷)**:
-  - `BRONZE` / `SILVER` 등급 매핑: `gpt-5.4-mini` (in: $0.15, out: $0.60)
-  - `GOLD` ~ `CHALLENGER` 등급 매핑: `gpt-5.5` (in: $3.00, out: $12.00)
-- **`v1.0.0` (Baseline 표준 스냅샷 백업본)**:
+- **`v1.0.0` (Baseline 표준 Active 스냅샷 - 기본값)**:
   - `BRONZE` / `SILVER` 등급 매핑: `gpt-5.6-luna` (in: $1.00, out: $3.00)
   - `GOLD` / `PLATINUM` / `DIAMOND` 등급 매핑: `gpt-5.6-terra` (in: $2.50, out: $10.00)
   - `CHALLENGER` 등급 매핑: `gpt-5.6-sol` (in: $5.00, out: $20.00)
+- **`v0.9.0-test-legacy` (테스트 롤백 스냅샷)**:
+  - `BRONZE` / `SILVER` 등급 매핑: `gpt-5.4-mini` (in: $0.15, out: $0.60)
+  - `GOLD` ~ `CHALLENGER` 등급 매핑: `gpt-5.5` (in: $3.00, out: $12.00)
 
-`v0.9.0-test-legacy` 스냅샷이 활성화되면 `HealingEngine`이 최신 `gpt-5.6` 라인업과의 단가/성능 차이를 자동 감지하여 `has_new_healing: true` 알림 배너를 트리거합니다.
+기본 배포 및 런타임 활성 버전(`active_version`)은 최신 표준 모델 스냅샷인 **`v1.0.0`**으로 유지되며, 사용자가 핫패치 검증을 위해 `v0.9.0-test-legacy` 스냅샷으로 전환했을 때만 `HealingEngine`이 `has_new_healing: true` 알림 배너를 트리거합니다.
 
 - **원클릭 핫패칭 릴리즈 적용 및 배포 영구 보존 (Dual-Sink Persistence & Deployment Preservation)**:
   - `apply_healing()` 또는 버전 전환(`switch_version()`) 호출 시 런타임 저장소(`~/.tierbridge/live/config/model_versions.json`)뿐만 아니라 **개발 레포 저장소(`config/model_versions.json`)에도 Active 버전 및 신규 릴리즈 스냅샷을 동시에 동기화 저장**합니다.
