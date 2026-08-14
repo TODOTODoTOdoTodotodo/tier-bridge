@@ -9,8 +9,11 @@ from collections import defaultdict
 from datetime import datetime
 
 def parse_args():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    default_log = os.path.join(script_dir, "harness.log") if os.path.exists(os.path.join(script_dir, "harness.log")) else "harness.log"
+    
     parser = argparse.ArgumentParser(description="TierBridge 로그 기반 Kibana풍 USAGE 및 힐링팩터 모델 관리 분석기")
-    parser.add_argument("log_file", nargs="?", default="harness.log", help="분석할 로그 파일 경로 (기본: harness.log)")
+    parser.add_argument("log_file", nargs="?", default=default_log, help=f"분석할 로그 파일 경로 (기본: {default_log})")
     parser.add_argument("--date", "-d", type=str, help="특정 날짜 필터 (형식: YYYY-MM-DD)")
     parser.add_argument("--month", "-m", type=str, help="특정 월 필터 (형식: YYYY-MM)")
     parser.add_argument("--session", "-s", type=str, help="특정 세션 ID 필터 (예: 5eb61a1e)")

@@ -106,7 +106,7 @@ setup_alias() {
             echo "# TierBridge Global Aliases" >> "$shell_rc"
             echo "alias tierbridge=\"source $LIVE_DIR/run_harness.sh\"" >> "$shell_rc"
             echo "alias tierbridge-log=\"tail -f $LIVE_DIR/harness.log\"" >> "$shell_rc"
-            echo "alias tierbridge-dash=\"$LIVE_DIR/.venv/bin/python $LIVE_DIR/analyze_usage.py --html\"" >> "$shell_rc"
+            echo "alias tierbridge-dash=\"$LIVE_DIR/.venv/bin/python $LIVE_DIR/analyze_usage.py $LIVE_DIR/harness.log --html\"" >> "$shell_rc"
             echo "🔗 Shell Alias 가 $shell_rc 에 자동 등록되었습니다."
         fi
     fi
