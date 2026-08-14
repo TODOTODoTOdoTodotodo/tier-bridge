@@ -22,7 +22,8 @@ def parse_args():
     return parser.parse_args()
 
 def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None):
-    html_filename = "usage_dashboard.html"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    html_filename = os.path.join(script_dir, "usage_dashboard.html")
     
     # Healing Engine 상태 가져오기 (Smart Import)
     try:

@@ -76,12 +76,14 @@ class ModelRegistry:
             print(f"[Error] Failed to save model_versions.json: {e}")
 
     def get_active_version_id(self) -> str:
+        self.data = self._load_config()
         active = self.data.get("active_version", "latest")
         if active == "latest":
             return self.data.get("latest_version_id", "v1.0.0")
         return active
 
     def get_active_mapping(self) -> Dict[str, Any]:
+        self.data = self._load_config()
         version_id = self.get_active_version_id()
         versions = self.data.get("versions", {})
         if version_id in versions:
@@ -91,6 +93,7 @@ class ModelRegistry:
         return versions.get(first_key, {}).get("mapping", {})
 
     def get_all_versions(self) -> List[Dict[str, Any]]:
+        self.data = self._load_config()
         versions_dict = self.data.get("versions", {})
         active = self.data.get("active_version", "latest")
         latest_id = self.data.get("latest_version_id", "v1.0.0")
