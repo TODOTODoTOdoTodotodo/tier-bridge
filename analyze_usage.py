@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 import sys
 import os
+
+# Auto-inject src directory into sys.path
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_src_dir = os.path.join(_script_dir, "src")
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
 import re
 import argparse
 import webbrowser
