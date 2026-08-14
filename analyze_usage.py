@@ -444,6 +444,19 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             tbody.innerHTML = '';
             const comp = healingData.comparison || [];
             comp.forEach(item => {{
+                let savingsText = '';
+                let savingsClass = '';
+                if (item.savings_pct > 0) {{
+                    savingsText = `+${{item.savings_pct}}% (절감)`;
+                    savingsClass = 'text-emerald-400 font-bold';
+                }} else if (item.savings_pct < 0) {{
+                    savingsText = `${{item.savings_pct}}% (인상)`;
+                    savingsClass = 'text-rose-400 font-bold';
+                }} else {{
+                    savingsText = '0.0% (동일)';
+                    savingsClass = 'text-slate-400 font-semibold';
+                }}
+
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-800/50';
                 tr.innerHTML = `
@@ -452,7 +465,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     <td class="p-3 text-right font-mono text-slate-400">$${{item.current_in_price}} / $${{item.current_out_price}}</td>
                     <td class="p-3 font-mono font-bold text-emerald-400">${{item.healing_model}}</td>
                     <td class="p-3 text-right font-mono font-bold text-emerald-400">$${{item.healing_in_price}} / $${{item.healing_out_price}}</td>
-                    <td class="p-3 text-right font-mono font-bold text-indigo-400">-${{item.savings_pct}}%</td>
+                    <td class="p-3 text-right font-mono ${{savingsClass}}">${{savingsText}}</td>
                 `;
                 tbody.appendChild(tr);
             }});

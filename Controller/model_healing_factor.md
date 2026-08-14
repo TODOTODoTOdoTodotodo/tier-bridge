@@ -51,6 +51,11 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 
 `v0.9.0-test-legacy` 스냅샷이 활성화되면 `HealingEngine`이 최신 `gpt-5.6` 라인업과의 단가/성능 차이를 자동 감지하여 `has_new_healing: true` 알림 배너를 트리거합니다.
 
+- **단가 절감율 표출 규격 (Dynamic `savings_pct`)**:
+  - `savings_pct > 0`: `+33.3% (절감)` (초록색 에메랄드 볼드)
+  - `savings_pct < 0`: `-220.0% (인상)` (빨간색 로즈 볼드)
+  - `savings_pct == 0`: `0.0% (동일)` (슬레이트 세미볼드)
+
 ---
 
 ## 3. 버전 관리 규격 (`config/model_versions.json`)
