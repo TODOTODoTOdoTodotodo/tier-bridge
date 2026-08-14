@@ -32,10 +32,11 @@ class HealingEngine:
         rec_mapping = cls.SAMPLE_HEALING_TEMPLATE["mapping"]
         active_vid = registry.get_active_version_id()
 
-        # 현재 활성 모델 매핑에 구형 모델(gpt-5.4-mini, gpt-5.5 등)이 포함되어 있으면 신규 힐링 감지 True 활성화
-        has_real_new_model = any(
-            m.get("model") in ["gpt-5.4-mini", "gpt-5.5"] or "test" in active_vid or "legacy" in active_vid
-            for m in active_mapping.values()
+        # 핫패치가 이미 적용되었거나(hotpatch) 최신 상태인 경우 감지 닫음, 구형 모델일 때만 True 활성화
+        is_already_hotpatched = "hotpatch" in active_vid or active_vid == "v1.1.0-healing-hotpatch"
+        has_real_new_model = (not is_already_hotpatched) and (
+            any(m.get("model") in ["gpt-5.4-mini", "gpt-5.5"] for m in active_mapping.values())
+            or "test" in active_vid or "legacy" in active_vid
         )
 
         # 비교표 생성 (데모 및 실제 비교 공용)

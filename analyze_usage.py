@@ -465,8 +465,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         function initVersionSelector() {{
             const select = document.getElementById('versionSelect');
             if (!select) return;
-            const currentVal = select.value;
             const allVersions = healingData.all_versions || [];
+            const activeVid = healingData.active_version_id;
             
             if (allVersions.length > 0) {{
                 select.innerHTML = '';
@@ -476,9 +476,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     let label = v.version_id + ' - ' + (v.name || '');
                     if (v.is_active) label += ' (Active)';
                     opt.text = label;
-                    if (currentVal && currentVal === v.version_id) {{
-                        opt.selected = true;
-                    }} else if (!currentVal && v.is_active) {{
+                    if (v.is_active || (activeVid && v.version_id === activeVid)) {{
                         opt.selected = true;
                     }}
                     select.appendChild(opt);
