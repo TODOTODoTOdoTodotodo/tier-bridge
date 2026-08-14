@@ -19,10 +19,10 @@ echo "🌐 라이브 런타임 경로: $LIVE_DIR"
 mkdir -p "$LIVE_DIR"
 mkdir -p "$HOME/.tierbridge"
 
-# 2. 소스코드 동기화 (임시/가상환경 제외)
+# 2. 소스코드 동기화 & 로그 마이그레이션
 echo "📦 소스코드 핫-동기화 진행 중..."
 if command -v rsync >/dev/null 2>&1; then
-    rsync -av --delete \
+    rsync -av \
         --exclude='.git' \
         --exclude='.venv' \
         --exclude='__pycache__' \
@@ -32,6 +32,23 @@ if command -v rsync >/dev/null 2>&1; then
         "$DEV_DIR/" "$LIVE_DIR/"
 else
     cp -R "$DEV_DIR/"* "$LIVE_DIR/"
+fi
+
+# 개발 레포의 누적 harness.log 가 존재할 경우 라이브 harness.log 로 자동 병합 마이그레이션
+if [ -f "$DEV_DIR/harness.log" ]; then
+    python3 -c "
+import os
+dev_log = '$DEV_DIR/harness.log'
+live_log = '$LIVE_DIR/harness.log'
+if os.path.exists(dev_log):
+    with open(dev_log, 'r', encoding='utf-8', errors='ignore') as f_dev:
+        dev_lines = f_dev.readlines()
+    live_content = open(live_log, 'r', encoding='utf-8', errors='ignore').read() if os.path.exists(live_log) else ''
+    with open(live_log, 'a', encoding='utf-8') as f_out:
+        for line in dev_lines:
+            if line not in live_content:
+                f_out.write(line)
+" 2>/dev/null || true
 fi
 
 # 3. 라이브 가상환경(.venv) 및 의존성 패키지 정비
