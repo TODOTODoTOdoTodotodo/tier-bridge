@@ -3,7 +3,22 @@ import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "model_versions.json")
+def get_config_path() -> str:
+    env_path = os.getenv("MODEL_VERSIONS_CONFIG_PATH")
+    if env_path and os.path.exists(env_path):
+        return env_path
+    
+    # 개발 레포 / 런타임 디렉토리 상위 탐색
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    dev_path = os.path.join(base_dir, "config", "model_versions.json")
+    if os.path.exists(dev_path):
+        return dev_path
+
+    live_path = os.path.expanduser("~/.tierbridge/live/config/model_versions.json")
+    if os.path.exists(live_path):
+        return live_path
+
+    return dev_path
 
 class ModelRegistry:
     _instance = None
@@ -15,7 +30,7 @@ class ModelRegistry:
         return cls._instance
 
     def _init_registry(self):
-        self.config_path = CONFIG_PATH
+        self.config_path = get_config_path()
         os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
         if not os.path.exists(self.config_path):
             self._write_default_config()
