@@ -58,6 +58,17 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 
 ---
 
+## 2.2 핫패치 이력 로그 파싱 & 대시보드 타임라인 (Hot-patch History & Timeline)
+
+핫패칭 적용 및 버전 전환 실행 시 `harness.log`에 구조화된 이벤트를 남기며 대시보드에 실시간 기록됩니다:
+1. **이벤트 로그 규격**:
+   - `➔ [HEALING] Hot-patch applied | new_version_id=v1.1.0-sample-demo | message=...`
+   - `➔ [VERSION_SWITCH] Switched model version | version_id=v1.0.0 | active_version_id=v1.0.0`
+2. **대시보드 시각화 (Kibana Real-time Timeline)**:
+   - `usage_dashboard.html` 하단에 **`🩹 모델 핫패치 & 버전 전환 이력 (Recent Hot-Patch & Version History)`** 타임라인 표를 배치하여 실시간 이력을 표출합니다.
+
+---
+
 ## 3. 버전 관리 규격 (`config/model_versions.json`)
 
 ```json

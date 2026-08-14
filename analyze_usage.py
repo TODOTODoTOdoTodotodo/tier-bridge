@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument("--no-open", action="store_true", help="HTML 대시보드 생성 후 브라우저 자동 오픈 금지")
     return parser.parse_args()
 
-def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None):
+def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None, healing_history=None):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     html_filename = os.path.join(script_dir, "usage_dashboard.html")
     
@@ -64,6 +64,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         }
 
     healing_status_json = json.dumps(healing_status)
+    healing_history_json = json.dumps(list(reversed(healing_history)) if healing_history else [])
 
     # 동적 월 선택 드롭다운 옵션 구성 (전체 원본 레코드 기준)
     available_months = sorted(list(set(r["month"] for r in all_raw_records if r["month"] != "Unknown Month")), reverse=True)
@@ -344,6 +345,35 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
     </div>
 
+    <!-- Recent Hot-Patch & Version History Card -->
+    <div class="glass-card p-6 rounded-2xl mb-8">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i> 모델 핫패치 & 버전 전환 이력 (Hot-Patch & Version Audit History)
+                </h2>
+                <p class="text-xs text-slate-400 mt-1">
+                    하네스 무중단 핫패칭 및 원클릭 버전 스위칭 이벤트 실시간 기록
+                </p>
+            </div>
+            <span class="text-xs px-2.5 py-1 bg-emerald-500/20 text-emerald-300 font-mono rounded-lg border border-emerald-500/30">Live Audit Log</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                    <tr class="bg-slate-800/80 text-slate-400 uppercase border-b border-slate-700">
+                        <th class="px-4 py-3">타임스탬프</th>
+                        <th class="px-4 py-3">이벤트 유형</th>
+                        <th class="px-4 py-3">상세 기록 / 적용 내역</th>
+                    </tr>
+                </thead>
+                <tbody id="healingHistoryTableBody" class="divide-y divide-slate-800">
+                    <!-- Populated dynamically via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Healing Factor Comparison Modal -->
     <div id="healingModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="glass-card max-w-3xl w-full p-6 rounded-3xl border border-slate-700 shadow-2xl relative">
@@ -403,9 +433,34 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     <script>
         let allRecords = {client_records_json};
         let healingData = {healing_status_json};
+        let healingHistoryData = {healing_history_json};
         let dailyChart = null;
         let decisionChart = null;
         let currentPromptLimit = 15; // 기본 노출 15개
+
+        function renderHealingHistory(historyList) {{
+            const tbody = document.getElementById('healingHistoryTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            const list = historyList || healingHistoryData || [];
+            if (list.length === 0) {{
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-slate-500">아직 수집된 핫패치/버전 전환 이력이 없습니다.</td></tr>';
+                return;
+            }}
+            list.forEach(item => {{
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/40 transition-colors';
+                let badge = item.event_type === 'HEALING'
+                    ? '<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-md font-bold">🩹 핫패치 적용</span>'
+                    : '<span class="px-2 py-0.5 bg-sky-500/20 text-sky-300 border border-sky-500/40 rounded-md font-bold">🔀 버전 전환</span>';
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-mono text-slate-400">${{item.timestamp || 'N/A'}}</td>
+                    <td class="px-4 py-3">${{badge}}</td>
+                    <td class="px-4 py-3 font-mono text-slate-200">${{item.details || ''}}</td>
+                `;
+                tbody.appendChild(tr);
+            }});
+        }}
 
         function initVersionSelector() {{
             const select = document.getElementById('versionSelect');
@@ -781,6 +836,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         healingData = data.healing_status;
                         initVersionSelector();
                     }}
+                    if (data.healing_history) {{
+                        healingHistoryData = data.healing_history;
+                        renderHealingHistory(data.healing_history);
+                    }}
                     const currentMonth = document.getElementById('monthSelect').value;
                     const currentSession = document.getElementById('sessionSelect').value;
                     renderDashboard(currentMonth, currentSession);
@@ -792,6 +851,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         window.onload = function() {{
             initVersionSelector();
+            renderHealingHistory(healingHistoryData);
             const initialMonth = document.getElementById('monthSelect').value;
             const initialSession = document.getElementById('sessionSelect').value;
             renderDashboard(initialMonth, initialSession);
@@ -819,13 +879,28 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
     )
 
+    healing_pattern = re.compile(
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[(?P<event_type>HEALING|VERSION_SWITCH)\] (?P<details>.*)$'
+    )
+
     all_raw_records = []
     records = []
     prompt_history = []
+    healing_history = []
     
     with open(log_filepath, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
             line = line.strip()
+
+            # HEALING & VERSION_SWITCH 수집
+            h_match = healing_pattern.search(line)
+            if h_match:
+                healing_history.append({
+                    "timestamp": h_match.group("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "event_type": h_match.group("event_type"),
+                    "details": h_match.group("details")
+                })
+                continue
             
             # DECISION 매칭 수집
             d_match = decision_pattern.search(line)
@@ -1021,7 +1096,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     print("====================================================================================================\n")
 
     if generate_html:
-        html_file = generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date, target_month, target_session)
+        html_file = generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date, target_month, target_session, healing_history=healing_history)
         if open_browser:
             webbrowser.open("file://" + os.path.abspath(html_file))
 

@@ -150,7 +150,9 @@ async def get_healing_status():
 @app.post("/v1/models/heal")
 async def apply_healing():
     """ 신규 저비용/고출력 모델 스냅샷을 핫패치 릴리즈 적용 """
-    return HealingEngine.apply_healing()
+    res = HealingEngine.apply_healing()
+    log.warning(f"➔ [HEALING] Hot-patch applied | active_version_id={res.get('active_version_id')} | message={res.get('message')}")
+    return res
 
 @app.post("/v1/models/version/switch")
 async def switch_model_version(request: Request):
@@ -160,7 +162,9 @@ async def switch_model_version(request: Request):
         version_id = body.get("version_id", "latest")
     except Exception:
         version_id = "latest"
-    return HealingEngine.switch_version(version_id)
+    res = HealingEngine.switch_version(version_id)
+    log.warning(f"➔ [VERSION_SWITCH] Switched model version | version_id={version_id} | active_version_id={res.get('active_version_id')}")
+    return res
 
 @app.get("/v1/dashboard/stats")
 async def get_dashboard_stats():
@@ -173,12 +177,21 @@ async def get_dashboard_stats():
         usage_pattern = re.compile(
             r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE\] (?P<decision>[^\s]+) \((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
         )
-        decision_pattern = re.compile(
-            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
+        healing_pattern = re.compile(
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[(?P<event_type>HEALING|VERSION_SWITCH)\] (?P<details>.*)$'
         )
+        healing_history = []
         with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 line = line.strip()
+                h_match = healing_pattern.search(line)
+                if h_match:
+                    healing_history.append({
+                        "timestamp": h_match.group("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "event_type": h_match.group("event_type"),
+                        "details": h_match.group("details")
+                    })
+                    continue
                 d_match = decision_pattern.search(line)
                 if d_match:
                     prompt_history.append({
@@ -232,7 +245,8 @@ async def get_dashboard_stats():
 
     return {
         "records": records,
-        "healing_status": HealingEngine.get_healing_status()
+        "healing_status": HealingEngine.get_healing_status(),
+        "healing_history": list(reversed(healing_history))
     }
 
 # ==========================================
