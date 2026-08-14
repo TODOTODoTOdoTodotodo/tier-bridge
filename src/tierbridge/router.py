@@ -209,4 +209,13 @@ class Router:
         mode_tag = "4-TIER SOL ROUTER" if is_4tier_sol_mode else "STANDARD 3-TIER ROUTER"
         sid_tag = f" [sid: {session_id}]" if session_id else ""
         print(f"[{now_str}]{sid_tag} ➔ [DECISION: {mode_tag}] {final_decision} ({final_model}:{final_effort}) | \"{display_prompt}\"", flush=True)
+
+        # 분류기(Classifier) 자체 소모 토큰 및 비용 트래킹 로깅 (전용 크레딧 산출용)
+        clf_in_tok = max(100, int(len(target_eval_prompt) * 0.35)) + 150
+        clf_out_tok = max(5, int(len(verdict_text) * 0.5))
+        clf_in_price = active_mapping.get("LUNA:LOW", {}).get("input_price", 1.0)
+        clf_out_price = active_mapping.get("LUNA:LOW", {}).get("output_price", 3.0)
+        clf_cost = (clf_in_tok / 1000000.0) * clf_in_price + (clf_out_tok / 1000000.0) * clf_out_price
+        print(f"[{now_str}]{sid_tag} ➔ [USAGE] CLASSIFIER (gpt-5.6-luna) | input={clf_in_tok} output={clf_out_tok} tokens | loc=0 lines | cost=${clf_cost:.6f} USD", flush=True)
+
         return final_decision, final_model, final_effort

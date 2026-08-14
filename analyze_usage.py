@@ -231,7 +231,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
             <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Total Consumed Credits</div>
             <div class="text-3xl font-extrabold text-emerald-400 font-mono mb-1" id="kpiCredits">0.00 <span class="text-sm font-normal text-slate-400">Cr</span></div>
-            <div class="text-xs text-slate-400">1 Credit = $0.20 USD 기준</div>
+            <div class="text-xs font-mono" id="kpiCreditBreakdown"><span class="text-indigo-300 font-bold">🤖 모델: 0.00 Cr</span> <span class="text-slate-500">|</span> <span class="text-amber-300 font-bold">🔍 분류기: 0.00 Cr</span></div>
             <div class="absolute -right-3 -bottom-3 text-emerald-500/10 text-6xl"><i class="fa-solid fa-credit-card"></i></div>
         </div>
 
@@ -648,28 +648,40 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 return;
             }}
 
-            const totalCost = filteredRecords.reduce((acc, r) => acc + r.cost, 0);
+            let mainCost = 0;
+            let clfCost = 0;
+            let lunaCount = 0;
+            let lunaCost = 0;
+
+            filteredRecords.forEach(r => {{
+                if (r.decision === 'CLASSIFIER') {{
+                    clfCost += r.cost;
+                }} else {{
+                    mainCost += r.cost;
+                    if (r.decision.includes('LUNA')) {{
+                        lunaCost += r.cost;
+                        lunaCount += 1;
+                    }}
+                }}
+            }});
+
+            const totalCost = mainCost + clfCost;
             const totalCredits = totalCost / 0.20;
+            const mainCredits = mainCost / 0.20;
+            const clfCredits = clfCost / 0.20;
+
             const totalIn = filteredRecords.reduce((acc, r) => acc + r.input_tokens, 0);
             const totalOut = filteredRecords.reduce((acc, r) => acc + r.output_tokens, 0);
             const totalTok = totalIn + totalOut;
 
             const sessions = new Set(filteredRecords.map(r => r.session_id)).size;
-
-            let lunaCost = 0;
-            let lunaCount = 0;
-            filteredRecords.forEach(r => {{
-                if (r.decision.includes('LUNA')) {{
-                    lunaCost += r.cost;
-                    lunaCount += 1;
-                }}
-            }});
             const savedUsd = Math.max(0, (lunaCount * 0.12) - lunaCost);
             const savedCredits = savedUsd / 0.20;
 
             document.getElementById('kpiCredits').innerHTML = totalCredits.toFixed(2) + ' <span class="text-sm font-normal text-slate-400">Cr</span>';
+            document.getElementById('kpiCreditBreakdown').innerHTML = `<span class="text-indigo-300 font-bold">🤖 모델: ${{mainCredits.toFixed(2)}} Cr</span> <span class="text-slate-500">|</span> <span class="text-amber-300 font-bold">🔍 분류기: ${{clfCredits.toFixed(2)}} Cr</span>`;
             document.getElementById('kpiCost').innerText = '$' + totalCost.toFixed(4);
-            document.getElementById('kpiRequests').innerText = '총 ' + filteredRecords.length.toLocaleString() + '회 성사 요청';
+            document.getElementById('kpiRequests').innerText = '총 ' + filteredRecords.length.toLocaleString() + '회 성사 (모델: $' + mainCost.toFixed(4) + ' / 분류기: $' + clfCost.toFixed(4) + ')';
             document.getElementById('kpiTokens').innerText = totalTok.toLocaleString();
             document.getElementById('kpiInTokens').innerText = 'Input: ' + totalIn.toLocaleString();
             document.getElementById('kpiSessions').innerHTML = sessions.toLocaleString() + ' <span class="text-sm font-normal text-slate-400">sessions</span>';
