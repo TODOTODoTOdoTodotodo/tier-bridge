@@ -8,12 +8,12 @@ async def run_decision_test():
     headers = {}
 
     test_cases = [
-        ("3-Tier Standard - LUNA:LOW", "명령어 오타 수정 방안", "gpt-5.6-terra"),
-        ("3-Tier Standard - TERRA:HIGH", "복잡한 알고리즘과 다중 컴포넌트 구조를 함께 설계해줘", "gpt-5.6-terra"),
-        ("3-Tier Standard - TERRA:EXTRA_HIGH (Capped at Terra)", "사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘", "gpt-5.6-terra"),
-        ("4-Tier Sol Router (--model super) - LUNA:LOW", "명령어 오타 수정 방안", "super"),
-        ("4-Tier Sol Router (--model super) - SOL:EXTRA_HIGH", "사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘", "super"),
-        ("4-Tier Sol Router (--model gpt-5.6-sol) - SOL:EXTRA_HIGH", "대규모 동시성 분산 락(Lock) 이슈 및 데드락 디버깅 해결 방안 설계해줘", "gpt-5.6-sol"),
+        ("3-Tier Standard - BRONZE", "명령어 오타 수정 방안", "gpt-5.6-terra"),
+        ("3-Tier Standard - PLATINUM", "복잡한 알고리즘과 다중 컴포넌트 구조를 함께 설계해줘", "gpt-5.6-terra"),
+        ("3-Tier Standard - DIAMOND (Capped at Terra)", "사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘", "gpt-5.6-terra"),
+        ("4-Tier Sol Router (--model super) - BRONZE", "명령어 오타 수정 방안", "super"),
+        ("4-Tier Sol Router (--model super) - CHALLENGER", "사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘", "super"),
+        ("4-Tier Sol Router (--model gpt-5.6-sol) - CHALLENGER", "대규모 동시성 분산 락(Lock) 이슈 및 데드락 디버깅 해결 방안 설계해줘", "gpt-5.6-sol"),
     ]
 
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -75,8 +75,8 @@ async def run_test():
         except Exception as e:
             print(f"Error executing Test Case 1: {e}")
 
-    # Test Case 2: LUNA:LOW (Simple algorithm prompt)
-    print("\n--- [TEST CASE 2: LUNA:LOW] ---")
+    # Test Case 2: BRONZE (Simple algorithm prompt)
+    print("\n--- [TEST CASE 2: BRONZE] ---")
     print("Prompt: '파이썬에서 단순 정렬 알고리즘 작성해줘'")
     simple_payload = {
         "model": "gpt-5.6-luna",
@@ -97,8 +97,8 @@ async def run_test():
         except Exception as e:
             print(f"Error executing Test Case 2: {e}")
 
-    # Test Case 3: TERRA:EXTRA_HIGH (Optimization / tuning prompt)
-    print("\n--- [TEST CASE 3: TERRA:EXTRA_HIGH] ---")
+    # Test Case 3: DIAMOND (Optimization / tuning prompt)
+    print("\n--- [TEST CASE 3: DIAMOND] ---")
     print("Prompt: '사내 데이터 파이프라인의 메모리 누수 탐지 및 튜닝 최적화 방안 제시해줘'")
     extra_high_payload = {
         "model": "gpt-5.6-terra",

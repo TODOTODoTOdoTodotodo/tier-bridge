@@ -27,7 +27,7 @@ This document defines the dynamic routing strategy designed to optimize credits 
                            │
              ┌─────────────┼──────────────┬──────────────┐
              ▼             ▼              ▼              ▼
-       [LUNA:LOW/MID] [TERRA:MEDIUM]  [TERRA:HIGH] [SOL:EXTRA_HIGH]
+       [BRONZE/MID] [GOLD]  [PLATINUM] [CHALLENGER]
              │             │              │              │
        gpt-5.6-luna   gpt-5.6-terra  gpt-5.6-terra   gpt-5.6-sol
          (low/med)       (medium)        (high)     (extra_high: 4-Tier만)
@@ -57,12 +57,12 @@ This document defines the dynamic routing strategy designed to optimize credits 
 
 | Router Mode | Gaming RPG Tier | Destination Model | Reasoning Effort | Description / Typical Use Cases |
 | :--- | :--- | :--- | :--- | :--- |
-| **Common (1/4 & 2/4)** | 🥉 **BRONZE** *(LUNA:LOW)* | `gpt-5.6-luna` | `"low"` | Simple grammar, minor typos, command guide, simple file read |
-| **Common (1/4 & 2/4)** | 🥈 **SILVER** *(LUNA:MEDIUM)* | `gpt-5.6-luna` | `"medium"` | Standard business logic, single-file refactoring |
-| **Common (2/4 & 3/4)** | 🥇 **GOLD** *(TERRA:MEDIUM)* | `gpt-5.6-terra` | `"medium"` | Medium complexity, multi-component refactoring |
-| **Common (2/4 & 3/4)** | 💎 **PLATINUM** *(TERRA:HIGH)* | `gpt-5.6-terra` | `"high"` | Complex algorithms, multi-component architecture |
-| **3-Tier Max** | 🔷 **DIAMOND** *(TERRA:EXTRA_HIGH)* | `gpt-5.6-terra` | `"extra_high"` *(API: `"xhigh"`)* | Deep debugging & tuning (3-Tier Mode Max Capped) |
-| **4-Tier Max** | 🏆 **CHALLENGER** *(SOL:EXTRA_HIGH)* | `gpt-5.6-sol` | `"extra_high"` *(API: `"xhigh"`)* | Deadlock debugging, memory leak detection, deep kernel tuning (4-Tier Sol Mode Max) |
+| **Common (1/4 & 2/4)** | 🥉 **BRONZE** *(BRONZE)* | `gpt-5.6-luna` | `"low"` | Simple grammar, minor typos, command guide, simple file read |
+| **Common (1/4 & 2/4)** | 🥈 **SILVER** *(SILVER)* | `gpt-5.6-luna` | `"medium"` | Standard business logic, single-file refactoring |
+| **Common (2/4 & 3/4)** | 🥇 **GOLD** *(GOLD)* | `gpt-5.6-terra` | `"medium"` | Medium complexity, multi-component refactoring |
+| **Common (2/4 & 3/4)** | 💎 **PLATINUM** *(PLATINUM)* | `gpt-5.6-terra` | `"high"` | Complex algorithms, multi-component architecture |
+| **3-Tier Max** | 🔷 **DIAMOND** *(DIAMOND)* | `gpt-5.6-terra` | `"extra_high"` *(API: `"xhigh"`)* | Deep debugging & tuning (3-Tier Mode Max Capped) |
+| **4-Tier Max** | 🏆 **CHALLENGER** *(CHALLENGER)* | `gpt-5.6-sol` | `"extra_high"` *(API: `"xhigh"`)* | Deadlock debugging, memory leak detection, deep kernel tuning (4-Tier Sol Mode Max) |
 
 > [!IMPORTANT]
 > 1. **Default 3-Tier Protection**: Running standard `codex --oss --local-provider=localai` strictly limits maximum model consumption to **`DIAMOND` (`gpt-5.6-terra`)**.
@@ -73,7 +73,7 @@ This document defines the dynamic routing strategy designed to optimize credits 
 * **Zero-Drop USAGE & Sub-step Cost Auto-scaling Policy**:
   1. **`/responses` Payload Sanitization**: Strips incompatible parameters like `stream_options` to prevent WAF / 400 Bad Request (`unknown_parameter`) errors from ChatGPT Enterprise backend API.
   2. **Session ID Tracking (세션 ID 구분 로깅)**: Extracts `conversation_id` / `session_id` from incoming request headers or payload and embeds `[sid: <session_id>]` tag in all `[DECISION]` and `[USAGE]` log entries to enable precise per-session credit auditing.
-  3. **Sub-step Prompt Extraction (서브 스텝 비용 오토 스케일링)**: For intermediate agent relays (Turn 2+ tool-call steps), the proxy extracts the latest action/context prompt rather than recycling the initial turn prompt. This automatically downgrades simple sub-task steps (e.g. file editing, reading, command outputs) to **`LUNA:LOW`**, saving up to 30-50% additional credits.
+  3. **Sub-step Prompt Extraction (서브 스텝 비용 오토 스케일링)**: For intermediate agent relays (Turn 2+ tool-call steps), the proxy extracts the latest action/context prompt rather than recycling the initial turn prompt. This automatically downgrades simple sub-task steps (e.g. file editing, reading, command outputs) to **`BRONZE`**, saving up to 30-50% additional credits.
   4. **Multi-layer SSE Event Parser**: Extracts usage across diverse SSE response schemas (`response.usage`, `event.usage`, `prompt_tokens`, `input_tokens`).
   5. **Prompt-based Token Estimation Fallback**: If upstream SSE chunks omit usage or return 0 tokens (e.g. during specific tool-call steps), the proxy estimates input token count based on request payload text length, ensuring **100% of DECISION events are logged with valid USAGE records**.
 

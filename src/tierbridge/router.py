@@ -42,7 +42,7 @@ class Router:
         if not is_new_user_turn and unified_request.messages:
             for msg in reversed(unified_request.messages):
                 txt = msg.content.strip()
-                if txt and not ("너는 비용 절감용 라우터다" in txt or "LUNA:LOW" in txt):
+                if txt and not ("너는 비용 절감용 라우터다" in txt or "BRONZE" in txt):
                     substep_prompt = txt
                     break
 
@@ -125,7 +125,7 @@ class Router:
         import asyncio
         from datetime import datetime
 
-        verdict_text = "LUNA:LOW"
+        verdict_text = "BRONZE"
         max_retries = 2
         retry_delay = 0.5
         
@@ -187,23 +187,23 @@ class Router:
         from src.tierbridge.model_registry import registry
         active_mapping = registry.get_active_mapping()
 
-        if "CHALLENGER" in verdict or "SOL:EXTRA_HIGH" in verdict or ("EXTRA_HIGH" in verdict and is_4tier_sol_mode):
-            tier_info = active_mapping.get("CHALLENGER", active_mapping.get("SOL:EXTRA_HIGH", {"model": "gpt-5.6-sol", "effort": "xhigh"}))
+        if "CHALLENGER" in verdict or "CHALLENGER" in verdict or ("EXTRA_HIGH" in verdict and is_4tier_sol_mode):
+            tier_info = active_mapping.get("CHALLENGER", active_mapping.get("CHALLENGER", {"model": "gpt-5.6-sol", "effort": "xhigh"}))
             final_decision, final_model, final_effort = "CHALLENGER", tier_info.get("model", "gpt-5.6-sol"), tier_info.get("effort", "xhigh")
-        elif "DIAMOND" in verdict or "TERRA:EXTRA_HIGH" in verdict:
-            tier_info = active_mapping.get("DIAMOND", active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"}))
+        elif "DIAMOND" in verdict or "DIAMOND" in verdict:
+            tier_info = active_mapping.get("DIAMOND", active_mapping.get("PLATINUM", {"model": "gpt-5.6-terra", "effort": "high"}))
             final_decision, final_model, final_effort = "DIAMOND", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
-        elif "PLATINUM" in verdict or "TERRA:HIGH" in verdict or "HIGH" in verdict:
-            tier_info = active_mapping.get("PLATINUM", active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"}))
+        elif "PLATINUM" in verdict or "PLATINUM" in verdict or "HIGH" in verdict:
+            tier_info = active_mapping.get("PLATINUM", active_mapping.get("PLATINUM", {"model": "gpt-5.6-terra", "effort": "high"}))
             final_decision, final_model, final_effort = "PLATINUM", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
-        elif "GOLD" in verdict or "TERRA:MEDIUM" in verdict or "TERRA" in verdict:
-            tier_info = active_mapping.get("GOLD", active_mapping.get("TERRA:MEDIUM", {"model": "gpt-5.6-terra", "effort": "medium"}))
+        elif "GOLD" in verdict or "GOLD" in verdict or "TERRA" in verdict:
+            tier_info = active_mapping.get("GOLD", active_mapping.get("GOLD", {"model": "gpt-5.6-terra", "effort": "medium"}))
             final_decision, final_model, final_effort = "GOLD", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "medium")
-        elif "SILVER" in verdict or "LUNA:MEDIUM" in verdict:
-            tier_info = active_mapping.get("SILVER", active_mapping.get("LUNA:MEDIUM", {"model": "gpt-5.6-luna", "effort": "medium"}))
+        elif "SILVER" in verdict or "SILVER" in verdict:
+            tier_info = active_mapping.get("SILVER", active_mapping.get("SILVER", {"model": "gpt-5.6-luna", "effort": "medium"}))
             final_decision, final_model, final_effort = "SILVER", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "medium")
         else:
-            tier_info = active_mapping.get("BRONZE", active_mapping.get("LUNA:LOW", {"model": "gpt-5.6-luna", "effort": "low"}))
+            tier_info = active_mapping.get("BRONZE", active_mapping.get("BRONZE", {"model": "gpt-5.6-luna", "effort": "low"}))
             final_decision, final_model, final_effort = "BRONZE", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "low")
 
         mode_tag = "4-TIER SOL ROUTER" if is_4tier_sol_mode else "STANDARD 3-TIER ROUTER"

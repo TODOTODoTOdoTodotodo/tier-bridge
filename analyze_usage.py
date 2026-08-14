@@ -814,11 +814,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const sidShort = (sidFull !== 'N/A' && sidFull.length > 8) ? sidFull.substring(0, 8) : sidFull;
                 
                 let badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
-                if (p.decision.includes('SILVER') || p.decision.includes('LUNA:MEDIUM')) {{
+                if (p.decision.includes('SILVER') || p.decision.includes('SILVER')) {{
                     badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
-                }} else if (p.decision.includes('GOLD') || p.decision.includes('TERRA:MEDIUM')) {{
+                }} else if (p.decision.includes('GOLD') || p.decision.includes('GOLD')) {{
                     badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
-                }} else if (p.decision.includes('PLATINUM') || p.decision.includes('TERRA:HIGH')) {{
+                }} else if (p.decision.includes('PLATINUM') || p.decision.includes('PLATINUM')) {{
                     badgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
                 }} else if (p.decision.includes('DIAMOND')) {{
                     badgeClass = 'bg-blue-500/20 text-blue-300 border-blue-400/40';

@@ -6,7 +6,7 @@
 
 ## 1. 작업 개요 및 목적 (Objectives)
 
-- **목적**: `SOL:EXTRA_HIGH` 등 초대규모 분석이나 막대한 크레딧을 소비하여 얻은 귀중한 트러블슈팅 지식을 일반 단순 대화 노이즈에 묻히지 않도록 그래프 연결 강도(`reinforce_memory`)를 높여 장기 보존.
+- **목적**: `CHALLENGER` 등 초대규모 분석이나 막대한 크레딧을 소비하여 얻은 귀중한 트러블슈팅 지식을 일반 단순 대화 노이즈에 묻히지 않도록 그래프 연결 강도(`reinforce_memory`)를 높여 장기 보존.
 - **가중치 계산 산식 (Cost-Weighted Weight Formula)**:
   $$\text{Reinforce\_Score} = \text{Base\_Score} \times \left(1.0 + \frac{\text{cost\_usd}}{0.10}\right)$$
   - 예: $0.20 달러(1 Cr) 소모 턴 ➔ 기본 가중치의 3배로 그래프 연결 강도 강화.
@@ -19,7 +19,7 @@
 [Harness Turn Completed] ➔ [Extract cost_usd & decision]
                                     │
                                     ▼ [Cost Threshold Check]
-                                    │ - Is cost > $0.05 or Tier == 'SOL:EXTRA_HIGH'?
+                                    │ - Is cost > $0.05 or Tier == 'CHALLENGER'?
                                     ▼
                          [MemoryReinforcer.calculate_score()]
                                     │
@@ -88,7 +88,7 @@ class MemoryReinforcer:
 ## 4. 검증 및 테스트 절차 (Verification Steps)
 
 1. **가중치 산출 로직 단위 테스트**:
-   * `cost_usd = 0.30` 및 `SOL:EXTRA_HIGH` 조건 입력 시 가중치가 8.0 이상으로 정확히 계산되는지 확인.
+   * `cost_usd = 0.30` 및 `CHALLENGER` 조건 입력 시 가중치가 8.0 이상으로 정확히 계산되는지 확인.
 2. **`sub-memory-bootstrap` 연관 그래프 검증**:
    * 고비용 턴 처리 후 `sub-memory-web` 대시보드(`http://127.0.0.1:8765/ui`)의 **Association Graph** 메뉴에서 대상 노드의 엣지 두께와 연결도가 높아졌는지 확인.
 
