@@ -53,7 +53,7 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 
 - **원클릭 핫패칭 릴리즈 적용 및 배포 영구 보존 (Dual-Sink Persistence & Deployment Preservation)**:
   - `apply_healing()` 또는 버전 전환(`switch_version()`) 호출 시 런타임 저장소(`~/.tierbridge/live/config/model_versions.json`)뿐만 아니라 **개발 레포 저장소(`config/model_versions.json`)에도 Active 버전 및 신규 릴리즈 스냅샷을 동시에 동기화 저장**합니다.
-  - 이를 통해 추후 개발자가 `./deploy.sh` 명령으로 재배포를 수행하더라도, 최신 핫패칭 상태가 덮어씌워지지 않고 Active 모델 버전이 지속적으로 유지됩니다.
+  - 배포 스크립트(`deploy.sh`)의 `rsync` 실행 시 `config/model_versions.json` 설정을 `--exclude` 대상으로 지정하여, 런타임의 최신 Active 모델 버전 및 핫패치 릴리즈 설정이 배포 시 덮어씌워지지 않고 100% 영구 보존되도록 보호합니다.
   - 핫패치가 완료되면 `has_new_healing`은 `false`로 닫히고, 대시보드 버전 선택 드롭다운과 하단 타임라인에 `v1.1.0-healing-hotpatch`가 이력으로 남게 됩니다.
 
 - **단가 절감율 표출 규격 (Dynamic `savings_pct`)**:

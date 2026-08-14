@@ -29,9 +29,16 @@ if command -v rsync >/dev/null 2>&1; then
         --exclude='*.pyc' \
         --exclude='harness.log' \
         --exclude='usage_dashboard.html' \
+        --exclude='config/model_versions.json' \
         "$DEV_DIR/" "$LIVE_DIR/"
 else
     cp -R "$DEV_DIR/"* "$LIVE_DIR/"
+fi
+
+# 런타임 설정 파일(model_versions.json)이 없을 경우에만 최초 복사
+if [ ! -f "$LIVE_DIR/config/model_versions.json" ] && [ -f "$DEV_DIR/config/model_versions.json" ]; then
+    mkdir -p "$LIVE_DIR/config"
+    cp "$DEV_DIR/config/model_versions.json" "$LIVE_DIR/config/model_versions.json"
 fi
 
 # 개발 레포의 누적 harness.log 가 존재할 경우 라이브 harness.log 로 자동 병합 마이그레이션
