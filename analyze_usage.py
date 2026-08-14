@@ -70,6 +70,20 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         selected_attr = 'selected' if target_session == s else ''
         session_options_html += f'<option value="{s}" {selected_attr}>{s} ({s_short})</option>'
 
+    # 동적 모델 버전 선택 드롭다운 옵션 구성
+    all_versions = healing_status.get("all_versions", [])
+    version_options_html = ""
+    for v in all_versions:
+        vid = v.get("version_id")
+        vname = v.get("name", "")
+        is_act = v.get("is_active", False)
+        selected_attr = "selected" if is_act else ""
+        active_label = " (Active)" if is_act else ""
+        version_options_html += f'<option value="{vid}" {selected_attr}>{vid} - {vname}{active_label}</option>'
+
+    if not version_options_html:
+        version_options_html = '<option value="v1.0.0" selected>v1.0.0 - Standard Baseline (Active)</option>'
+
     # Client-side JavaScript 처리를 위한 원본 JSON 데이터 구성
     client_records = []
     for r in all_raw_records:
@@ -152,7 +166,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <span class="text-xs font-semibold text-slate-300">모델 버전:</span>
                 <select id="versionSelect" onchange="switchModelVersion(this.value)"
                         class="bg-slate-900 text-sky-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-sky-400 cursor-pointer">
-                    <option value="latest">Latest ({healing_status.get('active_version_id', 'v1.0.0')})</option>
+                    {version_options_html}
                 </select>
             </div>
 
@@ -386,18 +400,25 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         function initVersionSelector() {{
             const select = document.getElementById('versionSelect');
             if (!select) return;
-            select.innerHTML = '';
-
+            const currentVal = select.value;
             const allVersions = healingData.all_versions || [];
-            allVersions.forEach(v => {{
-                const opt = document.createElement('option');
-                opt.value = v.version_id;
-                let label = v.version_id + ' - ' + (v.name || '');
-                if (v.is_active) label += ' (Active)';
-                opt.text = label;
-                if (v.is_active) opt.selected = true;
-                select.appendChild(opt);
-            }});
+            
+            if (allVersions.length > 0) {{
+                select.innerHTML = '';
+                allVersions.forEach(v => {{
+                    const opt = document.createElement('option');
+                    opt.value = v.version_id;
+                    let label = v.version_id + ' - ' + (v.name || '');
+                    if (v.is_active) label += ' (Active)';
+                    opt.text = label;
+                    if (currentVal && currentVal === v.version_id) {{
+                        opt.selected = true;
+                    }} else if (!currentVal && v.is_active) {{
+                        opt.selected = true;
+                    }}
+                    select.appendChild(opt);
+                }});
+            }}
 
             if (healingData.has_new_healing) {{
                 document.getElementById('healingNoticeBtn').classList.remove('hidden');
