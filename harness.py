@@ -22,6 +22,7 @@ logging.basicConfig(level=logging.WARNING)
 logging.getLogger("uvicorn").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
+log = logging.getLogger("harness")
 
 load_dotenv()
 
@@ -151,7 +152,9 @@ async def get_healing_status():
 async def apply_healing():
     """ 신규 저비용/고출력 모델 스냅샷을 핫패치 릴리즈 적용 """
     res = HealingEngine.apply_healing()
-    log.warning(f"➔ [HEALING] Hot-patch applied | active_version_id={res.get('active_version_id')} | message={res.get('message')}")
+    msg = f"➔ [HEALING] Hot-patch applied | active_version_id={res.get('active_version_id')} | message={res.get('message')}"
+    print(msg, flush=True)
+    log.warning(msg)
     return res
 
 @app.post("/v1/models/version/switch")
@@ -163,7 +166,9 @@ async def switch_model_version(request: Request):
     except Exception:
         version_id = "latest"
     res = HealingEngine.switch_version(version_id)
-    log.warning(f"➔ [VERSION_SWITCH] Switched model version | version_id={version_id} | active_version_id={res.get('active_version_id')}")
+    msg = f"➔ [VERSION_SWITCH] Switched model version | version_id={version_id} | active_version_id={res.get('active_version_id')}"
+    print(msg, flush=True)
+    log.warning(msg)
     return res
 
 @app.get("/v1/dashboard/stats")
