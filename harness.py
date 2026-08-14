@@ -24,9 +24,20 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("harness")
 
+from fastapi.middleware.cors import CORSMiddleware
+
 load_dotenv()
 
 app = FastAPI(title="TierBridge")
+
+# 브라우저 대시보드 3초 라이브 오토싱크 및 AJAX 요청용 CORS 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 싱글톤 세션 사용량 트래커 초기화
 global_tracker = UsageTracker()

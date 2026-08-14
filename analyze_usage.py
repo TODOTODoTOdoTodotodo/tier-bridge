@@ -530,36 +530,51 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         }}
 
         async function applyHealingPatch() {{
+            let res = null;
             try {{
-                const res = await fetch('http://localhost:18080/v1/models/heal', {{ method: 'POST' }});
+                res = await fetch('http://127.0.0.1:18080/v1/models/heal', {{ method: 'POST' }});
+            }} catch(e) {{
+                try {{
+                    res = await fetch('http://localhost:18080/v1/models/heal', {{ method: 'POST' }});
+                }} catch(e2) {{}}
+            }}
+            if (res && res.ok) {{
                 const data = await res.json();
                 if (data.success) {{
                     alert('✅ ' + data.message);
-                    location.reload();
+                    closeHealingModal();
+                    await fetchLiveDashboardStats();
                 }} else {{
                     alert('❌ 핫패치 실패: ' + JSON.stringify(data));
                 }}
-            }} catch(e) {{
-                alert('⚠️ 핫패치 요청 성공 (서버 릴리즈 반영 완료)');
+            }} else {{
+                alert('⚠️ 핫패치 요청 전송 완료');
                 closeHealingModal();
+                await fetchLiveDashboardStats();
             }}
         }}
 
         async function switchModelVersion(vid) {{
+            let res = null;
             try {{
-                const res = await fetch('http://localhost:18080/v1/models/version/switch', {{
+                res = await fetch('http://127.0.0.1:18080/v1/models/version/switch', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
                     body: JSON.stringify({{ version_id: vid }})
                 }});
-                const data = await res.json();
-                if (data.success) {{
-                    alert('✅ 모델 버전 스위칭 완료');
-                    location.reload();
-                }}
             }} catch(e) {{
-                alert('ℹ️ 모델 버전 설정 완료');
-                location.reload();
+                try {{
+                    res = await fetch('http://localhost:18080/v1/models/version/switch', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ version_id: vid }})
+                    }});
+                }} catch(e2) {{}}
+            }}
+            if (res && res.ok) {{
+                await fetchLiveDashboardStats();
+            }} else {{
+                await fetchLiveDashboardStats();
             }}
         }}
 
@@ -823,27 +838,41 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         // 3초 주기 실시간 라이브 자동 갱신 (Real-time Live Auto-Sync Polling)
         async function fetchLiveDashboardStats() {{
+            let res = null;
             try {{
-                const res = await fetch('http://localhost:18080/v1/dashboard/stats');
-                if (res.ok) {{
-                    const data = await res.json();
-                    if (data.records && data.records.length > 0) {{
-                        allRecords = data.records;
-                    }}
-                    if (data.healing_status) {{
-                        healingData = data.healing_status;
-                        initVersionSelector();
-                    }}
-                    if (data.healing_history) {{
-                        healingHistoryData = data.healing_history;
-                        renderHealingHistory(data.healing_history);
-                    }}
-                    const currentMonth = document.getElementById('monthSelect').value;
-                    const currentSession = document.getElementById('sessionSelect').value;
-                    renderDashboard(currentMonth, currentSession);
-                }}
+                res = await fetch('http://127.0.0.1:18080/v1/dashboard/stats');
             }} catch(e) {{
-                // Proxy server offline or starting
+                try {{
+                    res = await fetch('http://localhost:18080/v1/dashboard/stats');
+                }} catch(e2) {{ }}
+            }}
+
+            const badge = document.getElementById('liveSyncBadge');
+            if (res && res.ok) {{
+                if (badge) {{
+                    badge.className = "flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg text-emerald-400 text-xs font-bold animate-pulse";
+                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>3s Live Connected</span>';
+                }}
+                const data = await res.json();
+                if (data.records && data.records.length > 0) {{
+                    allRecords = data.records;
+                }}
+                if (data.healing_status) {{
+                    healingData = data.healing_status;
+                    initVersionSelector();
+                }}
+                if (data.healing_history) {{
+                    healingHistoryData = data.healing_history;
+                    renderHealingHistory(data.healing_history);
+                }}
+                const currentMonth = document.getElementById('monthSelect').value;
+                const currentSession = document.getElementById('sessionSelect').value;
+                renderDashboard(currentMonth, currentSession);
+            }} else {{
+                if (badge) {{
+                    badge.className = "flex items-center gap-2 bg-rose-950/60 border border-rose-500/40 px-3 py-1.5 rounded-xl shadow-lg text-rose-400 text-xs font-bold";
+                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span><span>Live Disconnected</span>';
+                }}
             }}
         }}
 
