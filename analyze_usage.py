@@ -90,7 +90,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TierBridge Kibana AI Real-time Live Analytics Dashboard</title>
+    <title>TierBridge Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -110,11 +110,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     <i class="fa-solid fa-chart-line text-xl"></i>
                 </span>
                 <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-sky-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
-                    TierBridge AI Kibana Analytics
+                    TierBridge Dashboard
                 </h1>
             </div>
             <p class="text-slate-400 text-sm pl-12">
-                Codex Enterprise 토큰 소모량, 힐링팩터 모델 핫패치 & 세션별 정밀 필터링 라이브 대시보드
+                Codex Enterprise AI 사용량, 토큰 소모 및 모델 관리 대시보드
             </p>
         </div>
         
@@ -906,16 +906,13 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         session_stats[s_key]["loc"] += r["loc"]
         session_stats[s_key]["cost"] += r["cost"]
 
-        prompt_stats[p_key]["count"] += 1
-        prompt_stats[p_key]["in_tok"] += r["input_tokens"]
-        prompt_stats[p_key]["out_tok"] += r["output_tokens"]
         prompt_stats[p_key]["cost"] += r["cost"]
         prompt_stats[p_key]["prompt"] = p_key
         prompt_stats[p_key]["decision"] = d
         prompt_stats[p_key]["session_id"] = s_key
 
-    print("\n====================================================================================================")
-    print("📊 [TierBridge Kibana AI 사용량, 크레딧 & 힐링팩터 모델 관리 통계 보고서]")
+    print("====================================================================================================")
+    print("📊 [TierBridge Dashboard] AI 사용량, 크레딧 & 모델 관리 보고서")
     print("====================================================================================================")
     if target_month: print(f"🗓️  조회 대상 월: {target_month}")
     if target_date: print(f"🗓️  조회 대상 일자: {target_date}")

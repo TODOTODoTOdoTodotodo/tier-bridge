@@ -32,7 +32,7 @@ Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=ollama`)로
 * **실시간 라이브 자동 갱신 대시보드 (Real-time Live Auto-Sync)**: 하네스 프록시(`harness.py`)의 `GET /v1/dashboard/stats` API와 연동하여 3초 주기로 자동 폴링을 수행함으로써 브라우저를 켜두기만 해도 새로운 로그, 크레딧 소모량, 차트 및 프롬프트 표가 새로고침 없이 실시간 라이브로 자동 갱신됩니다.
 * **월별(Monthly) 기간 필터링 및 동적 월 선택 드롭다운**: 특정 월(예: `2026-08`) 단위의 CLI 파싱뿐만 아니라, HTML 웹 대시보드(`usage_dashboard.html`) 상단에서 사용자가 드롭다운으로 월을 클릭 시 KPI 카드, 트렌드 차트, 등급 분포 및 프롬프트 인사이트 표가 동적으로 즉시 필터링됩니다.
 * **세션 ID(Session / Conversation ID)별 소모 요약 및 동적 세션 필터링 UI (`--session`)**: 요청 페이로드의 세션 ID(`[sid: <session_id>]`)를 파싱하여 세션별 소모 수치를 구분하며, 웹 대시보드 상단 **세션 ID 선택 드롭다운 UI (`#sessionSelect`)** 및 **실제 세션 ID 전체/축약 키워드 검색창(`filterTable`)**을 통해 클릭 한 번으로 특정 세션의 기록만 즉시 실시간 필터링합니다.
-* **Kibana 스타일 시각화 웹 대시보드 리포트 생성 (`--html`)**: `--html` 옵션으로 명령 실행 시 Kibana 스타일의 다크테마 대시보드 웹페이지 (`usage_dashboard.html`)를 자동 생성하여 반응형 그래프(Chart.js) 및 실시간 KPI 카드로 월별/일자별/세션별 추이를 시각적으로 제공합니다.
+* **Kibana 스타일 시각화 웹 대시보드 리포트 생성 (`--html`)**: `--html` 옵션으로 명령 실행 시 Kibana 스타일의 다크테마 **TierBridge Dashboard**(`usage_dashboard.html`)를 자동 생성하여 반응형 그래프(Chart.js) 및 실시간 KPI 카드로 월별/일자별/세션별 추이를 시각적으로 제공합니다.
 * **프롬프트별 인사이트 (Top Credit Consuming Prompts)**: `[DECISION]`과 `[USAGE]` 라인을 실시간으로 정밀 매칭하여 가장 많은 크레딧과 토큰을 소모한 프롬프트 턴 TOP 10을 파악하고 최적화 팁 및 인사이트를 제공합니다.
 * **3-Tier / 4-Tier 동적 등급 소모 분포 제공**: `LUNA:LOW`, `LUNA:MEDIUM`, `TERRA:MEDIUM`, `TERRA:HIGH`, `TERRA:EXTRA_HIGH`, `SOL:EXTRA_HIGH` 등 등급별 소모 비용, 토큰 비율 및 작성 LOC를 명확하게 구분해 표시합니다.
 
