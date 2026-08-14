@@ -79,3 +79,22 @@ if echo "$HEALTH_CHECK" | grep -q "object"; then
 else
     echo "⚠️ [배포 경고] 헬스체크 응답 대기 중입니다. 로그를 확인하세요: $LIVE_DIR/harness.log"
 fi
+
+# 7. Shell Alias (~/.zshrc, ~/.bashrc) 자동 등록 및 업데이트
+setup_alias() {
+    local shell_rc="$1"
+    if [ -f "$shell_rc" ]; then
+        if ! grep -q "alias tierbridge=" "$shell_rc"; then
+            echo "" >> "$shell_rc"
+            echo "# TierBridge Global Aliases" >> "$shell_rc"
+            echo "alias tierbridge=\"source $LIVE_DIR/run_harness.sh\"" >> "$shell_rc"
+            echo "alias tierbridge-log=\"tail -f $LIVE_DIR/harness.log\"" >> "$shell_rc"
+            echo "alias tierbridge-dash=\"$LIVE_DIR/.venv/bin/python $LIVE_DIR/analyze_usage.py --html\"" >> "$shell_rc"
+            echo "🔗 Shell Alias 가 $shell_rc 에 자동 등록되었습니다."
+        fi
+    fi
+}
+
+setup_alias "$HOME/.zshrc"
+setup_alias "$HOME/.bashrc"
+echo "💡 어디서든 'tierbridge'로 세션 연결, 'tierbridge-log'로 로그 모니터링이 가능합니다!"

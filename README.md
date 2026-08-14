@@ -139,11 +139,11 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 추가되거나 토큰 �
  └─ ./deploy.sh 실행 ─── (안전 동기화 & 핫패치) ─► └─ harness.pid (프로세스 관리)
 ```
 
-### 원클릭 배포 워크플로우:
-```bash
-# 개발 레포 소스를 $HOME/.tierbridge/live 에 동기화하고 백그라운드 프록시 안전 재가동
-./deploy.sh
-```
+### 편리한 터미널 글로벌 단축키 (Shell Aliases)
+`./deploy.sh` 실행 시 `~/.zshrc`에 아래 단축키가 자동 등록되어, 어느 폴더에서든 자유롭게 입력하실 수 있습니다:
+* **`tierbridge`** : 런타임 하네스 가동 및 현재 터미널 세션에 환경 변수 연결
+* **`tierbridge-log`** : 라이브 프록시 가동 로그 실시간 모니터링 (`tail -f`)
+* **`tierbridge-dash`** : Kibana 3초 라이브 대시보드 웹페이지 열기
 
 ---
 
