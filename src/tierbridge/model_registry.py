@@ -47,11 +47,12 @@ class ModelRegistry:
                     "updated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
                     "description": "초기 기본 표준 모델 라우팅 스냅샷",
                     "mapping": {
-                        "LUNA:LOW": {"model": "gpt-5.6-luna", "effort": "low", "input_price": 1.0, "output_price": 3.0},
-                        "LUNA:MEDIUM": {"model": "gpt-5.6-luna", "effort": "medium", "input_price": 1.0, "output_price": 3.0},
-                        "TERRA:MEDIUM": {"model": "gpt-5.6-terra", "effort": "medium", "input_price": 2.5, "output_price": 10.0},
-                        "TERRA:HIGH": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.5, "output_price": 10.0},
-                        "SOL:EXTRA_HIGH": {"model": "gpt-5.6-sol", "effort": "xhigh", "input_price": 5.0, "output_price": 20.0}
+                        "BRONZE": {"model": "gpt-5.6-luna", "effort": "low", "input_price": 1.0, "output_price": 3.0},
+                        "SILVER": {"model": "gpt-5.6-luna", "effort": "medium", "input_price": 1.0, "output_price": 3.0},
+                        "GOLD": {"model": "gpt-5.6-terra", "effort": "medium", "input_price": 2.5, "output_price": 10.0},
+                        "PLATINUM": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.5, "output_price": 10.0},
+                        "DIAMOND": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.5, "output_price": 10.0},
+                        "CHALLENGER": {"model": "gpt-5.6-sol", "effort": "xhigh", "input_price": 5.0, "output_price": 20.0}
                     }
                 }
             }

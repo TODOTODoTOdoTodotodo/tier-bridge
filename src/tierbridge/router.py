@@ -75,7 +75,7 @@ class Router:
         # 평가 대상 프롬프트: 턴의 첫 요청은 user_prompt, 내부 릴레이 서브 스텝은 substep_prompt 사용
         target_eval_prompt = user_prompt if is_new_user_turn else substep_prompt
         if not target_eval_prompt:
-            return "LUNA:LOW", "gpt-5.6-luna", "low"
+            return "BRONZE", "gpt-5.6-luna", "low"
             
         headers = {
             "Authorization": auth_token,
@@ -172,8 +172,8 @@ class Router:
                 print(f"➔ [RETRY] 0.5초 후 분류기 재시도 발송... ({attempt+1}/{max_retries})")
                 await asyncio.sleep(retry_delay)
             else:
-                print(f"[Warning] All classifier retries failed. Falling back to LUNA:LOW.")
-                return "LUNA:LOW", "gpt-5.6-luna", "low"
+                print(f"[Warning] All classifier retries failed. Falling back to BRONZE.")
+                return "BRONZE", "gpt-5.6-luna", "low"
 
         verdict = verdict_text.strip().upper()
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

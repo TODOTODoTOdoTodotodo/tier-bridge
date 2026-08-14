@@ -52,11 +52,12 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 "description": "힐링팩터 핫패치 및 롤백 기능 동작을 검증하기 위한 데모 샘플 스냅샷"
             },
             "comparison": [
-                {"tier": "LUNA:LOW", "current_model": "gpt-5.6-luna", "current_in_price": 1.0, "current_out_price": 3.0, "healing_model": "gpt-5.6-luna", "healing_in_price": 0.6, "healing_out_price": 1.8, "savings_pct": 40.0},
-                {"tier": "LUNA:MEDIUM", "current_model": "gpt-5.6-luna", "current_in_price": 1.0, "current_out_price": 3.0, "healing_model": "gpt-5.6-luna", "healing_in_price": 0.6, "healing_out_price": 1.8, "savings_pct": 40.0},
-                {"tier": "TERRA:MEDIUM", "current_model": "gpt-5.6-terra", "current_in_price": 2.5, "current_out_price": 10.0, "healing_model": "gpt-5.6-terra", "healing_in_price": 2.0, "healing_out_price": 8.0, "savings_pct": 20.0},
-                {"tier": "TERRA:HIGH", "current_model": "gpt-5.6-terra", "current_in_price": 2.5, "current_out_price": 10.0, "healing_model": "gpt-5.6-terra", "healing_in_price": 2.0, "healing_out_price": 8.0, "savings_pct": 20.0},
-                {"tier": "SOL:EXTRA_HIGH", "current_model": "gpt-5.6-sol", "current_in_price": 5.0, "current_out_price": 20.0, "healing_model": "gpt-5.6-sol", "healing_in_price": 4.5, "healing_out_price": 18.0, "savings_pct": 10.0}
+                {"tier": "BRONZE", "current_model": "gpt-5.6-luna", "current_in_price": 1.0, "current_out_price": 3.0, "healing_model": "gpt-5.6-luna", "healing_in_price": 0.6, "healing_out_price": 1.8, "savings_pct": 40.0},
+                {"tier": "SILVER", "current_model": "gpt-5.6-luna", "current_in_price": 1.0, "current_out_price": 3.0, "healing_model": "gpt-5.6-luna", "healing_in_price": 0.6, "healing_out_price": 1.8, "savings_pct": 40.0},
+                {"tier": "GOLD", "current_model": "gpt-5.6-terra", "current_in_price": 2.5, "current_out_price": 10.0, "healing_model": "gpt-5.6-terra", "healing_in_price": 2.0, "healing_out_price": 8.0, "savings_pct": 20.0},
+                {"tier": "PLATINUM", "current_model": "gpt-5.6-terra", "current_in_price": 2.5, "current_out_price": 10.0, "healing_model": "gpt-5.6-terra", "healing_in_price": 2.0, "healing_out_price": 8.0, "savings_pct": 20.0},
+                {"tier": "DIAMOND", "current_model": "gpt-5.6-terra", "current_in_price": 2.5, "current_out_price": 10.0, "healing_model": "gpt-5.6-terra", "healing_in_price": 2.0, "healing_out_price": 8.0, "savings_pct": 20.0},
+                {"tier": "CHALLENGER", "current_model": "gpt-5.6-sol", "current_in_price": 5.0, "current_out_price": 20.0, "healing_model": "gpt-5.6-sol", "healing_in_price": 4.5, "healing_out_price": 18.0, "savings_pct": 10.0}
             ],
             "all_versions": [
                 {"version_id": "v1.0.0", "name": "Standard Baseline v1.0.0", "updated_at": "2026-07-31T00:00:00", "is_active": True, "is_latest": True}
