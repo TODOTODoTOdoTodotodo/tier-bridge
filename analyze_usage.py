@@ -812,9 +812,17 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const sidFull = p.session_id || 'N/A';
                 const sidShort = (sidFull !== 'N/A' && sidFull.length > 8) ? sidFull.substring(0, 8) : sidFull;
                 
-                let badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
-                if (p.decision.includes('TERRA') || p.decision.includes('SOL')) {{
-                    badgeClass = p.decision.includes('MEDIUM') ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+                let badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
+                if (p.decision.includes('SILVER') || p.decision.includes('LUNA:MEDIUM')) {{
+                    badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
+                }} else if (p.decision.includes('GOLD') || p.decision.includes('TERRA:MEDIUM')) {{
+                    badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
+                }} else if (p.decision.includes('PLATINUM') || p.decision.includes('TERRA:HIGH')) {{
+                    badgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
+                }} else if (p.decision.includes('DIAMOND')) {{
+                    badgeClass = 'bg-blue-500/20 text-blue-300 border-blue-400/40';
+                }} else if (p.decision.includes('CHALLENGER') || p.decision.includes('SOL')) {{
+                    badgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-extrabold animate-pulse';
                 }}
 
                 const safePrompt = p.prompt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

@@ -187,24 +187,24 @@ class Router:
         from src.tierbridge.model_registry import registry
         active_mapping = registry.get_active_mapping()
 
-        if "SOL:EXTRA_HIGH" in verdict or ("EXTRA_HIGH" in verdict and is_4tier_sol_mode):
+        if "CHALLENGER" in verdict or "SOL:EXTRA_HIGH" in verdict or ("EXTRA_HIGH" in verdict and is_4tier_sol_mode):
             tier_info = active_mapping.get("SOL:EXTRA_HIGH", {"model": "gpt-5.6-sol", "effort": "xhigh"})
-            final_decision, final_model, final_effort = "SOL:EXTRA_HIGH", tier_info.get("model", "gpt-5.6-sol"), tier_info.get("effort", "xhigh")
-        elif "TERRA:EXTRA_HIGH" in verdict or "EXTRA_HIGH" in verdict:
+            final_decision, final_model, final_effort = "CHALLENGER", tier_info.get("model", "gpt-5.6-sol"), tier_info.get("effort", "xhigh")
+        elif "DIAMOND" in verdict or "TERRA:EXTRA_HIGH" in verdict:
             tier_info = active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"})
-            final_decision, final_model, final_effort = "TERRA:EXTRA_HIGH", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
-        elif "TERRA:HIGH" in verdict or "HIGH" in verdict:
+            final_decision, final_model, final_effort = "DIAMOND", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
+        elif "PLATINUM" in verdict or "TERRA:HIGH" in verdict or "HIGH" in verdict:
             tier_info = active_mapping.get("TERRA:HIGH", {"model": "gpt-5.6-terra", "effort": "high"})
-            final_decision, final_model, final_effort = "TERRA:HIGH", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
-        elif "TERRA:MEDIUM" in verdict or "TERRA" in verdict:
+            final_decision, final_model, final_effort = "PLATINUM", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
+        elif "GOLD" in verdict or "TERRA:MEDIUM" in verdict or "TERRA" in verdict:
             tier_info = active_mapping.get("TERRA:MEDIUM", {"model": "gpt-5.6-terra", "effort": "medium"})
-            final_decision, final_model, final_effort = "TERRA:MEDIUM", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "medium")
-        elif "LUNA:MEDIUM" in verdict:
+            final_decision, final_model, final_effort = "GOLD", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "medium")
+        elif "SILVER" in verdict or "LUNA:MEDIUM" in verdict:
             tier_info = active_mapping.get("LUNA:MEDIUM", {"model": "gpt-5.6-luna", "effort": "medium"})
-            final_decision, final_model, final_effort = "LUNA:MEDIUM", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "medium")
+            final_decision, final_model, final_effort = "SILVER", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "medium")
         else:
             tier_info = active_mapping.get("LUNA:LOW", {"model": "gpt-5.6-luna", "effort": "low"})
-            final_decision, final_model, final_effort = "LUNA:LOW", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "low")
+            final_decision, final_model, final_effort = "BRONZE", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "low")
 
         mode_tag = "4-TIER SOL ROUTER" if is_4tier_sol_mode else "STANDARD 3-TIER ROUTER"
         sid_tag = f" [sid: {session_id}]" if session_id else ""
