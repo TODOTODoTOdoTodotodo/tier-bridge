@@ -51,8 +51,9 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 
 `v0.9.0-test-legacy` 스냅샷이 활성화되면 `HealingEngine`이 최신 `gpt-5.6` 라인업과의 단가/성능 차이를 자동 감지하여 `has_new_healing: true` 알림 배너를 트리거합니다.
 
-- **원클릭 핫패칭 릴리즈 적용 (`POST /v1/models/heal`)**:
-  - `apply_healing()` 호출 시 최신 모델 스냅샷 **`v1.1.0-healing-hotpatch`** (GPT-5.6 Lineup + 최신 단가 인하) 스냅샷을 자동 신규 릴리즈 생성하고 **`active_version`으로 즉시 무중단 핫패치 스위칭**합니다.
+- **원클릭 핫패칭 릴리즈 적용 및 배포 영구 보존 (Dual-Sink Persistence & Deployment Preservation)**:
+  - `apply_healing()` 또는 버전 전환(`switch_version()`) 호출 시 런타임 저장소(`~/.tierbridge/live/config/model_versions.json`)뿐만 아니라 **개발 레포 저장소(`config/model_versions.json`)에도 Active 버전 및 신규 릴리즈 스냅샷을 동시에 동기화 저장**합니다.
+  - 이를 통해 추후 개발자가 `./deploy.sh` 명령으로 재배포를 수행하더라도, 최신 핫패칭 상태가 덮어씌워지지 않고 Active 모델 버전이 지속적으로 유지됩니다.
   - 핫패치가 완료되면 `has_new_healing`은 `false`로 닫히고, 대시보드 버전 선택 드롭다운과 하단 타임라인에 `v1.1.0-healing-hotpatch`가 이력으로 남게 됩니다.
 
 - **단가 절감율 표출 규격 (Dynamic `savings_pct`)**:

@@ -69,11 +69,26 @@ class ModelRegistry:
             return self._load_config()
 
     def _save_config(self):
+        # 1. Primary config_path 저장
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"[Error] Failed to save model_versions.json: {e}")
+
+        # 2. 배포 시 설정 유지(Deployment Preservation)를 위한 개발 저장소 <-> 런타임 저장소 양방향 영구 저장
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        dev_target = os.path.join(base_dir, "config", "model_versions.json")
+        live_target = os.path.expanduser("~/.tierbridge/live/config/model_versions.json")
+        
+        for target in [dev_target, live_target]:
+            if os.path.abspath(target) != os.path.abspath(self.config_path):
+                try:
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    with open(target, "w", encoding="utf-8") as f:
+                        json.dump(self.data, f, indent=2, ensure_ascii=False)
+                except Exception:
+                    pass
 
     def get_active_version_id(self) -> str:
         self.data = self._load_config()
