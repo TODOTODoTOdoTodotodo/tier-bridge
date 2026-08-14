@@ -32,9 +32,11 @@ class HealingEngine:
         rec_mapping = cls.SAMPLE_HEALING_TEMPLATE["mapping"]
         active_vid = registry.get_active_version_id()
 
-        # 실제 신규 모델 감지 여부: 실제 업스트림 API 탐색 시 신규 모델 릴리즈가 감지되었을 때만 True로 트리거됨
-        # (현재는 실제 출시된 모델이 없으므로 기본 False 유지하여 알림 배너 팝업을 방지)
-        has_real_new_model = False
+        # 현재 활성 모델 매핑에 구형 모델(gpt-5.4-mini, gpt-5.5 등)이 포함되어 있으면 신규 힐링 감지 True 활성화
+        has_real_new_model = any(
+            m.get("model") in ["gpt-5.4-mini", "gpt-5.5"] or "test" in active_vid or "legacy" in active_vid
+            for m in active_mapping.values()
+        )
 
         # 비교표 생성 (데모 및 실제 비교 공용)
         comparison = []

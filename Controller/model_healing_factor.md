@@ -38,6 +38,21 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 
 ---
 
+## 2.1 모델 스냅샷 버전 테스트 (Legacy Test Snapshot Scenario)
+
+힐링 핫패치 감지 및 무중단 원클릭 핫패칭/롤백 테스트를 위해 구형/테스트 스냅샷 버전을 지원합니다:
+- **`v0.9.0-test-legacy` (테스트 스냅샷)**:
+  - `LUNA` 등급 매핑: `gpt-5.4-mini` (in: $0.15, out: $0.60)
+  - `TERRA` & `SOL` 등급 매핑: `gpt-5.5` (in: $3.00, out: $12.00)
+- **`v1.0.0` (Baseline 표준 스냅샷 백업본)**:
+  - `LUNA` 등급 매핑: `gpt-5.6-luna` (in: $1.00, out: $3.00)
+  - `TERRA` 등급 매핑: `gpt-5.6-terra` (in: $2.50, out: $10.00)
+  - `SOL` 등급 매핑: `gpt-5.6-sol` (in: $5.00, out: $20.00)
+
+`v0.9.0-test-legacy` 스냅샷이 활성화되면 `HealingEngine`이 최신 `gpt-5.6` 라인업과의 단가/성능 차이를 자동 감지하여 `has_new_healing: true` 알림 배너를 트리거합니다.
+
+---
+
 ## 3. 버전 관리 규격 (`config/model_versions.json`)
 
 ```json
