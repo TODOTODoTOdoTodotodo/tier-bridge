@@ -15,6 +15,14 @@ from tierbridge.router import Router
 from tierbridge.auth_manager import AuthManager
 from tierbridge.usage_tracker import UsageTracker
 
+import logging
+
+# 시스템 로깅 레벨 WARNING 상향 설정 (잡다한 INFO 로그 차단)
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("uvicorn").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 load_dotenv()
 
 app = FastAPI(title="TierBridge")
@@ -30,13 +38,9 @@ ENTERPRISE_API_URL = os.getenv(
 MOCK_MODE = os.getenv("MOCK_TEST_MODE", "false").lower() == "true" or ENTERPRISE_API_URL in ("mock", "test")
 ROUTING_MODE = os.getenv("ROUTING_MODE", "standard").lower()
 HIGH_POWER_MODE = os.getenv("HIGH_POWER_MODE", "false").lower() == "true" or ROUTING_MODE in ("high_power", "high", "power")
-effective_mode = "HIGH_POWER (고출력 모드 - TERRA 직송)" if HIGH_POWER_MODE else "STANDARD (일반 모드 - 동적 3-Tier 라우팅)"
-print(f"[Debug System Config] MOCK_TEST_MODE: {os.getenv('MOCK_TEST_MODE')}, ENTERPRISE_API_URL: {ENTERPRISE_API_URL}, Final MOCK_MODE: {MOCK_MODE}")
-print(f"[Debug System Config] Active Routing Mode: {effective_mode}")
 
 # Mock 모드 활성화 시 로컬 모크 엔드포인트로 우회
 if MOCK_MODE:
-    print("[Info] Running in MOCK test mode. Rewriting ENTERPRISE_API_URL to local mock endpoint.")
     ENTERPRISE_API_URL = "http://localhost:18080/mock/enterprise/chat/completions"
 
 def get_latest_enterprise_token() -> str:
