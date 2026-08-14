@@ -80,9 +80,9 @@ if [ -n "$OCCUPIED_PID" ]; then
     sleep 1
 fi
 
-# 5. 라이브 런타임에서 하네스 백그라운드 가동 (PYTHONPATH=src 설정 & --log-level warning 적용)
+# 5. 라이브 런타임에서 하네스 백그라운드 가동 (PYTHONPATH=src 설정 & --log-level warning 적용, append 모드 >>)
 echo "⚡ 라이브 하네스 프록시 서버 가동 중 (Port: $PORT, LogLevel: WARNING)..."
-PYTHONPATH="$LIVE_DIR/src:$PYTHONPATH" nohup .venv/bin/python -m uvicorn harness:app --host 0.0.0.0 --port $PORT --log-level warning > "$LIVE_DIR/harness.log" 2>&1 &
+PYTHONPATH="$LIVE_DIR/src:$PYTHONPATH" nohup .venv/bin/python -m uvicorn harness:app --host 0.0.0.0 --port $PORT --log-level warning >> "$LIVE_DIR/harness.log" 2>&1 &
 NEW_PID=$!
 echo "$NEW_PID" > "$PID_FILE"
 
