@@ -74,15 +74,17 @@ class HealingEngine:
     @classmethod
     def apply_healing(cls) -> Dict[str, Any]:
         template = cls.SAMPLE_HEALING_TEMPLATE
-        new_vid = registry.create_version(
-            new_version_id=template["version_id"],
-            name=template["name"],
-            description=template["description"],
+        new_vid = "v1.1.0-healing-hotpatch"
+        registry.create_version(
+            new_version_id=new_vid,
+            name="GPT-5.6 Lineup (Healing Hot-Patch Release v1.1.0)",
+            description="힐링 엔진 자동 감지 기반 최신 고효율 모델 라우팅 무중단 핫패치 릴리즈",
             mapping=template["mapping"]
         )
+        registry.switch_version(new_vid)
         return {
             "success": True,
-            "message": f"성공적으로 힐링 데모 스냅샷 ({new_vid})이 핫패치 되었습니다.",
+            "message": f"성공적으로 최신 GPT-5.6 모델 핫패치 릴리즈({new_vid})가 즉시 적용되었습니다.",
             "active_version_id": new_vid
         }
 

@@ -51,6 +51,10 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 
 `v0.9.0-test-legacy` 스냅샷이 활성화되면 `HealingEngine`이 최신 `gpt-5.6` 라인업과의 단가/성능 차이를 자동 감지하여 `has_new_healing: true` 알림 배너를 트리거합니다.
 
+- **원클릭 핫패칭 릴리즈 적용 (`POST /v1/models/heal`)**:
+  - `apply_healing()` 호출 시 최신 모델 스냅샷 **`v1.1.0-healing-hotpatch`** (GPT-5.6 Lineup + 최신 단가 인하) 스냅샷을 자동 신규 릴리즈 생성하고 **`active_version`으로 즉시 무중단 핫패치 스위칭**합니다.
+  - 핫패치가 완료되면 `has_new_healing`은 `false`로 닫히고, 대시보드 버전 선택 드롭다운과 하단 타임라인에 `v1.1.0-healing-hotpatch`가 이력으로 남게 됩니다.
+
 - **단가 절감율 표출 규격 (Dynamic `savings_pct`)**:
   - `savings_pct > 0`: `+33.3% (절감)` (초록색 에메랄드 볼드)
   - `savings_pct < 0`: `-220.0% (인상)` (빨간색 로즈 볼드)
