@@ -40,4 +40,5 @@ OpenAI 및 ChatGPT Enterprise 백엔드 API 응답 메타데이터에는 토큰 
 `analyze_usage.py` 실행 시:
 * **총 작성 코드 라인 수 (Total Code LOC)**
 * **요청당 평균 작성 코드 라인 수 (Avg LOC / Request)**
-* **Decision 등급별 LOC 분포** (`SILVER` 등에서 작성된 소스코드 라인 수)
+* **Gaming RPG Rank Tier별 LOC 분포** (`BRONZE`, `SILVER`, `GOLD`, `PLATINUM`, `DIAMOND`, `CHALLENGER`에서 작성된 소스코드 라인 수)
+* **Kibana 실시간 대시보드 (`usage_dashboard.html`) LOC KPI 카드 및 도넛 차트 연동**

@@ -7,9 +7,9 @@
 ## 📋 목차
 1. [Q1. 스트림 종료 경고 및 토큰 집계 누락 현상](#q1-스트림-종료-경고-및-토큰-집계-누락-현상)
 2. [Q2. Invalid value: 'input_text' 400 Bad Request 에러](#q2-invalid-value-input_text-400-bad-request-에러)
-3. [Q3. 모든 분석 요청이 MINI 모델로만 고정(디폴트)되어 처리되는 현상](#q3-모든-분석-요청이-mini-모델로만-고정디폴트되어-처리되는-현상)
+3. [Q3. 모든 분석 요청이 BRONZE 모델로만 고정(디폴트)되어 처리되는 현상](#q3-모든-분석-요청이-bronze-모델로만-고정디폴트되어-처리되는-현상)
 4. [Q4. Classifier connection error: (ReadTimeout) 발생 및 지연 현상](#q4-classifier-connection-error-readtimeout-발생-및-지연-현상)
-5. [Q5. 새 터미널을 열면 "No running Ollama server detected" 에러가 발생합니다](#q5-새-터미널을-열면-no-running-ollama-server-detected-에러가-발생합니다)
+5. [Q5. 새 터미널을 열면 "No running server detected" 에러가 발생합니다](#q5-새-터미널을-열면-no-running-server-detected-에러가-발생합니다)
 6. [Q6. lsof 시 18080 포트에 프로세스가 2개 뜨거나 ESTABLISHED 상태 소켓이 2개 생깁니다](#q6-lsof-시-18080-포트에-프로세스가-2개-뜨거나-established-상태-소켓이-2개-생깁니다)
 
 ---

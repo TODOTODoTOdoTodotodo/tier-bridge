@@ -1,12 +1,12 @@
 # TierBridge
 
-This document defines the dynamic routing strategy designed to optimize credits for Codex Enterprise gpt-5.6 family line-ups. It allows selecting between the **Standard 3-Tier Router** (luna ➔ terra) and the **4-Tier Sol Router** (luna ➔ terra ➔ sol) at **Codex CLI execution time**.
+This document defines the dynamic routing strategy designed to optimize credits for Codex Enterprise models. It allows selecting between the **Standard 3-Tier Router** (BRONZE ➔ DIAMOND) and the **4-Tier Sol Router** (BRONZE ➔ CHALLENGER) at **Codex CLI execution time**.
 
 ## 1. System Architecture & Flow (CLI Execution-Time Router Selection)
 
 ```
 [Codex Enterprise CLI]
- (e.g. codex --oss --local-provider=localai [--model gpt-5.6-sol])
+ (e.g. codex --oss --local-provider=localai [--model super])
              │
              │ 1. GET /v1/models (Health check & Model discovery)
              │ 2. POST /v1/chat/completions or /v1/responses (Payload contains 'model')
@@ -17,20 +17,22 @@ This document defines the dynamic routing strategy designed to optimize credits 
 │                                                         │
 │ * Inspects incoming request 'model':                    │
 │   - '--model super' / 'gpt-5.6-sol' / '4tier'           │
-│     ➔ Activates 4-Tier Sol Router (LUNA ➔ TERRA ➔ SOL)  │
+│     ➔ Activates 4-Tier Sol Router (BRONZE ➔ CHALLENGER) │
 │   - Default ('gpt-5.4', 'gpt-5.6-terra', etc.)         │
-│     ➔ Activates Standard 3-Tier Router (LUNA ➔ TERRA)   │
+│     ➔ Activates Standard 3-Tier Router (BRONZE ➔ DIAMOND)│
 │ * Classifies query via gpt-5.6-luna (low effort).       │
+│ * Logs dedicated [USAGE] CLASSIFIER credit tracking.    │
+│ * Fetches dynamic mapping from ModelRegistry.           │
 │ * Swaps target model & reasoning_effort dynamically.    │
 │ * Injects Authorization: Bearer <access_token> header.  │
 └──────────────────────────┬──────────────────────────────┘
                            │
              ┌─────────────┼──────────────┬──────────────┐
              ▼             ▼              ▼              ▼
-       [BRONZE/MID] [GOLD]  [PLATINUM] [CHALLENGER]
+          [BRONZE]      [SILVER]       [GOLD]       [CHALLENGER]
              │             │              │              │
-       gpt-5.6-luna   gpt-5.6-terra  gpt-5.6-terra   gpt-5.6-sol
-         (low/med)       (medium)        (high)     (extra_high: 4-Tier만)
+       gpt-5.6-luna   gpt-5.6-luna  gpt-5.6-terra   gpt-5.6-sol
+         (low)         (medium)       (medium)     (extra_high: 4-Tier만)
              └─────────────┴──────────────┴──────────────┘
                            │
                            ▼ Forward with Injected JWT Auth Header
@@ -44,25 +46,25 @@ This document defines the dynamic routing strategy designed to optimize credits 
 
 * **기존 3-Tier 라우터 (Standard 3-Tier Router - 기본값)**:
   * **CLI 실행 명령**: `codex --oss --local-provider=localai`
-  * **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (extra_high)
-  * **특징**: `sol` 모델을 사용하지 않고 `terra` 계열 상한선으로 캡핑하여 회사의 크레딧을 철저히 보존합니다.
+  * **라우팅 범위**: `BRONZE` (low) ~ `DIAMOND` (extra_high)
+  * **특징**: `CHALLENGER` (`gpt-5.6-sol`) 모델을 사용하지 않고 `DIAMOND` (`gpt-5.6-terra`) 상한선으로 캡핑하여 회사의 크레딧을 철저히 보존합니다.
 
 * **4-Tier Sol 라우터 (4-Tier Sol Router)**:
   * **CLI 실행 명령**: `codex --oss --local-provider=localai --model super` (또는 `--model gpt-5.6-sol`)
-  * **라우팅 범위**: `gpt-5.6-luna` (low) ~ `gpt-5.6-terra` (high) ~ 최상위 **`gpt-5.6-sol` (extra_high / API: `xhigh`)**
-  * **특징**: `luna`로 시작하는 스마트 동적 라우터를 유지하되, 최상위 고난도 작업(메모리 누수, 교착상태, 초대규모 분석) 발생 시 `gpt-5.6-sol`까지 라우팅 영역을 확장합니다. 단축 인자 `--model super`로 직관적으로 호출할 수 있습니다.
+  * **라우팅 범위**: `BRONZE` (low) ~ `PLATINUM` (high) ~ 최상위 **`CHALLENGER` (`gpt-5.6-sol` / extra_high)**
+  * **특징**: 저난도 작업은 `BRONZE` / `SILVER`로 시작하는 스마트 동적 라우터를 유지하되, 최상위 고난도 작업(메모리 누수, 교착상태, 초대규모 분석) 발생 시 `CHALLENGER`까지 라우팅 영역을 확장합니다. 단축 인자 `--model super`로 직관적으로 호출할 수 있습니다.
 
 ### 2.2. Gaming RPG Rank Tier Classification Table
 특정 모델명(LUNA, TERRA, SOL)에 종속되지 않고 직관적이고 유연한 **게이밍 RPG 랭크 티어 체계 (BRONZE ➔ SILVER ➔ GOLD ➔ PLATINUM ➔ DIAMOND ➔ CHALLENGER)**를 적용합니다.
 
-| Router Mode | Gaming RPG Tier | Destination Model | Reasoning Effort | Description / Typical Use Cases |
+| Router Mode | Gaming RPG Rank | Destination Model (`v1.0.0`) | Reasoning Effort | Description / Typical Use Cases |
 | :--- | :--- | :--- | :--- | :--- |
-| **Common (1/4 & 2/4)** | 🥉 **BRONZE** *(BRONZE)* | `gpt-5.6-luna` | `"low"` | Simple grammar, minor typos, command guide, simple file read |
-| **Common (1/4 & 2/4)** | 🥈 **SILVER** *(SILVER)* | `gpt-5.6-luna` | `"medium"` | Standard business logic, single-file refactoring |
-| **Common (2/4 & 3/4)** | 🥇 **GOLD** *(GOLD)* | `gpt-5.6-terra` | `"medium"` | Medium complexity, multi-component refactoring |
-| **Common (2/4 & 3/4)** | 💎 **PLATINUM** *(PLATINUM)* | `gpt-5.6-terra` | `"high"` | Complex algorithms, multi-component architecture |
-| **3-Tier Max** | 🔷 **DIAMOND** *(DIAMOND)* | `gpt-5.6-terra` | `"extra_high"` *(API: `"xhigh"`)* | Deep debugging & tuning (3-Tier Mode Max Capped) |
-| **4-Tier Max** | 🏆 **CHALLENGER** *(CHALLENGER)* | `gpt-5.6-sol` | `"extra_high"` *(API: `"xhigh"`)* | Deadlock debugging, memory leak detection, deep kernel tuning (4-Tier Sol Mode Max) |
+| **Common (1/4 & 2/4)** | 🥉 **BRONZE** | `gpt-5.6-luna` | `"low"` | Simple grammar, minor typos, command guide, simple file read |
+| **Common (1/4 & 2/4)** | 🥈 **SILVER** | `gpt-5.6-luna` | `"medium"` | Standard business logic, single-file refactoring |
+| **Common (2/4 & 3/4)** | 🥇 **GOLD** | `gpt-5.6-terra` | `"medium"` | Medium complexity, multi-component refactoring |
+| **Common (2/4 & 3/4)** | 💎 **PLATINUM** | `gpt-5.6-terra` | `"high"` | Complex algorithms, multi-component architecture |
+| **3-Tier Max** | 🔷 **DIAMOND** | `gpt-5.6-terra` | `"extra_high"` *(API: `"high"`)* | Deep debugging & tuning (3-Tier Mode Max Capped) |
+| **4-Tier Max** | 🏆 **CHALLENGER** | `gpt-5.6-sol` | `"extra_high"` *(API: `"xhigh"`)* | Deadlock debugging, memory leak detection, deep kernel tuning (4-Tier Sol Mode Max) |
 
 > [!IMPORTANT]
 > 1. **Default 3-Tier Protection**: Running standard `codex --oss --local-provider=localai` strictly limits maximum model consumption to **`DIAMOND` (`gpt-5.6-terra`)**.
