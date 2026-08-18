@@ -62,5 +62,8 @@
 1. **`analyze_usage.py`**:
    * 로그 파서가 `real_credit` 필드를 우선적으로 수집하여 실제 과금 통계를 산출.
    * `--balance` / `-b` 플래그로 언제든지 실제 엔터프라이즈 잔여 한도 확인.
-2. **`usage_dashboard.html`**:
-   * 대시보드 상단에 **[Enterprise Live Balance 게이지 위젯]** (한도, 소모량, 잔여량, 리셋일) 실시간 렌더링.
+2. **`usage_dashboard.html` & 실시간 동적 한도 산출 (Dynamic Admin Spend Limit)**:
+   * **유동적 월간 한도 반영**: 어드민(Admin)이 계정 한도(`limit`)를 동적으로 조정하므로 한도를 하드코딩하지 않고 3초 라이브 오토싱크(`GET /v1/dashboard/stats`)에서 반환된 실시간 `limit`, `used`, `remaining`을 기준으로 계산:
+     $$\text{used\_percent} = \frac{\text{used}}{\text{limit}} \times 100 \quad (\text{limit} > 0)$$
+     $$\text{remaining\_percent} = \max(0.0, 100.0 - \text{used\_percent})$$
+   * 대시보드 상단 **[Enterprise Live Balance 게이지 위젯]**이 매 3초마다 실시간으로 게이지 너비, 수치, 퍼센티지, 리셋일을 동적 재계산하여 렌더링.

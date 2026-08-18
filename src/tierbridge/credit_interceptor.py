@@ -66,12 +66,18 @@ class CreditInterceptor:
             if response.status_code == 200:
                 data = response.json()
                 spend = data.get("spend_control", {}).get("individual_limit", {})
+                limit_val = float(spend.get("limit", 0))
+                used_val = float(spend.get("used", 0))
+                rem_val = float(spend.get("remaining", 0))
+                # 관리자(Admin)가 조정한 유동적 limit을 기준으로 실시간 비율 산출
+                used_pct = (used_val / limit_val * 100.0) if limit_val > 0 else 0.0
+                rem_pct = max(0.0, 100.0 - used_pct) if limit_val > 0 else 100.0
                 return {
-                    "limit": float(spend.get("limit", 0)),
-                    "used": float(spend.get("used", 0)),
-                    "remaining": float(spend.get("remaining", 0)),
-                    "used_percent": spend.get("used_percent", 0),
-                    "remaining_percent": spend.get("remaining_percent", 100),
+                    "limit": limit_val,
+                    "used": used_val,
+                    "remaining": rem_val,
+                    "used_percent": round(used_pct, 1),
+                    "remaining_percent": round(rem_pct, 1),
                     "reset_at": spend.get("reset_at")
                 }
         except Exception:

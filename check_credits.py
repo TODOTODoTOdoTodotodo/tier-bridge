@@ -44,8 +44,9 @@ def check_credits():
         limit = float(indiv.get("limit", 0))
         used = float(indiv.get("used", 0))
         remaining = float(indiv.get("remaining", 0))
-        used_percent = indiv.get("used_percent", 0)
-        remaining_percent = indiv.get("remaining_percent", 100)
+        # 관리자(Admin)가 유동적으로 조정한 월간 한도를 기준으로 실시간 동적 계산
+        used_percent = (used / limit * 100.0) if limit > 0 else 0.0
+        remaining_percent = max(0.0, 100.0 - used_percent) if limit > 0 else 100.0
         reset_at = indiv.get("reset_at")
         
         reset_dt_str = "N/A"
@@ -60,8 +61,8 @@ def check_credits():
         print("-" * 85)
         print("📊 크레딧 한도 및 소모 현황 (Monthly Spend Control):")
         print(f"  • 월간 할당 한도 (Limit)     : {limit:,.2f} Credits")
-        print(f"  • 실제 누적 소모량 (Used)    : {used:,.2f} Credits ({used_percent}%)")
-        print(f"  • 실제 잔여 크레딧 (Remaining): {remaining:,.2f} Credits ({remaining_percent}%)")
+        print(f"  • 실제 누적 소모량 (Used)    : {used:,.2f} Credits ({used_percent:.1f}%)")
+        print(f"  • 실제 잔여 크레딧 (Remaining): {remaining:,.2f} Credits ({remaining_percent:.1f}%)")
         print(f"  • 크레딧 리셋 일시 (Reset)   : {reset_dt_str}")
         print("=" * 85)
 

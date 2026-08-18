@@ -59,8 +59,8 @@ def show_enterprise_balance():
         limit = float(spend.get("limit", 0))
         used = float(spend.get("used", 0))
         remaining = float(spend.get("remaining", 0))
-        used_pct = spend.get("used_percent", 0)
-        rem_pct = spend.get("remaining_percent", 100)
+        used_pct = (used / limit * 100.0) if limit > 0 else 0.0
+        rem_pct = max(0.0, 100.0 - used_pct) if limit > 0 else 100.0
         reset_at = spend.get("reset_at")
         reset_str = datetime.fromtimestamp(reset_at).strftime("%Y-%m-%d %H:%M:%S") if reset_at else "N/A"
         
@@ -72,8 +72,8 @@ def show_enterprise_balance():
         print("-" * 85)
         print("📊 크레딧 한도 및 소모 현황 (Monthly Spend Control):")
         print(f"  • 월간 할당 한도 (Limit)     : {limit:,.2f} Credits")
-        print(f"  • 실제 누적 소모량 (Used)    : {used:,.2f} Credits ({used_pct}%)")
-        print(f"  • 실제 잔여 크레딧 (Remaining): {remaining:,.2f} Credits ({rem_pct}%)")
+        print(f"  • 실제 누적 소모량 (Used)    : {used:,.2f} Credits ({used_pct:.1f}%)")
+        print(f"  • 실제 잔여 크레딧 (Remaining): {remaining:,.2f} Credits ({rem_pct:.1f}%)")
         print(f"  • 크레딧 리셋 일시 (Reset)   : {reset_str}")
         print("=" * 85 + "\n")
     except Exception as e:
@@ -296,11 +296,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         <div class="flex-1 max-w-xl w-full">
             <div class="flex justify-between text-xs font-semibold mb-1.5">
-                <span class="text-slate-300">실제 소모: <span id="entUsedCredits" class="text-indigo-400 font-mono font-bold">119.85 Cr (8.0%)</span></span>
-                <span class="text-slate-300">실제 잔여: <span id="entRemainingCredits" class="text-emerald-400 font-mono font-bold">1,380.15 Cr (92.0%)</span> / <span id="entLimitCredits" class="text-slate-400">1,500.00 Cr</span></span>
+                <span class="text-slate-300">실제 소모: <span id="entUsedCredits" class="text-indigo-400 font-mono font-bold">- Cr</span></span>
+                <span class="text-slate-300">실제 잔여: <span id="entRemainingCredits" class="text-emerald-400 font-mono font-bold">- Cr</span> / <span id="entLimitCredits" class="text-slate-400 font-mono">- Cr</span></span>
             </div>
             <div class="w-full bg-slate-800 rounded-full h-3.5 p-0.5 border border-slate-700 overflow-hidden">
-                <div id="entProgressBar" class="bg-gradient-to-r from-emerald-500 via-sky-400 to-indigo-500 h-2.5 rounded-full transition-all duration-500" style="width: 8%;"></div>
+                <div id="entProgressBar" class="bg-gradient-to-r from-emerald-500 via-sky-400 to-indigo-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%;"></div>
             </div>
         </div>
     </div>
@@ -1006,15 +1006,23 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }}
                 if (data.enterprise_balance) {{
                     const eb = data.enterprise_balance;
+                    const limitVal = parseFloat(eb.limit) || 0;
+                    const usedVal = parseFloat(eb.used) || 0;
+                    const remVal = (limitVal > 0) ? Math.max(0, limitVal - usedVal) : (parseFloat(eb.remaining) || 0);
+                    
+                    // 어드민이 수시로 조정하는 유동적 limit을 기준으로 실시간 비율 계산
+                    const usedPct = limitVal > 0 ? ((usedVal / limitVal) * 100) : 0;
+                    const remPct = Math.max(0, 100 - usedPct);
+
                     const usedEl = document.getElementById('entUsedCredits');
                     const remEl = document.getElementById('entRemainingCredits');
                     const limEl = document.getElementById('entLimitCredits');
                     const barEl = document.getElementById('entProgressBar');
                     const resetEl = document.getElementById('entResetAt');
-                    if (usedEl) usedEl.innerText = `${{eb.used.toFixed(2)}} Cr (${{eb.used_percent}}%)`;
-                    if (remEl) remEl.innerText = `${{eb.remaining.toFixed(2)}} Cr (${{eb.remaining_percent}}%)`;
-                    if (limEl) limEl.innerText = `${{eb.limit.toFixed(2)}} Cr`;
-                    if (barEl) barEl.style.width = `${{Math.min(100, eb.used_percent)}}%`;
+                    if (usedEl) usedEl.innerText = `${{usedVal.toFixed(2)}} Cr (${{usedPct.toFixed(1)}}%)`;
+                    if (remEl) remEl.innerText = `${{remVal.toFixed(2)}} Cr (${{remPct.toFixed(1)}}%)`;
+                    if (limEl) limEl.innerText = `${{limitVal.toFixed(2)}} Cr`;
+                    if (barEl) barEl.style.width = `${{Math.min(100, Math.max(0, usedPct))}}%`;
                     if (resetEl && eb.reset_at) {{
                         const d = new Date(eb.reset_at * 1000);
                         resetEl.innerText = `${{d.getFullYear()}}-${{String(d.getMonth()+1).padStart(2,'0')}}-${{String(d.getDate()).padStart(2,'0')}}`;
