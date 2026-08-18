@@ -51,9 +51,10 @@ class UsageTracker:
             loc_count += len(lines)
         return loc_count
 
-    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = ""):
+    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = "", auth_token: str = "", account_id: str = ""):
         """
-        토큰 소모량 및 코드 작성 줄 수(LOC)를 전달받아 예상 비용을 계산하고 통계 세션에 누적합니다.
+        토큰 소모량 및 코드 작성 줄 수(LOC)를 전달받아 예상 비용을 계산하고,
+        비동기 델타 크레딧 인터셉터를 백그라운드로 실행하여 실제 크레딧 차감액을 추적합니다.
         """
         # 모델명 소문자 매핑
         model_key = model.lower()
@@ -89,10 +90,33 @@ class UsageTracker:
             "cost_usd": round(cost_total, 6)
         })
         
-        sid_tag = f" [sid: {session_id}]" if session_id else ""
-        print(f"[{timestamp_str}]{sid_tag} ➔ [USAGE] {decision} ({model}) | input={input_tokens} output={output_tokens} tokens | loc={loc} lines | cost=${round(cost_total, 6)} USD", flush=True)
+        # 실시간 델타 크레딧 인터셉터 비동기 백그라운드 구동 (0ms 클라이언트 레이턴시)
+        try:
+            try:
+                from tierbridge.credit_interceptor import interceptor
+            except ImportError:
+                from src.tierbridge.credit_interceptor import interceptor
+            
+            import asyncio
+            loop = asyncio.get_running_loop()
+            loop.create_task(interceptor.track_turn_delta(
+                session_id=session_id,
+                decision=decision,
+                model=model,
+                in_tok=input_tokens,
+                out_tok=output_tokens,
+                loc=loc,
+                est_cost=round(cost_total, 6),
+                auth_token=auth_token,
+                account_id=account_id,
+                now_str=timestamp_str
+            ))
+        except Exception:
+            # 비동기 루프가 없거나 예외 시 즉시 폴백 로깅
+            sid_tag = f" [sid: {session_id}]" if session_id else ""
+            print(f"[{timestamp_str}]{sid_tag} ➔ [USAGE] {decision} ({model}) | input={input_tokens} output={output_tokens} tokens | loc={loc} lines | cost=${round(cost_total, 6)} USD", flush=True)
 
-    def parse_and_track_from_buffer(self, buffer: bytes, model: str, decision: str, prompt_text: str = "", session_id: str = ""):
+    def parse_and_track_from_buffer(self, buffer: bytes, model: str, decision: str, prompt_text: str = "", session_id: str = "", auth_token: str = "", account_id: str = ""):
         """
         스트리밍 버퍼에 쌓인 SSE 최종 응답 텍스트를 파싱하여 토큰 소모량 및 코드 라인 수(LOC)를 식별 및 수집합니다.
         업스트림 API에서 usage 정보가 유실된 경우에도 prompt_text 기반 추정 폴백으로 Zero-Drop USAGE를 보장하며, session_id를 기록합니다.
@@ -161,6 +185,6 @@ class UsageTracker:
                 else:
                     output_tokens = 150
 
-            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id)
+            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id, auth_token=auth_token, account_id=account_id)
         except Exception as e:
             print(f"[Warning] Failed to parse usage stats from buffer: {e}")

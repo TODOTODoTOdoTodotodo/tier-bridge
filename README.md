@@ -127,6 +127,7 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가 �
 * **`tierbridge`** : 런타임 하네스 가동 및 현재 터미널 세션에 환경 변수 주입
 * **`tierbridge-log`** : 라이브 프록시 가동 로그 실시간 모니터링 (`tail -f ~/.tierbridge/live/harness.log`)
 * **`tierbridge-dash`** : Kibana 스타일 라이브 웹 대시보드 열기
+* **`tierbridge-credit`** : ChatGPT Enterprise 실제 잔여 크레딧 및 지출 한도 실시간 조회
 
 > 📖 **[상세 기술 문서: 배포 아키텍처 및 환경변수 설정 명세서 (deployment_architecture.md)](Controller/deployment_architecture.md)**
 
@@ -151,6 +152,7 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가 �
 | **🚀 시작 & 가이드** | [analyze_usage_guide.md](analyze_usage_guide.md) | USAGE 로그 분석기 및 CLI 옵션 사용 가이드 |
 | | [troubleshooting_QA.md](troubleshooting_QA.md) | 구축/운영 중 직면한 트러블슈팅 사례 및 Q&A |
 | **📐 코어 아키텍처** | [Controller/routing_harness.md](Controller/routing_harness.md) | 동적 라우팅 알고리즘, CLI 시점 분기 & 6단계 랭크 설계 |
+| | [Controller/delta_credit_interceptor.md](Controller/delta_credit_interceptor.md) | 실시간 엔터프라이즈 델타 크레딧 인터셉터 (오차 0% 동기화) |
 | | [Controller/model_healing_factor.md](Controller/model_healing_factor.md) | 신규 모델 감지, 무중단 핫패칭 & 버전 스냅샷 관리 |
 | | [Controller/deployment_architecture.md](Controller/deployment_architecture.md) | 런타임 격리 배포, Dual-Sink 보존 및 종합 환경변수 명세 |
 | | [Controller/analyze_usage.md](Controller/analyze_usage.md) | 실시간 라이브 오토싱크, 크레딧 산출 및 대시보드 명세 |

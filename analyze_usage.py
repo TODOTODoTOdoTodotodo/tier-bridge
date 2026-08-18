@@ -23,12 +23,61 @@ def parse_args():
     
     parser = argparse.ArgumentParser(description="TierBridge 로그 기반 Kibana풍 USAGE 및 힐링팩터 모델 관리 분석기")
     parser.add_argument("log_file", nargs="?", default=default_log, help=f"분석할 로그 파일 경로 (기본: {default_log})")
+    parser.add_argument("--balance", "-b", action="store_true", help="ChatGPT Enterprise 백엔드 실시간 계정 잔여 크레딧 및 지출 한도 조회")
     parser.add_argument("--date", "-d", type=str, help="특정 날짜 필터 (형식: YYYY-MM-DD)")
     parser.add_argument("--month", "-m", type=str, help="특정 월 필터 (형식: YYYY-MM)")
     parser.add_argument("--session", "-s", type=str, help="특정 세션 ID 필터 (예: 5eb61a1e)")
     parser.add_argument("--html", "-w", action="store_true", help="Kibana 스타일 시각화 웹 대시보드(usage_dashboard.html) 생성 및 브라우저 열기")
     parser.add_argument("--no-open", action="store_true", help="HTML 대시보드 생성 후 브라우저 자동 오픈 금지")
     return parser.parse_args()
+
+def show_enterprise_balance():
+    import urllib.request
+    auth_path = os.path.expanduser("~/.codex/auth.json")
+    if not os.path.exists(auth_path):
+        print(f"❌ [오류] 인증 설정 파일({auth_path})을 찾을 수 없습니다.")
+        return
+    try:
+        with open(auth_path, "r", encoding="utf-8") as f:
+            auth = json.load(f)
+        tokens = auth.get("tokens", {})
+        access_token = tokens.get("access_token")
+        account_id = tokens.get("account_id")
+        
+        req = urllib.request.Request("https://chatgpt.com/backend-api/codex/usage")
+        req.add_header("Authorization", f"Bearer {access_token}")
+        if account_id:
+            req.add_header("chatgpt-account-id", account_id)
+        req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+        
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            
+        email = data.get("email", "N/A")
+        plan = data.get("plan_type", "business")
+        spend = data.get("spend_control", {}).get("individual_limit", {})
+        limit = float(spend.get("limit", 0))
+        used = float(spend.get("used", 0))
+        remaining = float(spend.get("remaining", 0))
+        used_pct = (used / limit * 100.0) if limit > 0 else 0.0
+        rem_pct = max(0.0, 100.0 - used_pct) if limit > 0 else 100.0
+        reset_at = spend.get("reset_at")
+        reset_str = datetime.fromtimestamp(reset_at).strftime("%Y-%m-%d %H:%M:%S") if reset_at else "N/A"
+        
+        print("\n" + "=" * 85)
+        print("💳 [ChatGPT Enterprise] 실시간 계정 잔여 크레딧 및 지출 한도 조회")
+        print("=" * 85)
+        print(f"👤 사용자 계정      : {email} (Plan: {plan})")
+        print(f"🏢 계정 ID         : {account_id}")
+        print("-" * 85)
+        print("📊 크레딧 한도 및 소모 현황 (Monthly Spend Control):")
+        print(f"  • 월간 할당 한도 (Limit)     : {limit:,.2f} Credits")
+        print(f"  • 실제 누적 소모량 (Used)    : {used:,.2f} Credits ({used_pct:.1f}%)")
+        print(f"  • 실제 잔여 크레딧 (Remaining): {remaining:,.2f} Credits ({rem_pct:.1f}%)")
+        print(f"  • 크레딧 리셋 일시 (Reset)   : {reset_str}")
+        print("=" * 85 + "\n")
+    except Exception as e:
+        print(f"\n❌ [오류] 엔터프라이즈 실시간 크레딧 조회 실패: {e}\n")
 
 def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None, healing_history=None):
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -223,6 +272,36 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             <button onclick="openHealingModal()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-1.5">
                 <i class="fa-solid fa-code-compare"></i> 단가 비교 및 핫패치 적용
             </button>
+        </div>
+    </div>
+
+    <!-- Enterprise Live Balance Bar -->
+    <div id="enterpriseBalanceWidget" class="mb-8 p-5 rounded-2xl glass-card border border-sky-500/40 bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950/40 flex flex-col lg:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-4">
+            <span class="p-3.5 bg-sky-500/20 border border-sky-500/40 text-sky-400 rounded-2xl text-2xl">
+                <i class="fa-solid fa-building-columns"></i>
+            </span>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                        ChatGPT Enterprise Live Spend Control
+                    </h3>
+                    <span id="entPlanBadge" class="text-xs px-2.5 py-0.5 bg-sky-500/20 text-sky-300 rounded-full font-mono font-bold">Business Plan</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-1" id="entAccountEmail">
+                    계정: <span class="text-slate-300 font-mono">86lyh@hanatour.com</span> | 리셋 주기: <span id="entResetAt" class="text-emerald-400 font-bold">매월 1일</span>
+                </p>
+            </div>
+        </div>
+
+        <div class="flex-1 max-w-xl w-full">
+            <div class="flex justify-between text-xs font-semibold mb-1.5">
+                <span class="text-slate-300">실제 소모: <span id="entUsedCredits" class="text-indigo-400 font-mono font-bold">- Cr</span></span>
+                <span class="text-slate-300">실제 잔여: <span id="entRemainingCredits" class="text-emerald-400 font-mono font-bold">- Cr</span> / <span id="entLimitCredits" class="text-slate-400 font-mono">- Cr</span></span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-3.5 p-0.5 border border-slate-700 overflow-hidden">
+                <div id="entProgressBar" class="bg-gradient-to-r from-emerald-500 via-sky-400 to-indigo-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%;"></div>
+            </div>
         </div>
     </div>
 
@@ -925,6 +1004,30 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     healingHistoryData = data.healing_history;
                     renderHealingHistory(data.healing_history);
                 }}
+                if (data.enterprise_balance) {{
+                    const eb = data.enterprise_balance;
+                    const limitVal = parseFloat(eb.limit) || 0;
+                    const usedVal = parseFloat(eb.used) || 0;
+                    const remVal = (limitVal > 0) ? Math.max(0, limitVal - usedVal) : (parseFloat(eb.remaining) || 0);
+                    
+                    // 어드민이 수시로 조정하는 유동적 limit을 기준으로 실시간 비율 계산
+                    const usedPct = limitVal > 0 ? ((usedVal / limitVal) * 100) : 0;
+                    const remPct = Math.max(0, 100 - usedPct);
+
+                    const usedEl = document.getElementById('entUsedCredits');
+                    const remEl = document.getElementById('entRemainingCredits');
+                    const limEl = document.getElementById('entLimitCredits');
+                    const barEl = document.getElementById('entProgressBar');
+                    const resetEl = document.getElementById('entResetAt');
+                    if (usedEl) usedEl.innerText = `${{usedVal.toFixed(2)}} Cr (${{usedPct.toFixed(1)}}%)`;
+                    if (remEl) remEl.innerText = `${{remVal.toFixed(2)}} Cr (${{remPct.toFixed(1)}}%)`;
+                    if (limEl) limEl.innerText = `${{limitVal.toFixed(2)}} Cr`;
+                    if (barEl) barEl.style.width = `${{Math.min(100, Math.max(0, usedPct))}}%`;
+                    if (resetEl && eb.reset_at) {{
+                        const d = new Date(eb.reset_at * 1000);
+                        resetEl.innerText = `${{d.getFullYear()}}-${{String(d.getMonth()+1).padStart(2,'0')}}-${{String(d.getDate()).padStart(2,'0')}}`;
+                    }}
+                }}
                 const currentMonth = document.getElementById('monthSelect').value;
                 const currentSession = document.getElementById('sessionSelect').value;
                 renderDashboard(currentMonth, currentSession);
@@ -960,7 +1063,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         sys.exit(1)
 
     usage_pattern = re.compile(
-        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE\] (?P<decision>[^\s]+) \((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
     )
     decision_pattern = re.compile(
         r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
@@ -1016,12 +1119,15 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                     except ValueError:
                         pass
                 
-                decision = u_match.group("decision")
+                decision_str = u_match.group("decision_opt") or u_match.group("decision_legacy") or "UNKNOWN"
                 model = u_match.group("model")
                 in_tok = int(u_match.group("in_tok"))
                 out_tok = int(u_match.group("out_tok"))
                 loc_val = int(u_match.group("loc")) if u_match.group("loc") else 0
                 cost = float(u_match.group("cost"))
+                real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
+                balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
+                credits_val = real_credit_val if real_credit_val is not None else (cost / 0.20)
 
                 # 가장 최근의 DECISION 프롬프트 연동
                 associated_prompt = ""
@@ -1042,14 +1148,17 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                     "date": date_key,
                     "month": month_key,
                     "session_id": sid_str,
-                    "decision": decision,
+                    "decision": decision_str,
                     "model": model,
                     "prompt": associated_prompt,
                     "input_tokens": in_tok,
                     "output_tokens": out_tok,
                     "total_tokens": in_tok + out_tok,
                     "loc": loc_val,
-                    "cost": cost
+                    "cost": cost,
+                    "real_credit": real_credit_val,
+                    "balance": balance_val,
+                    "credits": credits_val
                 }
 
                 all_raw_records.append(item)
@@ -1080,13 +1189,13 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     total_tokens = total_in + total_out
     total_loc = sum(r["loc"] for r in records)
     total_cost = sum(r["cost"] for r in records)
-    total_credits = total_cost / 0.20
+    total_credits = sum(r.get("credits", r["cost"] / 0.20) for r in records)
 
-    decision_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
-    daily_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
-    monthly_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
-    session_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0})
-    prompt_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "cost": 0.0, "prompt": "", "decision": "", "session_id": ""})
+    decision_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0, "credits": 0.0})
+    daily_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0, "credits": 0.0})
+    monthly_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0, "credits": 0.0})
+    session_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0, "credits": 0.0})
+    prompt_stats = defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "cost": 0.0, "credits": 0.0, "prompt": "", "decision": "", "session_id": ""})
 
     for r in records:
         d = r["decision"]
@@ -1095,31 +1204,41 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         s_key = r["session_id"]
         p_key = r["prompt"] if r["prompt"] else "(서브 스텝 / 연속 릴레이)"
         
+        c_val = r.get("credits", r["cost"] / 0.20)
+
         decision_stats[d]["count"] += 1
         decision_stats[d]["in_tok"] += r["input_tokens"]
         decision_stats[d]["out_tok"] += r["output_tokens"]
         decision_stats[d]["loc"] += r["loc"]
         decision_stats[d]["cost"] += r["cost"]
+        decision_stats[d]["credits"] += c_val
 
         daily_stats[dt_key]["count"] += 1
         daily_stats[dt_key]["in_tok"] += r["input_tokens"]
         daily_stats[dt_key]["out_tok"] += r["output_tokens"]
         daily_stats[dt_key]["loc"] += r["loc"]
         daily_stats[dt_key]["cost"] += r["cost"]
+        daily_stats[dt_key]["credits"] += c_val
 
         monthly_stats[m_key]["count"] += 1
         monthly_stats[m_key]["in_tok"] += r["input_tokens"]
         monthly_stats[m_key]["out_tok"] += r["output_tokens"]
         monthly_stats[m_key]["loc"] += r["loc"]
         monthly_stats[m_key]["cost"] += r["cost"]
+        monthly_stats[m_key]["credits"] += c_val
 
         session_stats[s_key]["count"] += 1
         session_stats[s_key]["in_tok"] += r["input_tokens"]
         session_stats[s_key]["out_tok"] += r["output_tokens"]
         session_stats[s_key]["loc"] += r["loc"]
         session_stats[s_key]["cost"] += r["cost"]
+        session_stats[s_key]["credits"] += c_val
 
+        prompt_stats[p_key]["count"] += 1
+        prompt_stats[p_key]["in_tok"] += r["input_tokens"]
+        prompt_stats[p_key]["out_tok"] += r["output_tokens"]
         prompt_stats[p_key]["cost"] += r["cost"]
+        prompt_stats[p_key]["credits"] += c_val
         prompt_stats[p_key]["prompt"] = p_key
         prompt_stats[p_key]["decision"] = d
         prompt_stats[p_key]["session_id"] = s_key
@@ -1144,21 +1263,21 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     print(f"{'Decision 등급':<18} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12} | {'예상 크레딧 (Credits)':<20}")
     print("-" * 105)
     for dec, s in sorted(decision_stats.items(), key=lambda x: x[1]["cost"], reverse=True):
-        credits = s['cost'] / 0.20
+        credits = s.get('credits', s['cost'] / 0.20)
         print(f"{dec:<18} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
 
     print("\n[2] 🗓️  일자(Daily)별 소모 요약")
     print(f"{'날짜':<12} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12} | {'예상 크레딧 (Credits)':<20}")
     print("-" * 95)
     for date_str, s in sorted(daily_stats.items()):
-        credits = s['cost'] / 0.20
+        credits = s.get('credits', s['cost'] / 0.20)
         print(f"{date_str:<12} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
 
     print("\n[3] 🗓️  월별(Monthly) 소모 요약")
     print(f"{'년-월':<12} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12} | {'예상 크레딧 (Credits)':<20}")
     print("-" * 95)
     for month_str, s in sorted(monthly_stats.items()):
-        credits = s['cost'] / 0.20
+        credits = s.get('credits', s['cost'] / 0.20)
         print(f"{month_str:<12} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
 
     print("\n[4] 🔀 세션(Session ID)별 소모 요약 (Top 10)")
@@ -1166,7 +1285,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     print("-" * 95)
     top_sessions = sorted(session_stats.items(), key=lambda x: x[1]["cost"], reverse=True)[:10]
     for sid, s in top_sessions:
-        credits = s['cost'] / 0.20
+        credits = s.get('credits', s['cost'] / 0.20)
         tok_total = s['in_tok'] + s['out_tok']
         print(f"{sid:<38} | {s['count']:<8,} | {tok_total:<12,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
 
@@ -1175,7 +1294,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     print("-" * 95)
     top_p = sorted(prompt_stats.values(), key=lambda x: x["cost"], reverse=True)[:5]
     for idx, p in enumerate(top_p, 1):
-        c_val = p["cost"] / 0.20
+        c_val = p.get("credits", p["cost"] / 0.20)
         t_val = p["in_tok"] + p["out_tok"]
         p_short = p["prompt"][:45] + "..." if len(p["prompt"]) > 45 else p["prompt"]
         print(f"{idx:<4} | {c_val:.2f} Credits   | {t_val:<10,} | {p['decision']:<14} | {p_short}")
@@ -1189,4 +1308,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
 
 if __name__ == "__main__":
     args = parse_args()
-    analyze(args.log_file, target_date=args.date, target_month=args.month, target_session=args.session, generate_html=args.html, open_browser=not args.no_open)
+    if args.balance:
+        show_enterprise_balance()
+    else:
+        analyze(args.log_file, target_date=args.date, target_month=args.month, target_session=args.session, generate_html=args.html, open_browser=not args.no_open)

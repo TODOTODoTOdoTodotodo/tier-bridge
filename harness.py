@@ -184,14 +184,14 @@ async def switch_model_version(request: Request):
 
 @app.get("/v1/dashboard/stats")
 async def get_dashboard_stats():
-    """ 대시보드 3초 라이브 자동 갱신(Live Auto-Sync)용 최신 집계 수치 및 힐링 데이터 반환 """
+    """ 대시보드 3초 라이브 자동 갱신(Live Auto-Sync)용 최신 집계 수치, 엔터프라이즈 실시간 잔여량 및 힐링 데이터 반환 """
     log_file = "harness.log"
     records = []
     prompt_history = []
     
     if os.path.exists(log_file):
         usage_pattern = re.compile(
-            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE\] (?P<decision>[^\s]+) \((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
         )
         decision_pattern = re.compile(
             r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
@@ -233,10 +233,14 @@ async def get_dashboard_stats():
                             month_key = dt.strftime("%Y-%m")
                         except ValueError:
                             pass
+                    decision_str = u_match.group("decision_opt") or u_match.group("decision_legacy") or "UNKNOWN"
                     in_tok = int(u_match.group("in_tok"))
                     out_tok = int(u_match.group("out_tok"))
                     loc_val = int(u_match.group("loc")) if u_match.group("loc") else 0
                     cost = float(u_match.group("cost"))
+                    real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
+                    balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
+                    
                     associated_prompt = prompt_history[-1]["prompt"] if prompt_history else ""
                     if prompt_history and sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
                         sid_str = prompt_history[-1]["sid"]
@@ -252,20 +256,29 @@ async def get_dashboard_stats():
                         "date": date_key,
                         "month": month_key,
                         "session_id": sid_str,
-                        "decision": u_match.group("decision"),
+                        "decision": decision_str,
                         "model": u_match.group("model"),
                         "prompt": associated_prompt,
                         "input_tokens": in_tok,
                         "output_tokens": out_tok,
                         "total_tokens": in_tok + out_tok,
                         "loc": loc_val,
-                        "cost": cost
+                        "cost": cost,
+                        "real_credit": real_credit_val,
+                        "balance": balance_val
                     })
+
+    try:
+        from src.tierbridge.credit_interceptor import interceptor
+        ent_balance = await interceptor.fetch_enterprise_usage()
+    except Exception:
+        ent_balance = None
 
     return {
         "records": records,
         "healing_status": HealingEngine.get_healing_status(),
-        "healing_history": list(reversed(healing_history))
+        "healing_history": list(reversed(healing_history)),
+        "enterprise_balance": ent_balance
     }
 
 # ==========================================
@@ -491,11 +504,11 @@ async def route_harness(request: Request):
                                 yield transpiled_chunk
                             
                     # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적 (Zero-Drop guarantee)
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id)
+                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
                 except Exception as e:
                     print(f"[Error] Stream routing exception: {e}")
                     # 스트림 에러 예외 발생 시에도 턴 추적 누락을 방지하기 위해 폴백 추적 실행
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id)
+                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
                     err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
                     yield f"data: {err_msg}\n\n".encode("utf-8")
 
@@ -514,7 +527,7 @@ async def route_harness(request: Request):
                 if not in_tok and not out_tok:
                     in_tok = max(100, int(len(raw_prompt_text) * 0.35))
                     out_tok = 150
-                global_tracker.track_request(target_model, decision, in_tok, out_tok, session_id=session_id)
+                global_tracker.track_request(target_model, decision, in_tok, out_tok, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
             return res
         except Exception as e:
             return PlainTextResponse(f"Proxy connection failed: {e}", status_code=500)

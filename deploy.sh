@@ -117,6 +117,7 @@ setup_alias() {
             echo "alias tierbridge=\"source \$HOME/.tierbridge/live/run_harness.sh\"" >> "$shell_rc"
             echo "alias tierbridge-log=\"tail -f \$HOME/.tierbridge/live/harness.log\"" >> "$shell_rc"
             echo "alias tierbridge-dash=\"PYTHONPATH=\\\$HOME/.tierbridge/live/src:\\\$HOME/.tierbridge/live:\\\$PYTHONPATH \\\$HOME/.tierbridge/live/.venv/bin/python \\\$HOME/.tierbridge/live/analyze_usage.py \\\$HOME/.tierbridge/live/harness.log --html\"" >> "$shell_rc"
+            echo "alias tierbridge-credit=\"PYTHONPATH=\\\$HOME/.tierbridge/live/src:\\\$HOME/.tierbridge/live:\\\$PYTHONPATH \\\$HOME/.tierbridge/live/.venv/bin/python \\\$HOME/.tierbridge/live/analyze_usage.py --balance\"" >> "$shell_rc"
             echo "🔗 Shell Alias 가 $shell_rc 에 자동 등록되었습니다."
         fi
     fi
