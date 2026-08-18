@@ -6,7 +6,7 @@
 
 ## 1. 작업 개요 및 목적 (Objectives)
 
-- **목적**: `sub-memory-bootstrap`과의 시너지 효과를 정량적으로 시각화하여 "장기 기억 회수를 통해 복잡한 질문이 저비용 `LUNA` 라우팅으로 다운스케일되어 실제 아낀 크레딧(Cr)" 수치를 실시간 리포팅.
+- **목적**: `sub-memory-bootstrap`과의 시너지 효과를 정량적으로 시각화하여 "장기 기억 회수를 통해 복잡한 질문이 저비용 `BRONZE` / `SILVER` 라우팅으로 다운스케일되어 실제 아낀 크레딧(Cr)" 수치를 실시간 리포팅.
 - **통합 분석 지표 (Synergy Metrics)**:
   1. **Memory Recall Hits**: 세션별 연관 기억 회수 누적 횟수
   2. **Memory-driven Cost Savings**: 기억 주입으로 난이도가 강하되어 아낀 크레딧 (Cr) 및 USD ($)
@@ -18,7 +18,7 @@
 ```
 [harness.log]                    [.sub-memory/metrics.jsonl]
  ├─ timestamp, session_id         ├─ timestamp, session_id
- ├─ decision (LUNA/TERRA)         ├─ recall_size, memory_contribution
+ ├─ decision (BRONZE/GOLD/etc)    ├─ recall_size, memory_contribution
  └─ cost_usd                      └─ mcp_tool_name
        │                                 │
        └──────────────┬──────────────────┘

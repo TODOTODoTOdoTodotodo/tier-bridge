@@ -48,7 +48,7 @@ class MemoryReinforcer:
     @classmethod
     def compute_reinforce_weight(cls, cost_usd: float, decision: str) -> float:
         base_weight = 1.0
-        if "SOL" in decision or "HIGH" in decision:
+        if "CHALLENGER" in decision or "DIAMOND" in decision or "PLATINUM" in decision:
             base_weight = 2.0
         
         weight = base_weight * (1.0 + (cost_usd / 0.10))
@@ -56,7 +56,7 @@ class MemoryReinforcer:
 
     @classmethod
     async def trigger_reinforcement(cls, session_id: str, prompt: str, cost_usd: float, decision: str):
-        if cost_usd < cls.COST_THRESHOLD_USD and "SOL" not in decision:
+        if cost_usd < cls.COST_THRESHOLD_USD and "CHALLENGER" not in decision:
             return
 
         weight = cls.compute_reinforce_weight(cost_usd, decision)

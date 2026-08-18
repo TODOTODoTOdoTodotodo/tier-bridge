@@ -78,28 +78,35 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 
 ```json
 {
-  "active_version": "v1.1.0",
+  "active_version": "v1.0.0",
+  "latest_version_id": "v1.0.0",
   "versions": {
     "v1.0.0": {
-      "name": "Standard 3-Tier v1.0",
+      "version_id": "v1.0.0",
+      "name": "Standard Baseline v1.0.0 (GPT-5.6 Lineup)",
       "updated_at": "2026-07-31T00:00:00",
+      "description": "초기 기본 표준 모델 게이밍 랭크 스냅샷",
       "mapping": {
-        "BRONZE": {"model": "gpt-5.6-luna", "effort": "low"},
-        "SILVER": {"model": "gpt-5.6-luna", "effort": "medium"},
-        "GOLD": {"model": "gpt-5.6-terra", "effort": "medium"},
-        "PLATINUM": {"model": "gpt-5.6-terra", "effort": "high"},
-        "CHALLENGER": {"model": "gpt-5.6-sol", "effort": "xhigh"}
+        "BRONZE": {"model": "gpt-5.6-luna", "effort": "low", "input_price": 1.0, "output_price": 3.0},
+        "SILVER": {"model": "gpt-5.6-luna", "effort": "medium", "input_price": 1.0, "output_price": 3.0},
+        "GOLD": {"model": "gpt-5.6-terra", "effort": "medium", "input_price": 2.5, "output_price": 10.0},
+        "PLATINUM": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.5, "output_price": 10.0},
+        "DIAMOND": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.5, "output_price": 10.0},
+        "CHALLENGER": {"model": "gpt-5.6-sol", "effort": "xhigh", "input_price": 5.0, "output_price": 20.0}
       }
     },
-    "v1.1.0": {
-      "name": "Healing Update: LUNA-v2 Cost Reduction",
-      "updated_at": "2026-08-13T14:00:00",
+    "v1.1.0-healing-hotpatch": {
+      "version_id": "v1.1.0-healing-hotpatch",
+      "name": "Healing Hotpatch Release v1.1.0",
+      "updated_at": "2026-08-14T14:00:00",
+      "description": "신규 저비용/고출력 모델 핫패치 릴리즈 스냅샷",
       "mapping": {
-        "BRONZE": {"model": "gpt-5.6-luna-v2", "effort": "low"},
-        "SILVER": {"model": "gpt-5.6-luna-v2", "effort": "medium"},
-        "GOLD": {"model": "gpt-5.6-terra", "effort": "medium"},
-        "PLATINUM": {"model": "gpt-5.6-terra", "effort": "high"},
-        "CHALLENGER": {"model": "gpt-5.6-sol", "effort": "xhigh"}
+        "BRONZE": {"model": "gpt-5.6-luna", "effort": "low", "input_price": 1.0, "output_price": 3.0},
+        "SILVER": {"model": "gpt-5.6-luna", "effort": "medium", "input_price": 1.0, "output_price": 3.0},
+        "GOLD": {"model": "gpt-5.6-terra", "effort": "medium", "input_price": 2.5, "output_price": 10.0},
+        "PLATINUM": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.5, "output_price": 10.0},
+        "DIAMOND": {"model": "gpt-5.6-terra", "effort": "high", "input_price": 2.5, "output_price": 10.0},
+        "CHALLENGER": {"model": "gpt-5.6-sol", "effort": "xhigh", "input_price": 5.0, "output_price": 20.0}
       }
     }
   }
@@ -113,6 +120,8 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 1. `GET /v1/models/healing-status`:
    - 현재 활성화된 모델 버전, 신규 업데이트 가능 버전 및 단가 비교표 반환.
 2. `POST /v1/models/heal`:
-   - 탐지된 신규 모델 매핑으로 핫패치 업데이트 수행 및 신규 버전 스냅샷 생성.
+   - 탐지된 신규 모델 매핑으로 핫패치 업데이트 수행 및 신규 버전(`v1.1.0-healing-hotpatch`) 스냅샷 생성.
 3. `POST /v1/models/version/switch`:
-   - 지정한 과거 버전 ID(e.g., `v1.0.0`)로 라우터 매핑 즉시 롤백/복원.
+   - 지정한 과거 버전 ID(e.g., `v1.0.0`, `latest`)로 라우터 매핑 즉시 롤백/복원.
+4. `GET /v1/dashboard/stats`:
+   - 3초 주기 대시보드 라이브 오토싱크(Live Auto-Sync)용 토큰/비용/크레딧 통계, 월/세션 옵션 및 힐링 이력 반환.

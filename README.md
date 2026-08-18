@@ -51,10 +51,11 @@
 │                                                         │
 │ * Inspects incoming request 'model':                    │
 │   - '--model super' / 'gpt-5.6-sol' / '4tier'           │
-│     ➔ Activates 4-Tier Sol Router (LUNA ➔ TERRA ➔ SOL)  │
+│     ➔ Activates 4-Tier Sol Router (BRONZE ➔ CHALLENGER) │
 │   - Default ('gpt-5.4', 'gpt-5.6-terra', etc.)         │
-│     ➔ Activates Standard 3-Tier Router (LUNA ➔ TERRA)   │
+│     ➔ Activates Standard 3-Tier Router (BRONZE ➔ DIAMOND)│
 │ * Classifies query via gpt-5.6-luna (low effort).       │
+│ * Logs dedicated [USAGE] CLASSIFIER credit tracking.    │
 │ * Swaps target model & reasoning_effort dynamically.    │
 │ * Injects Authorization: Bearer <access_token> header.  │
 └──────────────────────────┬──────────────────────────────┘
@@ -213,7 +214,7 @@ TierBridge 하네스 및 연동 엔진에서 사용하는 전체 환경변수 �
 
 * **세션 ID 동적 선택 드롭다운 UI & 세션 전용 랭킹 검색**: 대시보드 상단 세션 선택기(`sess_...`) 또는 검색창에 세션 ID 키워드를 입력하면, 해당 세션 내에서의 1, 2, 3위 **전용 랭크(Session-local Rank)**와 턴 기록이 즉시 필터링됩니다.
 * **무제한 더보기 (Load More)**: 기본 Top 15개 턴이 노출되며, 하단 **`[ 🔽 더보기 ]`** 버튼을 눌러 15개 단위(16~30위...)로 전체 프롬프트를 확장하여 이어서 조회할 수 있습니다.
-* **KPI Metric Cards**: Total Credits (1 Credit = $0.20 USD), Estimated Value ($), Total Tokens, Unique Sessions, LUNA Auto-scaling Savings ($ / Credits).
+* **KPI Metric Cards**: Total Credits (1 Credit = $0.20 USD), Estimated Value ($), Total Tokens, Unique Sessions, Classifier vs Main Model Credit Breakdown, Auto-scaling Savings ($ / Credits).
 * **Top Credit Consuming Prompts**: 가장 많은 크레딧을 소모한 프롬프트/릴레이 턴 TOP 15 목록 및 등급 배치 인사이트.
 
 ---

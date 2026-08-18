@@ -21,7 +21,8 @@
 ## 2. 배포 및 구동 스크립트 스펙
 
 1. **`deploy.sh` (원클릭 배포 스크립트)**:
-   - 개발 레포의 소스를 `$HOME/.tierbridge/live`로 동기화.
+   - 개발 레포의 소스를 `$HOME/.tierbridge/live`로 동기화 (`config/model_versions.json`은 `--exclude` 보호).
+   - 라이브 런타임 설정이 없는 경우에만 초기 복사하며, 활성 버전(Active Version)은 영구 보존.
    - 파이썬 가상환경 패키지 자동 체크 및 설치.
    - 기존 Port 18080 프록시 프로세스를 안전 종료 후 배포본에서 무중단/1초 재가동.
 2. **`run_harness.sh` (환경변수 주입 및 프록시 시드 스크립트)**:
@@ -44,6 +45,7 @@ TierBridge 시스템 및 연동 모듈에서 사용하는 전체 환경변수 �
 | **`ENTERPRISE_API_URL`** | `https://chatgpt.com/backend-api/codex/responses` | 업스트림 OpenAI Enterprise 백엔드 API 엔드포인트 |
 | **`HARNESS_PORT`** | `18080` | 하네스 프록시가 바인딩하여 수신하는 로컬 포트 |
 | **`AUTH_FILE_PATH`** | `~/.codex/auth.json` | 엔터프라이즈 JWT 인증 토큰 자동 파싱 경로 |
+| **`MODEL_VERSIONS_CONFIG_PATH`** | `~/.tierbridge/live/config/model_versions.json` (우선) | 모델 버전 스냅샷 및 핫패치 설정 파일 경로 |
 | **`SQLITE_VEC_PATH`** | `""` (자동 탐색) | `sub-memory-bootstrap` 벡터 확장 모듈 경로 |
 | **`METRICS_LOG_PATH`** | `.sub-memory/metrics.jsonl` | 기억 회수 기여도 및 메트릭 수집 경로 |
 | **`METRICS_RETENTION_DAYS`** | `30` | 메트릭 로그 보관 일수 |
