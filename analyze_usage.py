@@ -149,6 +149,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     client_records = []
     for r in all_raw_records:
         client_records.append({
+            "timestamp": r.get("timestamp") or (r["datetime"].strftime("%Y-%m-%d %H:%M:%S") if r.get("datetime") else "N/A"),
             "date": r["date"],
             "month": r["month"],
             "session_id": r["session_id"],
@@ -218,6 +219,20 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <select id="sessionSelect" onchange="onFilterChange()" 
                         class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer max-w-[180px] truncate">
                     {session_options_html}
+                </select>
+            </div>
+
+            <!-- Dynamic Time Interval Selector (Visible when specific session is selected) -->
+            <div id="timeIntervalWrapper" class="hidden flex items-center gap-2 bg-slate-800/90 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg transition-all">
+                <i class="fa-solid fa-clock-rotate-left text-emerald-400 text-sm"></i>
+                <span class="text-xs font-semibold text-slate-300">시간 범위:</span>
+                <select id="timeIntervalSelect" onchange="onFilterChange()" 
+                        class="bg-slate-900 text-emerald-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-emerald-400 cursor-pointer">
+                    <option value="ALL_TURNS" selected>턴별 타임라인 (Turn-by-Turn)</option>
+                    <option value="1MIN">1분 단위 집계 (1-Min Window)</option>
+                    <option value="5MIN">5분 단위 집계 (5-Min Window)</option>
+                    <option value="10MIN">10분 단위 집계 (10-Min Window)</option>
+                    <option value="1HOUR">1시간 단위 집계 (Hourly Window)</option>
                 </select>
             </div>
 
@@ -341,10 +356,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         <!-- Card 5: Savings -->
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden border-emerald-500/30 bg-emerald-950/20">
-            <div class="text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-2">LUNA Auto-scaling Savings</div>
+            <div class="flex items-center justify-between mb-2">
+                <div class="text-xs font-semibold uppercase tracking-wider text-emerald-400">다운스케일링 누적 절감액</div>
+                <button onclick="openSavingsInfoModal()" class="text-emerald-400/80 hover:text-emerald-200 transition-colors p-1 rounded-lg hover:bg-emerald-500/20 flex items-center justify-center cursor-pointer" title="절감액 산출 기준 및 수식 안내">
+                    <i class="fa-solid fa-circle-info text-sm"></i>
+                </button>
+            </div>
             <div class="text-3xl font-extrabold text-emerald-300 font-mono mb-1" id="kpiSavingsUsd">$0.00</div>
             <div class="text-xs text-emerald-400/80" id="kpiSavingsCredits">약 0.0 Cr 크레딧 아낌</div>
-            <div class="absolute -right-3 -bottom-3 text-emerald-400/10 text-6xl"><i class="fa-solid fa-shield-halved"></i></div>
+            <div class="absolute -right-3 -bottom-3 text-emerald-400/10 text-6xl pointer-events-none"><i class="fa-solid fa-shield-halved"></i></div>
         </div>
     </div>
 
@@ -353,10 +373,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         <!-- Daily Trend Line Chart -->
         <div class="lg:col-span-2 glass-card p-6 rounded-2xl">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold text-slate-200 flex items-center gap-2">
-                    <i class="fa-solid fa-chart-area text-sky-400"></i> 선택 기간 일자별 추이 (Daily Trend)
+                <h2 id="timelineChartTitle" class="text-base font-semibold text-slate-200 flex items-center gap-2">
+                    <i id="timelineChartIcon" class="fa-solid fa-chart-area text-sky-400"></i> <span id="timelineChartTitleText">선택 기간 일자별 추이 (Daily Trend)</span>
                 </h2>
-                <span class="text-xs text-slate-400">Kibana Live Timeline</span>
+                <span id="timelineChartSubText" class="text-xs text-slate-400">Kibana Live Timeline</span>
             </div>
             <div class="h-64">
                 <canvas id="dailyTrendChart"></canvas>
@@ -504,6 +524,70 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
     </div>
 
+    <!-- Downscaling Savings Info Modal -->
+    <div id="savingsInfoModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-card max-w-2xl w-full p-6 rounded-3xl border border-emerald-500/40 shadow-2xl relative bg-slate-900/95">
+            <button onclick="closeSavingsInfoModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            
+            <div class="flex items-center gap-3 mb-5">
+                <span class="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-2xl text-xl">
+                    <i class="fa-solid fa-calculator"></i>
+                </span>
+                <div>
+                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                        다운스케일링 누적 절감액 산출 기준 및 수식
+                    </h2>
+                    <p class="text-xs text-slate-400">하네스 스마트 라우팅을 통한 실질적 크레딧 방어 성과 (ROI)</p>
+                </div>
+            </div>
+
+            <div class="space-y-4 text-xs text-slate-300 mb-6">
+                <div class="p-4 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-2">
+                    <div class="font-bold text-emerald-400 text-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-bullseye"></i> 비교 모델 기준 (Baseline vs Optimized)
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                        <div class="p-3 bg-slate-900/90 rounded-xl border border-rose-500/30">
+                            <span class="text-rose-400 font-bold">📌 기준 기본 모델 (Baseline)</span>
+                            <p class="text-slate-400 mt-1 font-mono text-[11px]">gpt-5.6-terra:medium</p>
+                            <p class="text-slate-400 mt-0.5 text-[11px] leading-relaxed">하네스 미적용 시 모든 단순 작업 및 툴 루프까지 100% 투입되는 고비용 모델 (평균 턴당 ~$0.12 소모)</p>
+                        </div>
+                        <div class="p-3 bg-slate-900/90 rounded-xl border border-emerald-500/30">
+                            <span class="text-emerald-400 font-bold">🛡️ 최적화 다운스케일 (Optimized)</span>
+                            <p class="text-slate-300 mt-1 font-mono text-[11px]">gpt-5.6-luna (BRONZE / SILVER)</p>
+                            <p class="text-slate-400 mt-0.5 text-[11px] leading-relaxed">난이도 분류기가 단순 작업(오타, 파일 조회, 사소한 수정)을 감지하여 초경량 모델로 자동 전환</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-2">
+                    <div class="font-bold text-sky-400 text-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-square-root-variable"></i> 정량적 산출 공식 (Mathematical Formula)
+                    </div>
+                    <div class="p-3 bg-slate-950 font-mono text-emerald-300 rounded-xl border border-slate-700 text-[11px] leading-relaxed space-y-1">
+                        <div>1. 가상 소모 비용 (하네스 미적용 시) = N(다운스케일 턴 수) × $0.12 (TERRA 평균 턴 비용)</div>
+                        <div>2. 실제 소모 비용 (하네스 적용 시)   = ∑(경량 모델 턴 실소모 비용)</div>
+                        <div>3. 순수 절감액 (Saved USD)          = 가상 소모 비용 - 실제 소모 비용</div>
+                        <div>4. 아낀 크레딧 (Saved Credits)      = 순수 절감액 / $0.20 (1 Credit = $0.20 USD)</div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-indigo-950/30 rounded-xl border border-indigo-500/30 text-[11px] text-indigo-300 flex items-start gap-2">
+                    <i class="fa-solid fa-lightbulb text-indigo-400 mt-0.5"></i>
+                    <span>에이전트는 대화가 길어질수록 5~10만 토큰의 컨텍스트를 매 턴마다 반복 전송합니다. 후반 단순 작업 스텝을 경량 모델로 다운스케일링함으로써 회사 월간 크레딧 한도를 안전하게 방어합니다.</span>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-3 border-t border-slate-800">
+                <button onclick="closeSavingsInfoModal()" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl shadow-lg transition-all">
+                    확인 완료
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Footer -->
     <footer class="text-center text-xs text-slate-500 py-4 border-t border-slate-800/60">
         TierBridge Analytics Core • Powered by LLM Routing Harness Proxy • Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -646,6 +730,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             document.getElementById('healingModal').classList.add('hidden');
         }}
 
+        function openSavingsInfoModal() {{
+            document.getElementById('savingsInfoModal').classList.remove('hidden');
+        }}
+
+        function closeSavingsInfoModal() {{
+            document.getElementById('savingsInfoModal').classList.add('hidden');
+        }}
+
         async function applyHealingPatch() {{
             let res = null;
             try {{
@@ -768,31 +860,126 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             document.getElementById('kpiSavingsUsd').innerText = '$' + savedUsd.toFixed(2);
             document.getElementById('kpiSavingsCredits').innerText = '약 ' + savedCredits.toFixed(1) + ' Cr 크레딧 아낌';
 
-            const dailyMap = {{}};
-            filteredRecords.forEach(r => {{
-                if (!dailyMap[r.date]) dailyMap[r.date] = {{ cost: 0, tokens: 0 }};
-                dailyMap[r.date].cost += r.cost;
-                dailyMap[r.date].tokens += r.total_tokens;
-            }});
+            // 세션 선택 여부에 따른 시간 범위(인터벌) 필터 표시 제어 및 차트 데이터 그룹화
+            const timeIntervalWrapper = document.getElementById('timeIntervalWrapper');
+            const timeIntervalSelect = document.getElementById('timeIntervalSelect');
+            const isSessionSelected = targetSession && targetSession !== 'ALL';
+            
+            let chartLabels = [];
+            let chartCreditsData = [];
+            let chartTokensData = [];
+            let chartTurnMeta = [];
 
-            const sortedDates = Object.keys(dailyMap).sort();
-            const dailyCreditsData = sortedDates.map(d => (dailyMap[d].cost / 0.20).toFixed(2));
-            const dailyTokensData = sortedDates.map(d => dailyMap[d].tokens);
+            if (isSessionSelected) {{
+                if (timeIntervalWrapper) timeIntervalWrapper.classList.remove('hidden');
+                const interval = timeIntervalSelect ? timeIntervalSelect.value : 'ALL_TURNS';
+                
+                const titleTextEl = document.getElementById('timelineChartTitleText');
+                const subTextEl = document.getElementById('timelineChartSubText');
+                const iconEl = document.getElementById('timelineChartIcon');
+                if (titleTextEl) titleTextEl.innerText = '세션 시간대별 소모 추이 (Session Timeline Trend)';
+                if (subTextEl) subTextEl.innerText = `세션 ID: ${{targetSession.length > 18 ? targetSession.substring(0, 18) + '...' : targetSession}} (${{filteredRecords.length}} 턴)`;
+                if (iconEl) iconEl.className = 'fa-solid fa-clock-rotate-left text-emerald-400';
+
+                // 세션 내 시간순 정렬
+                const sessionRecords = [...filteredRecords].sort((a, b) => {{
+                    const tA = a.timestamp || a.date || '';
+                    const tB = b.timestamp || b.date || '';
+                    return tA.localeCompare(tB);
+                }});
+
+                if (interval === 'ALL_TURNS') {{
+                    // 개별 턴별 (Turn-by-Turn) 타임라인
+                    sessionRecords.forEach((r, idx) => {{
+                        const timeStr = (r.timestamp && r.timestamp.length >= 19) ? r.timestamp.substring(11, 19) : (r.date || `T${{idx+1}}`);
+                        chartLabels.push(`T${{idx+1}} [${{timeStr}}]`);
+                        chartCreditsData.push((r.cost / 0.20).toFixed(2));
+                        chartTokensData.push(r.total_tokens);
+                        chartTurnMeta.push({{
+                            turn: idx + 1,
+                            time: r.timestamp || 'N/A',
+                            decision: r.decision,
+                            model: r.model || 'N/A',
+                            prompt: r.prompt || '(연속 서브스텝 / 툴 액션)',
+                            tokens: r.total_tokens,
+                            credits: (r.cost / 0.20).toFixed(2)
+                        }});
+                    }});
+                }} else {{
+                    // 시간 단위 슬롯 집계 (1MIN / 5MIN / 10MIN / 1HOUR)
+                    let slotMinutes = 5;
+                    if (interval === '1MIN') slotMinutes = 1;
+                    else if (interval === '5MIN') slotMinutes = 5;
+                    else if (interval === '10MIN') slotMinutes = 10;
+                    else if (interval === '1HOUR') slotMinutes = 60;
+
+                    const timeSlotMap = {{}};
+                    sessionRecords.forEach(r => {{
+                        let slotKey = r.date || 'Unknown';
+                        if (r.timestamp && r.timestamp.length >= 19) {{
+                            const hh = parseInt(r.timestamp.substring(11, 13), 10);
+                            const mm = parseInt(r.timestamp.substring(14, 16), 10);
+                            if (slotMinutes === 60) {{
+                                slotKey = `${{String(hh).padStart(2, '0')}}:00`;
+                            }} else {{
+                                const flooredMm = Math.floor(mm / slotMinutes) * slotMinutes;
+                                slotKey = `${{String(hh).padStart(2, '0')}}:${{String(flooredMm).padStart(2, '0')}}`;
+                            }}
+                        }}
+                        if (!timeSlotMap[slotKey]) {{
+                            timeSlotMap[slotKey] = {{ cost: 0, tokens: 0, count: 0 }};
+                        }}
+                        timeSlotMap[slotKey].cost += r.cost;
+                        timeSlotMap[slotKey].tokens += r.total_tokens;
+                        timeSlotMap[slotKey].count += 1;
+                    }});
+
+                    const sortedSlots = Object.keys(timeSlotMap).sort();
+                    sortedSlots.forEach(slot => {{
+                        chartLabels.push(`${{slot}} (${{timeSlotMap[slot].count}}턴)`);
+                        chartCreditsData.push((timeSlotMap[slot].cost / 0.20).toFixed(2));
+                        chartTokensData.push(timeSlotMap[slot].tokens);
+                        chartTurnMeta.push({{
+                            slot: slot,
+                            count: timeSlotMap[slot].count
+                        }});
+                    }});
+                }}
+            }} else {{
+                if (timeIntervalWrapper) timeIntervalWrapper.classList.add('hidden');
+                const titleTextEl = document.getElementById('timelineChartTitleText');
+                const subTextEl = document.getElementById('timelineChartSubText');
+                const iconEl = document.getElementById('timelineChartIcon');
+                if (titleTextEl) titleTextEl.innerText = '선택 기간 일자별 추이 (Daily Trend)';
+                if (subTextEl) subTextEl.innerText = 'Kibana Live Timeline';
+                if (iconEl) iconEl.className = 'fa-solid fa-chart-area text-sky-400';
+
+                const dailyMap = {{}};
+                filteredRecords.forEach(r => {{
+                    if (!dailyMap[r.date]) dailyMap[r.date] = {{ cost: 0, tokens: 0 }};
+                    dailyMap[r.date].cost += r.cost;
+                    dailyMap[r.date].tokens += r.total_tokens;
+                }});
+
+                chartLabels = Object.keys(dailyMap).sort();
+                chartCreditsData = chartLabels.map(d => (dailyMap[d].cost / 0.20).toFixed(2));
+                chartTokensData = chartLabels.map(d => dailyMap[d].tokens);
+            }}
 
             if (dailyChart) {{
-                dailyChart.data.labels = sortedDates;
-                dailyChart.data.datasets[0].data = dailyCreditsData;
-                dailyChart.data.datasets[1].data = dailyTokensData;
+                dailyChart.data.labels = chartLabels;
+                dailyChart.data.datasets[0].data = chartCreditsData;
+                dailyChart.data.datasets[1].data = chartTokensData;
                 dailyChart.update();
             }} else {{
                 dailyChart = new Chart(document.getElementById('dailyTrendChart'), {{
                     type: 'line',
                     data: {{
-                        labels: sortedDates,
+                        labels: chartLabels,
                         datasets: [
                             {{
                                 label: 'Consumed Credits (Cr)',
-                                data: dailyCreditsData,
+                                data: chartCreditsData,
                                 borderColor: '#34d399',
                                 backgroundColor: 'rgba(52, 211, 153, 0.1)',
                                 borderWidth: 3,
@@ -802,7 +989,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             }},
                             {{
                                 label: 'Total Tokens',
-                                data: dailyTokensData,
+                                data: chartTokensData,
                                 borderColor: '#38bdf8',
                                 backgroundColor: 'rgba(56, 189, 248, 0.05)',
                                 borderWidth: 2,
@@ -816,6 +1003,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     options: {{
                         responsive: true,
                         maintainAspectRatio: false,
+                        interaction: {{
+                            mode: 'index',
+                            intersect: false
+                        }},
                         plugins: {{
                             legend: {{ labels: {{ color: '#94a3b8', font: {{ family: 'Inter' }} }} }}
                         }},
@@ -862,7 +1053,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }});
             }}
 
-            // 프롬프트 그룹화 및 세션 랭킹 수합
+            // 프롬프트 그룹화 및 세션 랭킹 수합 (CLASSIFIER 덮어쓰기 방지 및 턴수 중복 보정)
             const promptMap = {{}};
             filteredRecords.forEach(r => {{
                 const pKey = r.prompt ? r.prompt : "(서브 스텝 / 연속 릴레이)";
@@ -876,9 +1067,21 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         session_id: r.session_id
                     }};
                 }}
-                promptMap[pKey].count += 1;
+                // CLASSIFIER는 보조 분류 로그이므로 메인 모델 등급(BRONZE, SILVER, GOLD, PLATINUM 등)을 우선 적용
+                if (r.decision !== 'CLASSIFIER' || promptMap[pKey].decision === 'CLASSIFIER') {{
+                    promptMap[pKey].decision = r.decision;
+                }}
+                // 메인 턴 기준으로 요청 횟수 카운트
+                if (r.decision !== 'CLASSIFIER') {{
+                    promptMap[pKey].count += 1;
+                }}
                 promptMap[pKey].tokens += r.total_tokens;
                 promptMap[pKey].cost += r.cost;
+            }});
+
+            // 순수 분류기만 발생한 경우 최소 1회 보정
+            Object.values(promptMap).forEach(p => {{
+                if (p.count === 0) p.count = 1;
             }});
 
             const allSortedPrompts = Object.values(promptMap).sort((a,b) => b.cost - a.cost);
@@ -892,17 +1095,21 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const sidFull = p.session_id || 'N/A';
                 const sidShort = (sidFull !== 'N/A' && sidFull.length > 8) ? sidFull.substring(0, 8) : sidFull;
                 
-                let badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
-                if (p.decision.includes('SILVER') || p.decision.includes('SILVER')) {{
+                let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
+                if (p.decision.includes('BRONZE')) {{
+                    badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
+                }} else if (p.decision.includes('SILVER')) {{
                     badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
-                }} else if (p.decision.includes('GOLD') || p.decision.includes('GOLD')) {{
+                }} else if (p.decision.includes('GOLD')) {{
                     badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
-                }} else if (p.decision.includes('PLATINUM') || p.decision.includes('PLATINUM')) {{
+                }} else if (p.decision.includes('PLATINUM')) {{
                     badgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
                 }} else if (p.decision.includes('DIAMOND')) {{
                     badgeClass = 'bg-blue-500/20 text-blue-300 border-blue-400/40';
                 }} else if (p.decision.includes('CHALLENGER') || p.decision.includes('SOL')) {{
                     badgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-extrabold animate-pulse';
+                }} else if (p.decision.includes('CLASSIFIER')) {{
+                    badgeClass = 'bg-purple-950/40 text-purple-300 border-purple-600/40 font-mono';
                 }}
 
                 const safePrompt = p.prompt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -1144,6 +1351,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                     sid_str = "sess_legacy"
 
                 item = {
+                    "timestamp": ts_str or (dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "N/A"),
                     "datetime": dt,
                     "date": date_key,
                     "month": month_key,
@@ -1234,13 +1442,15 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         session_stats[s_key]["cost"] += r["cost"]
         session_stats[s_key]["credits"] += c_val
 
-        prompt_stats[p_key]["count"] += 1
+        if d != "CLASSIFIER" or not prompt_stats[p_key]["decision"]:
+            prompt_stats[p_key]["decision"] = d
+        if d != "CLASSIFIER":
+            prompt_stats[p_key]["count"] += 1
         prompt_stats[p_key]["in_tok"] += r["input_tokens"]
         prompt_stats[p_key]["out_tok"] += r["output_tokens"]
         prompt_stats[p_key]["cost"] += r["cost"]
         prompt_stats[p_key]["credits"] += c_val
         prompt_stats[p_key]["prompt"] = p_key
-        prompt_stats[p_key]["decision"] = d
         prompt_stats[p_key]["session_id"] = s_key
 
     print("====================================================================================================")

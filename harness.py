@@ -253,6 +253,7 @@ async def get_dashboard_stats():
                         sid_str = "sess_legacy"
 
                     records.append({
+                        "timestamp": ts_str or "N/A",
                         "date": date_key,
                         "month": month_key,
                         "session_id": sid_str,
