@@ -862,7 +862,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }});
             }}
 
-            // 프롬프트 그룹화 및 세션 랭킹 수합
+            // 프롬프트 그룹화 및 세션 랭킹 수합 (CLASSIFIER 덮어쓰기 방지 및 턴수 중복 보정)
             const promptMap = {{}};
             filteredRecords.forEach(r => {{
                 const pKey = r.prompt ? r.prompt : "(서브 스텝 / 연속 릴레이)";
@@ -876,9 +876,21 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         session_id: r.session_id
                     }};
                 }}
-                promptMap[pKey].count += 1;
+                // CLASSIFIER는 보조 분류 로그이므로 메인 모델 등급(BRONZE, SILVER, GOLD, PLATINUM 등)을 우선 적용
+                if (r.decision !== 'CLASSIFIER' || promptMap[pKey].decision === 'CLASSIFIER') {{
+                    promptMap[pKey].decision = r.decision;
+                }}
+                // 메인 턴 기준으로 요청 횟수 카운트
+                if (r.decision !== 'CLASSIFIER') {{
+                    promptMap[pKey].count += 1;
+                }}
                 promptMap[pKey].tokens += r.total_tokens;
                 promptMap[pKey].cost += r.cost;
+            }});
+
+            // 순수 분류기만 발생한 경우 최소 1회 보정
+            Object.values(promptMap).forEach(p => {{
+                if (p.count === 0) p.count = 1;
             }});
 
             const allSortedPrompts = Object.values(promptMap).sort((a,b) => b.cost - a.cost);
@@ -892,17 +904,21 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const sidFull = p.session_id || 'N/A';
                 const sidShort = (sidFull !== 'N/A' && sidFull.length > 8) ? sidFull.substring(0, 8) : sidFull;
                 
-                let badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
-                if (p.decision.includes('SILVER') || p.decision.includes('SILVER')) {{
+                let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
+                if (p.decision.includes('BRONZE')) {{
+                    badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
+                }} else if (p.decision.includes('SILVER')) {{
                     badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
-                }} else if (p.decision.includes('GOLD') || p.decision.includes('GOLD')) {{
+                }} else if (p.decision.includes('GOLD')) {{
                     badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
-                }} else if (p.decision.includes('PLATINUM') || p.decision.includes('PLATINUM')) {{
+                }} else if (p.decision.includes('PLATINUM')) {{
                     badgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
                 }} else if (p.decision.includes('DIAMOND')) {{
                     badgeClass = 'bg-blue-500/20 text-blue-300 border-blue-400/40';
                 }} else if (p.decision.includes('CHALLENGER') || p.decision.includes('SOL')) {{
                     badgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-extrabold animate-pulse';
+                }} else if (p.decision.includes('CLASSIFIER')) {{
+                    badgeClass = 'bg-purple-950/40 text-purple-300 border-purple-600/40 font-mono';
                 }}
 
                 const safePrompt = p.prompt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -1234,13 +1250,15 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         session_stats[s_key]["cost"] += r["cost"]
         session_stats[s_key]["credits"] += c_val
 
-        prompt_stats[p_key]["count"] += 1
+        if d != "CLASSIFIER" or not prompt_stats[p_key]["decision"]:
+            prompt_stats[p_key]["decision"] = d
+        if d != "CLASSIFIER":
+            prompt_stats[p_key]["count"] += 1
         prompt_stats[p_key]["in_tok"] += r["input_tokens"]
         prompt_stats[p_key]["out_tok"] += r["output_tokens"]
         prompt_stats[p_key]["cost"] += r["cost"]
         prompt_stats[p_key]["credits"] += c_val
         prompt_stats[p_key]["prompt"] = p_key
-        prompt_stats[p_key]["decision"] = d
         prompt_stats[p_key]["session_id"] = s_key
 
     print("====================================================================================================")
