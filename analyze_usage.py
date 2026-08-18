@@ -341,10 +341,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         <!-- Card 5: Savings -->
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden border-emerald-500/30 bg-emerald-950/20">
-            <div class="text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-2">LUNA Auto-scaling Savings</div>
+            <div class="flex items-center justify-between mb-2">
+                <div class="text-xs font-semibold uppercase tracking-wider text-emerald-400">다운스케일링 누적 절감액</div>
+                <button onclick="openSavingsInfoModal()" class="text-emerald-400/80 hover:text-emerald-200 transition-colors p-1 rounded-lg hover:bg-emerald-500/20 flex items-center justify-center cursor-pointer" title="절감액 산출 기준 및 수식 안내">
+                    <i class="fa-solid fa-circle-info text-sm"></i>
+                </button>
+            </div>
             <div class="text-3xl font-extrabold text-emerald-300 font-mono mb-1" id="kpiSavingsUsd">$0.00</div>
             <div class="text-xs text-emerald-400/80" id="kpiSavingsCredits">약 0.0 Cr 크레딧 아낌</div>
-            <div class="absolute -right-3 -bottom-3 text-emerald-400/10 text-6xl"><i class="fa-solid fa-shield-halved"></i></div>
+            <div class="absolute -right-3 -bottom-3 text-emerald-400/10 text-6xl pointer-events-none"><i class="fa-solid fa-shield-halved"></i></div>
         </div>
     </div>
 
@@ -504,6 +509,70 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
     </div>
 
+    <!-- Downscaling Savings Info Modal -->
+    <div id="savingsInfoModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-card max-w-2xl w-full p-6 rounded-3xl border border-emerald-500/40 shadow-2xl relative bg-slate-900/95">
+            <button onclick="closeSavingsInfoModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            
+            <div class="flex items-center gap-3 mb-5">
+                <span class="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-2xl text-xl">
+                    <i class="fa-solid fa-calculator"></i>
+                </span>
+                <div>
+                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                        다운스케일링 누적 절감액 산출 기준 및 수식
+                    </h2>
+                    <p class="text-xs text-slate-400">하네스 스마트 라우팅을 통한 실질적 크레딧 방어 성과 (ROI)</p>
+                </div>
+            </div>
+
+            <div class="space-y-4 text-xs text-slate-300 mb-6">
+                <div class="p-4 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-2">
+                    <div class="font-bold text-emerald-400 text-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-bullseye"></i> 비교 모델 기준 (Baseline vs Optimized)
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                        <div class="p-3 bg-slate-900/90 rounded-xl border border-rose-500/30">
+                            <span class="text-rose-400 font-bold">📌 기준 기본 모델 (Baseline)</span>
+                            <p class="text-slate-400 mt-1 font-mono text-[11px]">gpt-5.6-terra:medium</p>
+                            <p class="text-slate-400 mt-0.5 text-[11px] leading-relaxed">하네스 미적용 시 모든 단순 작업 및 툴 루프까지 100% 투입되는 고비용 모델 (평균 턴당 ~$0.12 소모)</p>
+                        </div>
+                        <div class="p-3 bg-slate-900/90 rounded-xl border border-emerald-500/30">
+                            <span class="text-emerald-400 font-bold">🛡️ 최적화 다운스케일 (Optimized)</span>
+                            <p class="text-slate-300 mt-1 font-mono text-[11px]">gpt-5.6-luna (BRONZE / SILVER)</p>
+                            <p class="text-slate-400 mt-0.5 text-[11px] leading-relaxed">난이도 분류기가 단순 작업(오타, 파일 조회, 사소한 수정)을 감지하여 초경량 모델로 자동 전환</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-2">
+                    <div class="font-bold text-sky-400 text-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-square-root-variable"></i> 정량적 산출 공식 (Mathematical Formula)
+                    </div>
+                    <div class="p-3 bg-slate-950 font-mono text-emerald-300 rounded-xl border border-slate-700 text-[11px] leading-relaxed space-y-1">
+                        <div>1. 가상 소모 비용 (하네스 미적용 시) = N(다운스케일 턴 수) × $0.12 (TERRA 평균 턴 비용)</div>
+                        <div>2. 실제 소모 비용 (하네스 적용 시)   = ∑(경량 모델 턴 실소모 비용)</div>
+                        <div>3. 순수 절감액 (Saved USD)          = 가상 소모 비용 - 실제 소모 비용</div>
+                        <div>4. 아낀 크레딧 (Saved Credits)      = 순수 절감액 / $0.20 (1 Credit = $0.20 USD)</div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-indigo-950/30 rounded-xl border border-indigo-500/30 text-[11px] text-indigo-300 flex items-start gap-2">
+                    <i class="fa-solid fa-lightbulb text-indigo-400 mt-0.5"></i>
+                    <span>에이전트는 대화가 길어질수록 5~10만 토큰의 컨텍스트를 매 턴마다 반복 전송합니다. 후반 단순 작업 스텝을 경량 모델로 다운스케일링함으로써 회사 월간 크레딧 한도를 안전하게 방어합니다.</span>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-3 border-t border-slate-800">
+                <button onclick="closeSavingsInfoModal()" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl shadow-lg transition-all">
+                    확인 완료
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Footer -->
     <footer class="text-center text-xs text-slate-500 py-4 border-t border-slate-800/60">
         TierBridge Analytics Core • Powered by LLM Routing Harness Proxy • Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -644,6 +713,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         function closeHealingModal() {{
             document.getElementById('healingModal').classList.add('hidden');
+        }}
+
+        function openSavingsInfoModal() {{
+            document.getElementById('savingsInfoModal').classList.remove('hidden');
+        }}
+
+        function closeSavingsInfoModal() {{
+            document.getElementById('savingsInfoModal').classList.add('hidden');
         }}
 
         async function applyHealingPatch() {{
