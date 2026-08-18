@@ -16,7 +16,7 @@
 
 ## 1. 개요 및 목적
 
-Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=localai`)로 가동할 경우 CLI 자체 `status` 명령어로는 계정 크레딧 및 소모 토큰 정보가 표시되지 않습니다.
+Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=ollama`)로 가동할 경우 CLI 자체 `status` 명령어로는 계정 크레딧 및 소모 토큰 정보가 표시되지 않습니다.
 
 `analyze_usage.py`는 프록시가 `harness.log` 파일에 실시간으로 기록하는 타임스탬프 기반의 **`➔ [USAGE]`** 이벤트 라인을 정밀 파싱하여, **누적 사용량, 작성 소스코드 라인 수(LOC) 및 일자별 비용 절감 지표를 자동으로 리포트** 형태로 집계합니다.
 
