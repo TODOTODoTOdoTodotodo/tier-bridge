@@ -149,6 +149,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     client_records = []
     for r in all_raw_records:
         client_records.append({
+            "timestamp": r.get("timestamp") or (r["datetime"].strftime("%Y-%m-%d %H:%M:%S") if r.get("datetime") else "N/A"),
             "date": r["date"],
             "month": r["month"],
             "session_id": r["session_id"],
@@ -218,6 +219,20 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <select id="sessionSelect" onchange="onFilterChange()" 
                         class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer max-w-[180px] truncate">
                     {session_options_html}
+                </select>
+            </div>
+
+            <!-- Dynamic Time Interval Selector (Visible when specific session is selected) -->
+            <div id="timeIntervalWrapper" class="hidden flex items-center gap-2 bg-slate-800/90 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg transition-all">
+                <i class="fa-solid fa-clock-rotate-left text-emerald-400 text-sm"></i>
+                <span class="text-xs font-semibold text-slate-300">시간 범위:</span>
+                <select id="timeIntervalSelect" onchange="onFilterChange()" 
+                        class="bg-slate-900 text-emerald-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-emerald-400 cursor-pointer">
+                    <option value="ALL_TURNS" selected>턴별 타임라인 (Turn-by-Turn)</option>
+                    <option value="1MIN">1분 단위 집계 (1-Min Window)</option>
+                    <option value="5MIN">5분 단위 집계 (5-Min Window)</option>
+                    <option value="10MIN">10분 단위 집계 (10-Min Window)</option>
+                    <option value="1HOUR">1시간 단위 집계 (Hourly Window)</option>
                 </select>
             </div>
 
@@ -358,10 +373,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         <!-- Daily Trend Line Chart -->
         <div class="lg:col-span-2 glass-card p-6 rounded-2xl">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold text-slate-200 flex items-center gap-2">
-                    <i class="fa-solid fa-chart-area text-sky-400"></i> 선택 기간 일자별 추이 (Daily Trend)
+                <h2 id="timelineChartTitle" class="text-base font-semibold text-slate-200 flex items-center gap-2">
+                    <i id="timelineChartIcon" class="fa-solid fa-chart-area text-sky-400"></i> <span id="timelineChartTitleText">선택 기간 일자별 추이 (Daily Trend)</span>
                 </h2>
-                <span class="text-xs text-slate-400">Kibana Live Timeline</span>
+                <span id="timelineChartSubText" class="text-xs text-slate-400">Kibana Live Timeline</span>
             </div>
             <div class="h-64">
                 <canvas id="dailyTrendChart"></canvas>
@@ -845,31 +860,126 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             document.getElementById('kpiSavingsUsd').innerText = '$' + savedUsd.toFixed(2);
             document.getElementById('kpiSavingsCredits').innerText = '약 ' + savedCredits.toFixed(1) + ' Cr 크레딧 아낌';
 
-            const dailyMap = {{}};
-            filteredRecords.forEach(r => {{
-                if (!dailyMap[r.date]) dailyMap[r.date] = {{ cost: 0, tokens: 0 }};
-                dailyMap[r.date].cost += r.cost;
-                dailyMap[r.date].tokens += r.total_tokens;
-            }});
+            // 세션 선택 여부에 따른 시간 범위(인터벌) 필터 표시 제어 및 차트 데이터 그룹화
+            const timeIntervalWrapper = document.getElementById('timeIntervalWrapper');
+            const timeIntervalSelect = document.getElementById('timeIntervalSelect');
+            const isSessionSelected = targetSession && targetSession !== 'ALL';
+            
+            let chartLabels = [];
+            let chartCreditsData = [];
+            let chartTokensData = [];
+            let chartTurnMeta = [];
 
-            const sortedDates = Object.keys(dailyMap).sort();
-            const dailyCreditsData = sortedDates.map(d => (dailyMap[d].cost / 0.20).toFixed(2));
-            const dailyTokensData = sortedDates.map(d => dailyMap[d].tokens);
+            if (isSessionSelected) {{
+                if (timeIntervalWrapper) timeIntervalWrapper.classList.remove('hidden');
+                const interval = timeIntervalSelect ? timeIntervalSelect.value : 'ALL_TURNS';
+                
+                const titleTextEl = document.getElementById('timelineChartTitleText');
+                const subTextEl = document.getElementById('timelineChartSubText');
+                const iconEl = document.getElementById('timelineChartIcon');
+                if (titleTextEl) titleTextEl.innerText = '세션 시간대별 소모 추이 (Session Timeline Trend)';
+                if (subTextEl) subTextEl.innerText = `세션 ID: ${{targetSession.length > 18 ? targetSession.substring(0, 18) + '...' : targetSession}} (${{filteredRecords.length}} 턴)`;
+                if (iconEl) iconEl.className = 'fa-solid fa-clock-rotate-left text-emerald-400';
+
+                // 세션 내 시간순 정렬
+                const sessionRecords = [...filteredRecords].sort((a, b) => {{
+                    const tA = a.timestamp || a.date || '';
+                    const tB = b.timestamp || b.date || '';
+                    return tA.localeCompare(tB);
+                }});
+
+                if (interval === 'ALL_TURNS') {{
+                    // 개별 턴별 (Turn-by-Turn) 타임라인
+                    sessionRecords.forEach((r, idx) => {{
+                        const timeStr = (r.timestamp && r.timestamp.length >= 19) ? r.timestamp.substring(11, 19) : (r.date || `T${{idx+1}}`);
+                        chartLabels.push(`T${{idx+1}} [${{timeStr}}]`);
+                        chartCreditsData.push((r.cost / 0.20).toFixed(2));
+                        chartTokensData.push(r.total_tokens);
+                        chartTurnMeta.push({{
+                            turn: idx + 1,
+                            time: r.timestamp || 'N/A',
+                            decision: r.decision,
+                            model: r.model || 'N/A',
+                            prompt: r.prompt || '(연속 서브스텝 / 툴 액션)',
+                            tokens: r.total_tokens,
+                            credits: (r.cost / 0.20).toFixed(2)
+                        }});
+                    }});
+                }} else {{
+                    // 시간 단위 슬롯 집계 (1MIN / 5MIN / 10MIN / 1HOUR)
+                    let slotMinutes = 5;
+                    if (interval === '1MIN') slotMinutes = 1;
+                    else if (interval === '5MIN') slotMinutes = 5;
+                    else if (interval === '10MIN') slotMinutes = 10;
+                    else if (interval === '1HOUR') slotMinutes = 60;
+
+                    const timeSlotMap = {{}};
+                    sessionRecords.forEach(r => {{
+                        let slotKey = r.date || 'Unknown';
+                        if (r.timestamp && r.timestamp.length >= 19) {{
+                            const hh = parseInt(r.timestamp.substring(11, 13), 10);
+                            const mm = parseInt(r.timestamp.substring(14, 16), 10);
+                            if (slotMinutes === 60) {{
+                                slotKey = `${{String(hh).padStart(2, '0')}}:00`;
+                            }} else {{
+                                const flooredMm = Math.floor(mm / slotMinutes) * slotMinutes;
+                                slotKey = `${{String(hh).padStart(2, '0')}}:${{String(flooredMm).padStart(2, '0')}}`;
+                            }}
+                        }}
+                        if (!timeSlotMap[slotKey]) {{
+                            timeSlotMap[slotKey] = {{ cost: 0, tokens: 0, count: 0 }};
+                        }}
+                        timeSlotMap[slotKey].cost += r.cost;
+                        timeSlotMap[slotKey].tokens += r.total_tokens;
+                        timeSlotMap[slotKey].count += 1;
+                    }});
+
+                    const sortedSlots = Object.keys(timeSlotMap).sort();
+                    sortedSlots.forEach(slot => {{
+                        chartLabels.push(`${{slot}} (${{timeSlotMap[slot].count}}턴)`);
+                        chartCreditsData.push((timeSlotMap[slot].cost / 0.20).toFixed(2));
+                        chartTokensData.push(timeSlotMap[slot].tokens);
+                        chartTurnMeta.push({{
+                            slot: slot,
+                            count: timeSlotMap[slot].count
+                        }});
+                    }});
+                }}
+            }} else {{
+                if (timeIntervalWrapper) timeIntervalWrapper.classList.add('hidden');
+                const titleTextEl = document.getElementById('timelineChartTitleText');
+                const subTextEl = document.getElementById('timelineChartSubText');
+                const iconEl = document.getElementById('timelineChartIcon');
+                if (titleTextEl) titleTextEl.innerText = '선택 기간 일자별 추이 (Daily Trend)';
+                if (subTextEl) subTextEl.innerText = 'Kibana Live Timeline';
+                if (iconEl) iconEl.className = 'fa-solid fa-chart-area text-sky-400';
+
+                const dailyMap = {{}};
+                filteredRecords.forEach(r => {{
+                    if (!dailyMap[r.date]) dailyMap[r.date] = {{ cost: 0, tokens: 0 }};
+                    dailyMap[r.date].cost += r.cost;
+                    dailyMap[r.date].tokens += r.total_tokens;
+                }});
+
+                chartLabels = Object.keys(dailyMap).sort();
+                chartCreditsData = chartLabels.map(d => (dailyMap[d].cost / 0.20).toFixed(2));
+                chartTokensData = chartLabels.map(d => dailyMap[d].tokens);
+            }}
 
             if (dailyChart) {{
-                dailyChart.data.labels = sortedDates;
-                dailyChart.data.datasets[0].data = dailyCreditsData;
-                dailyChart.data.datasets[1].data = dailyTokensData;
+                dailyChart.data.labels = chartLabels;
+                dailyChart.data.datasets[0].data = chartCreditsData;
+                dailyChart.data.datasets[1].data = chartTokensData;
                 dailyChart.update();
             }} else {{
                 dailyChart = new Chart(document.getElementById('dailyTrendChart'), {{
                     type: 'line',
                     data: {{
-                        labels: sortedDates,
+                        labels: chartLabels,
                         datasets: [
                             {{
                                 label: 'Consumed Credits (Cr)',
-                                data: dailyCreditsData,
+                                data: chartCreditsData,
                                 borderColor: '#34d399',
                                 backgroundColor: 'rgba(52, 211, 153, 0.1)',
                                 borderWidth: 3,
@@ -879,7 +989,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             }},
                             {{
                                 label: 'Total Tokens',
-                                data: dailyTokensData,
+                                data: chartTokensData,
                                 borderColor: '#38bdf8',
                                 backgroundColor: 'rgba(56, 189, 248, 0.05)',
                                 borderWidth: 2,
@@ -893,6 +1003,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     options: {{
                         responsive: true,
                         maintainAspectRatio: false,
+                        interaction: {{
+                            mode: 'index',
+                            intersect: false
+                        }},
                         plugins: {{
                             legend: {{ labels: {{ color: '#94a3b8', font: {{ family: 'Inter' }} }} }}
                         }},
@@ -1237,6 +1351,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                     sid_str = "sess_legacy"
 
                 item = {
+                    "timestamp": ts_str or (dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "N/A"),
                     "datetime": dt,
                     "date": date_key,
                     "month": month_key,
