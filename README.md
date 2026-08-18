@@ -34,10 +34,10 @@ tierbridge
 
 ```bash
 # [기본 모드] Standard 3-Tier 라우터 (BRONZE ~ DIAMOND 캡핑)
-codex --oss --local-provider=localai
+codex --oss --local-provider=ollama
 
 # [고난도 모드] 4-Tier Sol 라우터 (최상위 CHALLENGER / gpt-5.6-sol 확장)
-codex --oss --local-provider=localai --model super
+codex --oss --local-provider=ollama --model super
 ```
 
 ---

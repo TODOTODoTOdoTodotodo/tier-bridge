@@ -50,7 +50,7 @@ def patch():
     print("  export LOCALAI_URL=\"http://127.0.0.1:18080\"")
     print("  export OLLAMA_HOST=\"http://127.0.0.1:18080\"")
     print("  export CODEX_OSS_PORT=18080")
-    print("  codex --oss --local-provider=localai")
+    print("  codex --oss --local-provider=ollama")
 
 if __name__ == "__main__":
     patch()
