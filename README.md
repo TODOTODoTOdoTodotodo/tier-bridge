@@ -40,6 +40,10 @@ codex --oss --local-provider=ollama
 codex --oss --local-provider=ollama --model super
 ```
 
+> [!NOTE]
+> **💡 왜 공급자를 `ollama`로 지정해야 하나요?**  
+> Codex CLI 바이너리가 지원하는 로컬 오픈소스 공급자 옵션은 `ollama`로 고정되어 있습니다. TierBridge는 에이전트 코드 수정 없이 `OLLAMA_HOST` 환경변수로 요청을 가로채어 작동하므로, `--local-provider=ollama`를 사용해야만 하네스 프록시의 스마트 라우팅 및 크레딧 절감 기능을 정상적으로 연결받을 수 있습니다.
+
 ---
 
 ### 4단계: 실시간 대시보드 및 로그 모니터링 (단축키 지원)

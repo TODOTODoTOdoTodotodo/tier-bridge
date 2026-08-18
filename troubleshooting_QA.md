@@ -11,6 +11,7 @@
 4. [Q4. Classifier connection error: (ReadTimeout) 발생 및 지연 현상](#q4-classifier-connection-error-readtimeout-발생-및-지연-현상)
 5. [Q5. 새 터미널을 열면 "No running server detected" 에러가 발생합니다](#q5-새-터미널을-열면-no-running-server-detected-에러가-발생합니다)
 6. [Q6. lsof 시 18080 포트에 프로세스가 2개 뜨거나 ESTABLISHED 상태 소켓이 2개 생깁니다](#q6-lsof-시-18080-포트에-프로세스가-2개-뜨거나-established-상태-소켓이-2개-생깁니다)
+7. [Q7. 왜 --local-provider에 ollama 외의 다른 값(e.g., localai)을 주면 에러가 발생하나요?](#q7-왜---local-provider에-ollama-외의-다른-valuelocalai을-주면-에러가-발생하나요)
 
 ---
 
@@ -81,3 +82,13 @@
      * Uvicorn 서버를 `--reload` 옵션으로 켜면, 소스 파일 변경을 감시하는 **부모(Watcher)**와 실제 통신을 처리하는 **자식(Worker)** 프로세스가 생성되어 파일 디스크립터를 공유하므로 2개가 리스닝 상태로 보입니다. (지극히 정상)
   2. **ESTABLISHED 네트워크 커넥션 (2개)**:
      * 프록시가 가운데서 요청을 릴레이하므로, `[CLI ➔ Harness Proxy]` 연결 1개와 `[Harness Proxy ➔ 원격 API]` 연결 1개가 동시에 맺어져 2개의 ESTABLISHED 커넥션이 관찰되는 것은 네트워크 중계 구조상 정상적인 흐름입니다.
+
+---
+
+### Q7. 왜 `--local-provider`에 `ollama` 외의 다른 값(e.g., `localai`)을 주면 에러가 발생하나요?
+> **증상**: `codex --oss --local-provider=localai` 실행 시 `Error loading configuration: Model provider 'localai' not found` 에러가 발생합니다.
+
+* **원인**:
+  * Codex CLI 바이너리 내부에서 지원하는 오픈소스 로컬 공급자 옵션값은 오직 **`ollama`** (및 `lmstudio`)로 제한되어 있습니다.
+* **해결책**:
+  * TierBridge 하네스는 에이전트 수정 없이 `OLLAMA_HOST="http://localhost:18080"` 환경변수를 통해 인바운드 요청을 투명하게 가로채어 작동하므로, 반드시 **`codex --oss --local-provider=ollama`**로 실행하셔야 하네스 프록시의 스마트 라우팅 및 크레딧 절감 기능을 정상적으로 연결받을 수 있습니다.

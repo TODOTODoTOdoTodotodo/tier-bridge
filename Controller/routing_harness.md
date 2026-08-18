@@ -54,6 +54,11 @@ This document defines the dynamic routing strategy designed to optimize credits 
   * **라우팅 범위**: `BRONZE` (low) ~ `PLATINUM` (high) ~ 최상위 **`CHALLENGER` (`gpt-5.6-sol` / extra_high)**
   * **특징**: 저난도 작업은 `BRONZE` / `SILVER`로 시작하는 스마트 동적 라우터를 유지하되, 최상위 고난도 작업(메모리 누수, 교착상태, 초대규모 분석) 발생 시 `CHALLENGER`까지 라우팅 영역을 확장합니다. 단축 인자 `--model super`로 직관적으로 호출할 수 있습니다.
 
+> [!NOTE]
+> **왜 `--local-provider=ollama`를 사용해야 하나요?**  
+> 1. **Codex CLI 공급자 제약**: Codex 바이너리 내부에서 OSS 로컬 공급자로 지원하는 옵션값은 오직 `ollama`와 `lmstudio`로 고정되어 있습니다.  
+> 2. **무수정 투명 가로채기**: TierBridge는 에이전트 수정 없이 `OLLAMA_HOST="http://localhost:18080"` 환경변수를 통해 Ollama 인바운드 요청을 가로채어 동작하므로, `--local-provider=ollama`를 지정해야만 하네스 프록시의 스마트 라우팅 및 크레딧 절감 기능을 적용받을 수 있습니다.
+
 ### 2.2. Gaming RPG Rank Tier Classification Table
 특정 모델명(LUNA, TERRA, SOL)에 종속되지 않고 직관적이고 유연한 **게이밍 RPG 랭크 티어 체계 (BRONZE ➔ SILVER ➔ GOLD ➔ PLATINUM ➔ DIAMOND ➔ CHALLENGER)**를 적용합니다.
 
