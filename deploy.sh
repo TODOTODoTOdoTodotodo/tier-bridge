@@ -117,11 +117,14 @@ setup_alias() {
             echo "alias tierbridge=\"source \$HOME/.tierbridge/live/run_harness.sh\"" >> "$shell_rc"
             echo "alias tierbridge-log=\"tail -f \$HOME/.tierbridge/live/harness.log\"" >> "$shell_rc"
             echo "alias tierbridge-dash=\"PYTHONPATH=\\\$HOME/.tierbridge/live/src:\\\$HOME/.tierbridge/live:\\\$PYTHONPATH \\\$HOME/.tierbridge/live/.venv/bin/python \\\$HOME/.tierbridge/live/analyze_usage.py \\\$HOME/.tierbridge/live/harness.log --html\"" >> "$shell_rc"
+            echo "alias tierbridge-credit=\"\\\$HOME/.tierbridge/live/.venv/bin/python \\\$HOME/.tierbridge/live/analyze_usage.py --balance\"" >> "$shell_rc"
             echo "🔗 Shell Alias 가 $shell_rc 에 자동 등록되었습니다."
+        elif ! grep -q "alias tierbridge-credit=" "$shell_rc"; then
+            echo "alias tierbridge-credit=\"\\\$HOME/.tierbridge/live/.venv/bin/python \\\$HOME/.tierbridge/live/analyze_usage.py --balance\"" >> "$shell_rc"
         fi
     fi
 }
 
 setup_alias "$HOME/.zshrc"
 setup_alias "$HOME/.bashrc"
-echo "💡 어디서든 'tierbridge'로 세션 연결, 'tierbridge-log'로 로그 모니터링이 가능합니다!"
+echo "💡 어디서든 'tierbridge'로 세션 연결, 'tierbridge-credit'로 실시간 잔여 크레딧 조회가 가능합니다!"

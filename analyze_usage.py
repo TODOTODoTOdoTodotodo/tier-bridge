@@ -23,12 +23,61 @@ def parse_args():
     
     parser = argparse.ArgumentParser(description="TierBridge 로그 기반 Kibana풍 USAGE 및 힐링팩터 모델 관리 분석기")
     parser.add_argument("log_file", nargs="?", default=default_log, help=f"분석할 로그 파일 경로 (기본: {default_log})")
+    parser.add_argument("--balance", "-b", action="store_true", help="ChatGPT Enterprise 백엔드 실시간 계정 잔여 크레딧 및 지출 한도 조회")
     parser.add_argument("--date", "-d", type=str, help="특정 날짜 필터 (형식: YYYY-MM-DD)")
     parser.add_argument("--month", "-m", type=str, help="특정 월 필터 (형식: YYYY-MM)")
     parser.add_argument("--session", "-s", type=str, help="특정 세션 ID 필터 (예: 5eb61a1e)")
     parser.add_argument("--html", "-w", action="store_true", help="Kibana 스타일 시각화 웹 대시보드(usage_dashboard.html) 생성 및 브라우저 열기")
     parser.add_argument("--no-open", action="store_true", help="HTML 대시보드 생성 후 브라우저 자동 오픈 금지")
     return parser.parse_args()
+
+def show_enterprise_balance():
+    import urllib.request
+    auth_path = os.path.expanduser("~/.codex/auth.json")
+    if not os.path.exists(auth_path):
+        print(f"❌ [오류] 인증 설정 파일({auth_path})을 찾을 수 없습니다.")
+        return
+    try:
+        with open(auth_path, "r", encoding="utf-8") as f:
+            auth = json.load(f)
+        tokens = auth.get("tokens", {})
+        access_token = tokens.get("access_token")
+        account_id = tokens.get("account_id")
+        
+        req = urllib.request.Request("https://chatgpt.com/backend-api/codex/usage")
+        req.add_header("Authorization", f"Bearer {access_token}")
+        if account_id:
+            req.add_header("chatgpt-account-id", account_id)
+        req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+        
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            
+        email = data.get("email", "N/A")
+        plan = data.get("plan_type", "business")
+        spend = data.get("spend_control", {}).get("individual_limit", {})
+        limit = float(spend.get("limit", 0))
+        used = float(spend.get("used", 0))
+        remaining = float(spend.get("remaining", 0))
+        used_pct = spend.get("used_percent", 0)
+        rem_pct = spend.get("remaining_percent", 100)
+        reset_at = spend.get("reset_at")
+        reset_str = datetime.fromtimestamp(reset_at).strftime("%Y-%m-%d %H:%M:%S") if reset_at else "N/A"
+        
+        print("\n" + "=" * 85)
+        print("💳 [ChatGPT Enterprise] 실시간 계정 잔여 크레딧 및 지출 한도 조회")
+        print("=" * 85)
+        print(f"👤 사용자 계정      : {email} (Plan: {plan})")
+        print(f"🏢 계정 ID         : {account_id}")
+        print("-" * 85)
+        print("📊 크레딧 한도 및 소모 현황 (Monthly Spend Control):")
+        print(f"  • 월간 할당 한도 (Limit)     : {limit:,.2f} Credits")
+        print(f"  • 실제 누적 소모량 (Used)    : {used:,.2f} Credits ({used_pct}%)")
+        print(f"  • 실제 잔여 크레딧 (Remaining): {remaining:,.2f} Credits ({rem_pct}%)")
+        print(f"  • 크레딧 리셋 일시 (Reset)   : {reset_str}")
+        print("=" * 85 + "\n")
+    except Exception as e:
+        print(f"\n❌ [오류] 엔터프라이즈 실시간 크레딧 조회 실패: {e}\n")
 
 def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None, healing_history=None):
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1189,4 +1238,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
 
 if __name__ == "__main__":
     args = parse_args()
-    analyze(args.log_file, target_date=args.date, target_month=args.month, target_session=args.session, generate_html=args.html, open_browser=not args.no_open)
+    if args.balance:
+        show_enterprise_balance()
+    else:
+        analyze(args.log_file, target_date=args.date, target_month=args.month, target_session=args.session, generate_html=args.html, open_browser=not args.no_open)

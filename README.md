@@ -79,6 +79,11 @@ tierbridge-log
 `harness.log`에 기록된 데이터를 정밀 분석하여 월별, 일자별, 세션별 통계와 3초 라이브 갱신 대시보드를 제공합니다.
 
 ```bash
+# 실시간 엔터프라이즈 계정 잔여 크레딧 및 지출 한도 조회
+./analyze_usage.py --balance
+# 또는 독립 스크립트 실행
+./check_credits.py
+
 # 전체 통계 및 Top 크레딧 소모 프롬프트 요약 보고서 출력
 ./analyze_usage.py
 
@@ -92,6 +97,7 @@ tierbridge-log
 ./analyze_usage.py --html
 ```
 
+* **실시간 엔터프라이즈 잔여 크레딧 조회 (`--balance` / `check_credits.py`)**: 백엔드 API를 직접 호출하여 실제 지출 한도, 누적 소모량, 잔여 크레딧(%) 및 리셋 일정을 실시간으로 즉시 파악합니다.
 * **3초 라이브 오토싱크 (`#liveSyncBadge`)**: 브라우저를 열어두기만 해도 새 로그와 수치가 실시간 갱신됩니다.
 * **크레딧 정밀 3분할 집계**: `전체 크레딧`, `메인 모델 크레딧`, `분류기 크레딧`을 분리 표시합니다.
 * **생성 소스코드(LOC) 집계**: 모델 답변 내 마크다운 코드 블록 줄 수를 추출하여 개발 생산성을 측정합니다.
@@ -125,6 +131,7 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가 �
 #### 편리한 터미널 단축 명령어 (Shell Aliases)
 `deploy.sh` 실행 시 `~/.zshrc`에 자동 등록되어 어느 경로에서든 사용 가능합니다:
 * **`tierbridge`** : 런타임 하네스 가동 및 현재 터미널 세션에 환경 변수 주입
+* **`tierbridge-credit`** : ChatGPT Enterprise 실제 계정 잔여 크레딧 및 한도 즉시 조회
 * **`tierbridge-log`** : 라이브 프록시 가동 로그 실시간 모니터링 (`tail -f ~/.tierbridge/live/harness.log`)
 * **`tierbridge-dash`** : Kibana 스타일 라이브 웹 대시보드 열기
 

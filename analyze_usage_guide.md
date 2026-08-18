@@ -30,7 +30,18 @@
 ```
 *(또는 `python3 analyze_usage.py`)*
 
-### 2.2. 월별(Monthly) 기간 조회 (`--month` / `-m`)
+### 2.2. 실시간 엔터프라이즈 계정 잔여 크레딧 & 한도 조회 (`--balance` / `-b`)
+OpenAI ChatGPT Enterprise 백엔드 API와 직접 통신하여 실제 월간 할당 한도, 누적 소모 크레딧, 잔여 크레딧 및 리셋 일정을 실시간으로 즉시 조회합니다.
+
+```bash
+./analyze_usage.py --balance
+# 축약형
+./analyze_usage.py -b
+# 또는 독립 스크립트 실행
+./check_credits.py
+```
+
+### 2.3. 월별(Monthly) 기간 조회 (`--month` / `-m`)
 특정 월(예: `2026-08`)의 통계 및 소모 요약만 조회합니다.
 
 ```bash
@@ -39,7 +50,7 @@
 ./analyze_usage.py -m 2026-08
 ```
 
-### 2.3. 세션 ID(Session ID) 필터링 조회 (`--session` / `-s`)
+### 2.4. 세션 ID(Session ID) 필터링 조회 (`--session` / `-s`)
 특정 대화 세션 ID(예: `5eb61a1e`)의 소모 토큰 및 크레딧만 정밀 파싱합니다.
 
 ```bash
@@ -48,7 +59,7 @@
 ./analyze_usage.py -s 5eb61a1e
 ```
 
-### 2.4. Kibana 스타일 웹 대시보드 생성 및 열기 (`--html` / `-w`)
+### 2.5. Kibana 스타일 웹 대시보드 생성 및 열기 (`--html` / `-w`)
 Kibana 풍의 아름다운 반응형 다크테마 시각화 리포트 웹페이지 (`usage_dashboard.html`)를 생성하고 자동으로 브라우저에 엽니다.
 
 ```bash
@@ -56,7 +67,7 @@ Kibana 풍의 아름다운 반응형 다크테마 시각화 리포트 웹페이�
 ./analyze_usage.py --month 2026-08 --html
 ```
 
-### 2.5. 특정 날짜 필터링 조회 (`--date` / `-d`)
+### 2.6. 특정 날짜 필터링 조회 (`--date` / `-d`)
 특정 날짜(예: `2026-08-14`)의 소모량만 추출하여 조회합니다.
 
 ```bash
@@ -65,7 +76,7 @@ Kibana 풍의 아름다운 반응형 다크테마 시각화 리포트 웹페이�
 ./analyze_usage.py -d 2026-08-14
 ```
 
-### 2.6. 특정 로그 파일 지정 분석
+### 2.7. 특정 로그 파일 지정 분석
 백업해 둔 별도의 로그 파일(예: `harness.log.bak`)을 지정하여 분석할 수 있습니다.
 
 ```bash

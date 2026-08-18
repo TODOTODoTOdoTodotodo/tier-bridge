@@ -48,7 +48,16 @@ Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=ollama`)로
 ./analyze_usage.py
 ```
 
-### 3.2. 월별(Monthly) 기간 조회 (`--month` / `-m`)
+### 3.2. 실시간 엔터프라이즈 잔여 크레딧 & 한도 조회 (`--balance` / `-b`)
+ChatGPT Enterprise 백엔드(`https://chatgpt.com/backend-api/codex/usage`)에서 실제 계정의 지출 한도, 누적 소모 크레딧, 잔여 크레딧 및 리셋 일정을 실시간으로 직접 조회합니다.
+
+```bash
+./analyze_usage.py --balance
+# 축약형
+./analyze_usage.py -b
+```
+
+### 3.3. 월별(Monthly) 기간 조회 (`--month` / `-m`)
 특정 월(예: `2026-08`)의 통계 및 소모 요약만 조회합니다.
 
 ```bash
@@ -57,7 +66,7 @@ Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=ollama`)로
 ./analyze_usage.py -m 2026-08
 ```
 
-### 3.3. 세션 ID(Session ID) 필터링 조회 (`--session` / `-s`)
+### 3.4. 세션 ID(Session ID) 필터링 조회 (`--session` / `-s`)
 특정 대화 세션 ID(예: `5eb61a1e`)의 소모 토큰 및 크레딧만 정밀 파싱합니다.
 
 ```bash
