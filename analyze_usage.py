@@ -397,6 +397,48 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
     </div>
 
+    <!-- Session Turn-by-Turn Live Stream (Visible ONLY when specific session is selected) -->
+    <div id="sessionTurnsSection" class="hidden glass-card p-6 rounded-2xl mb-8 border border-purple-500/40 bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/20">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-800">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="p-2 bg-purple-500/20 text-purple-400 rounded-xl text-lg">
+                        <i class="fa-solid fa-list-ol"></i>
+                    </span>
+                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                        선택 세션 턴별 프롬프트 실시간 타임라인
+                        <span id="sessionTurnsBadge" class="text-xs px-2.5 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-mono font-bold">0 턴</span>
+                    </h2>
+                </div>
+                <p class="text-xs text-slate-400 mt-1" id="sessionTurnsDesc">
+                    세션 내 발생한 모든 질의 턴과 에이전트 서브스텝 프롬프트, 모델 라우팅 등급 및 소모 수치를 시간순으로 실시간 표시합니다.
+                </p>
+            </div>
+            <div class="text-xs font-mono text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
+                세션 ID: <span id="sessionTurnsSid" class="text-purple-300 font-bold">-</span>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto max-h-96 overflow-y-auto pr-1">
+            <table class="w-full text-left border-collapse" id="sessionTurnsTable">
+                <thead class="sticky top-0 bg-slate-900/95 backdrop-blur-md z-10">
+                    <tr class="text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
+                        <th class="px-3 py-2.5 rounded-tl-lg font-mono">Turn</th>
+                        <th class="px-3 py-2.5">발생 시각</th>
+                        <th class="px-3 py-2.5 text-center">라우팅 등급</th>
+                        <th class="px-3 py-2.5">프롬프트 전문 / 서브스텝 요약</th>
+                        <th class="px-3 py-2.5 text-right">In / Out 토큰</th>
+                        <th class="px-3 py-2.5 text-right">소모 토큰</th>
+                        <th class="px-3 py-2.5 text-right rounded-tr-lg">소모 크레딧</th>
+                    </tr>
+                </thead>
+                <tbody id="sessionTurnsTableBody" class="divide-y divide-slate-800 text-xs">
+                    <!-- Populated dynamically via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Top Consuming Prompts Table -->
     <div class="glass-card p-6 rounded-2xl mb-8">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -870,8 +912,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             let chartTokensData = [];
             let chartTurnMeta = [];
 
+            const sessionTurnsSection = document.getElementById('sessionTurnsSection');
+            const sessionTurnsBadge = document.getElementById('sessionTurnsBadge');
+            const sessionTurnsSid = document.getElementById('sessionTurnsSid');
+            const sessionTurnsTableBody = document.getElementById('sessionTurnsTableBody');
+
             if (isSessionSelected) {{
                 if (timeIntervalWrapper) timeIntervalWrapper.classList.remove('hidden');
+                if (sessionTurnsSection) sessionTurnsSection.classList.remove('hidden');
                 const interval = timeIntervalSelect ? timeIntervalSelect.value : 'ALL_TURNS';
                 
                 const titleTextEl = document.getElementById('timelineChartTitleText');
@@ -888,6 +936,52 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     return tA.localeCompare(tB);
                 }});
 
+                // 턴별 프롬프트 실시간 타임라인 테이블 렌더링
+                if (sessionTurnsBadge) sessionTurnsBadge.innerText = `${{sessionRecords.length}} 턴`;
+                if (sessionTurnsSid) sessionTurnsSid.innerText = targetSession;
+                if (sessionTurnsTableBody) {{
+                    let turnsHtml = '';
+                    sessionRecords.forEach((r, idx) => {{
+                        const credits = (r.cost / 0.20).toFixed(2);
+                        const timeStr = r.timestamp || r.date || 'N/A';
+                        const safePrompt = (r.prompt || '(연속 서브스텝 / 툴 액션)').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+                        
+                        let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
+                        if (r.decision.includes('BRONZE')) {{
+                            badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
+                        }} else if (r.decision.includes('SILVER')) {{
+                            badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
+                        }} else if (r.decision.includes('GOLD')) {{
+                            badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
+                        }} else if (r.decision.includes('PLATINUM')) {{
+                            badgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
+                        }} else if (r.decision.includes('DIAMOND')) {{
+                            badgeClass = 'bg-blue-500/20 text-blue-300 border-blue-400/40';
+                        }} else if (r.decision.includes('CHALLENGER') || r.decision.includes('SOL')) {{
+                            badgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-extrabold animate-pulse';
+                        }} else if (r.decision.includes('CLASSIFIER')) {{
+                            badgeClass = 'bg-purple-950/40 text-purple-300 border-purple-600/40 font-mono';
+                        }}
+
+                        turnsHtml += `
+                        <tr class="hover:bg-slate-800/60 transition-colors border-b border-slate-800/80">
+                            <td class="px-3 py-2.5 font-mono text-purple-300 font-bold">Turn ${{idx + 1}}</td>
+                            <td class="px-3 py-2.5 font-mono text-slate-400 whitespace-nowrap">${{timeStr}}</td>
+                            <td class="px-3 py-2.5 text-center">
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full border ${{badgeClass}}">
+                                    ${{r.decision}}
+                                </span>
+                            </td>
+                            <td class="px-3 py-2.5 text-slate-200 font-medium max-w-md truncate" title="${{safePrompt}}">${{safePrompt}}</td>
+                            <td class="px-3 py-2.5 text-right font-mono text-slate-400 whitespace-nowrap">${{r.input_tokens.toLocaleString()}} / ${{r.output_tokens.toLocaleString()}}</td>
+                            <td class="px-3 py-2.5 text-right font-mono text-sky-400 font-semibold whitespace-nowrap">${{r.total_tokens.toLocaleString()}}</td>
+                            <td class="px-3 py-2.5 text-right font-mono text-emerald-400 font-bold whitespace-nowrap">${{credits}} Cr</td>
+                        </tr>
+                        `;
+                    }});
+                    sessionTurnsTableBody.innerHTML = turnsHtml;
+                }}
+
                 if (interval === 'ALL_TURNS') {{
                     // 개별 턴별 (Turn-by-Turn) 타임라인
                     sessionRecords.forEach((r, idx) => {{
@@ -901,6 +995,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             decision: r.decision,
                             model: r.model || 'N/A',
                             prompt: r.prompt || '(연속 서브스텝 / 툴 액션)',
+                            in_tok: r.input_tokens,
+                            out_tok: r.output_tokens,
                             tokens: r.total_tokens,
                             credits: (r.cost / 0.20).toFixed(2)
                         }});
@@ -947,6 +1043,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }}
             }} else {{
                 if (timeIntervalWrapper) timeIntervalWrapper.classList.add('hidden');
+                if (sessionTurnsSection) sessionTurnsSection.classList.add('hidden');
                 const titleTextEl = document.getElementById('timelineChartTitleText');
                 const subTextEl = document.getElementById('timelineChartSubText');
                 const iconEl = document.getElementById('timelineChartIcon');
@@ -965,6 +1062,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 chartCreditsData = chartLabels.map(d => (dailyMap[d].cost / 0.20).toFixed(2));
                 chartTokensData = chartLabels.map(d => dailyMap[d].tokens);
             }}
+
+            window.currentChartTurnMeta = chartTurnMeta;
+            window.currentIsSessionSelected = isSessionSelected;
 
             if (dailyChart) {{
                 dailyChart.data.labels = chartLabels;
@@ -1008,7 +1108,54 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             intersect: false
                         }},
                         plugins: {{
-                            legend: {{ labels: {{ color: '#94a3b8', font: {{ family: 'Inter' }} }} }}
+                            legend: {{ labels: {{ color: '#94a3b8', font: {{ family: 'Inter' }} }} }},
+                            tooltip: {{
+                                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                                titleColor: '#38bdf8',
+                                bodyColor: '#e2e8f0',
+                                borderColor: 'rgba(56, 189, 248, 0.3)',
+                                borderWidth: 1,
+                                padding: 12,
+                                boxPadding: 6,
+                                usePointStyle: true,
+                                callbacks: {{
+                                    title: function(items) {{
+                                        if (!items || items.length === 0) return '';
+                                        const idx = items[0].dataIndex;
+                                        const meta = window.currentChartTurnMeta;
+                                        if (window.currentIsSessionSelected && meta && meta[idx]) {{
+                                            const m = meta[idx];
+                                            if (m.turn) {{
+                                                return `🎯 턴 ${{m.turn}} [${{m.time}}]`;
+                                            }} else if (m.slot) {{
+                                                return `⏱️ 시간대: ${{m.slot}} (${{m.count}}개 턴)`;
+                                            }}
+                                        }}
+                                        return items[0].label;
+                                    }},
+                                    afterTitle: function(items) {{
+                                        if (!items || items.length === 0) return '';
+                                        const idx = items[0].dataIndex;
+                                        const meta = window.currentChartTurnMeta;
+                                        if (window.currentIsSessionSelected && meta && meta[idx] && meta[idx].decision) {{
+                                            const m = meta[idx];
+                                            return `🤖 라우팅: [${{m.decision}}] (${{m.model}})`;
+                                        }}
+                                        return '';
+                                    }},
+                                    afterBody: function(items) {{
+                                        if (!items || items.length === 0) return '';
+                                        const idx = items[0].dataIndex;
+                                        const meta = window.currentChartTurnMeta;
+                                        if (window.currentIsSessionSelected && meta && meta[idx] && meta[idx].prompt) {{
+                                            const p = meta[idx].prompt;
+                                            const shortPrompt = p.length > 70 ? p.substring(0, 70) + '...' : p;
+                                            return `\n💬 프롬프트:\n"${{shortPrompt}}"`;
+                                        }}
+                                        return '';
+                                    }}
+                                }}
+                            }}
                         }},
                         scales: {{
                             x: {{ grid: {{ color: 'rgba(51, 65, 85, 0.3)' }}, ticks: {{ color: '#94a3b8' }} }},
