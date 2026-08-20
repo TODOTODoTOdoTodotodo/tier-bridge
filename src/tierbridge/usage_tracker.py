@@ -22,6 +22,7 @@ class UsageTracker:
         self.total_loc = 0
         self.total_cost_usd = 0.0
         self.history = []
+        self.seen_sessions = set()
 
     def get_summary(self) -> dict:
         return {
@@ -45,16 +46,16 @@ class UsageTracker:
             return 0
         
         loc_count = 0
-        code_blocks = re.findall(r'```[\w\-]*\n(.*?)```', full_text, re.DOTALL)
+        code_blocks = re.findall(r"```(?:\w+)?\n(.*?)```", full_text, re.DOTALL)
         for block in code_blocks:
             lines = [line for line in block.splitlines() if line.strip()]
             loc_count += len(lines)
         return loc_count
 
-    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = "", auth_token: str = "", account_id: str = ""):
+    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = "", auth_token: str = "", account_id: str = "", prompt_text: str = "", is_first_turn: Optional[bool] = None):
         """
         토큰 소모량 및 코드 작성 줄 수(LOC)를 전달받아 예상 비용을 계산하고,
-        비동기 델타 크레딧 인터셉터를 백그라운드로 실행하여 실제 크레딧 차감액을 추적합니다.
+        비동기 델타 크레딧 인터셉터 및 기억저장소(MemoryIngestionWorker)를 백그라운드로 실행합니다.
         """
         # 모델명 소문자 매핑
         model_key = model.lower()
@@ -89,8 +90,18 @@ class UsageTracker:
             "loc": loc,
             "cost_usd": round(cost_total, 6)
         })
+
+        # 세션 최초 턴 여부 식별
+        if is_first_turn is None:
+            if session_id:
+                is_first = session_id not in self.seen_sessions
+                self.seen_sessions.add(session_id)
+            else:
+                is_first = False
+        else:
+            is_first = is_first_turn
         
-        # 실시간 델타 크레딧 인터셉터 비동기 백그라운드 구동 (0ms 클라이언트 레이턴시)
+        # 1. 실시간 델타 크레딧 인터셉터 비동기 백그라운드 구동 (0ms 클라이언트 레이턴시)
         try:
             try:
                 from tierbridge.credit_interceptor import interceptor
@@ -115,6 +126,27 @@ class UsageTracker:
             # 비동기 루프가 없거나 예외 시 즉시 폴백 로깅
             sid_tag = f" [sid: {session_id}]" if session_id else ""
             print(f"[{timestamp_str}]{sid_tag} ➔ [USAGE] {decision} ({model}) | input={input_tokens} output={output_tokens} tokens | loc={loc} lines | cost=${round(cost_total, 6)} USD", flush=True)
+
+        # 2. Step 1: 비동기 세션 로그 수집 및 기억 저장소(sub-memory) 연동 (0ms 클라이언트 레이턴시)
+        try:
+            try:
+                from tierbridge.memory_ingestion_worker import MemoryIngestionWorker
+            except ImportError:
+                from src.tierbridge.memory_ingestion_worker import MemoryIngestionWorker
+            
+            import asyncio
+            loop = asyncio.get_running_loop()
+            event_data = {
+                "session_id": session_id,
+                "prompt": prompt_text,
+                "decision": decision,
+                "loc": loc,
+                "cost": round(cost_total, 6),
+                "is_first_turn": is_first
+            }
+            loop.create_task(MemoryIngestionWorker.process_log_event(event_data))
+        except Exception:
+            pass
 
     def parse_and_track_from_buffer(self, buffer: bytes, model: str, decision: str, prompt_text: str = "", session_id: str = "", auth_token: str = "", account_id: str = ""):
         """
@@ -185,6 +217,6 @@ class UsageTracker:
                 else:
                     output_tokens = 150
 
-            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id, auth_token=auth_token, account_id=account_id)
+            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id, auth_token=auth_token, account_id=account_id, prompt_text=prompt_text)
         except Exception as e:
             print(f"[Warning] Failed to parse usage stats from buffer: {e}")
