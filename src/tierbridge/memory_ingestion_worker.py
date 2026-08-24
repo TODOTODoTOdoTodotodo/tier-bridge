@@ -69,24 +69,37 @@ class MemoryIngestionWorker:
         conn = sqlite3.connect(db_path, timeout=5.0)
         cursor = conn.cursor()
 
-        # 1. Giyeok nodes 테이블 지원 (순수 User / Assistant 텍스트만 보존)
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='nodes';")
-        has_nodes = cursor.fetchone() is not None
+        # 1. Giyeok nodes & edges 테이블 자동 생성 및 저장 (순수 User / Assistant 텍스트만 보존)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS nodes (
+                id TEXT PRIMARY KEY,
+                text TEXT,
+                embedding BLOB,
+                timestamp TEXT
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS edges (
+                source_id TEXT,
+                target_id TEXT,
+                weight REAL DEFAULT 1.0,
+                PRIMARY KEY (source_id, target_id)
+            );
+        """)
 
-        if has_nodes:
-            clean_p = prompt.strip()
-            # 동일 질문의 이전 중간 턴이 있다면 삭제 후 최종 1:1 쌍으로 대체 (Single Pair Guarantee)
-            cursor.execute("DELETE FROM nodes WHERE text LIKE ?;", (f"User: {clean_p}\n%",))
+        clean_p = prompt.strip()
+        # 동일 질문의 이전 중간 턴이 있다면 삭제 후 최종 1:1 쌍으로 대체 (Single Pair Guarantee)
+        cursor.execute("DELETE FROM nodes WHERE text LIKE ?;", (f"User: {clean_p}\n%",))
 
-            node_id = str(uuid.uuid4())
-            node_text = f"User: {clean_p}\nAssistant: {clean_sol}"
-            # 384 dims float32 = 1536 bytes
-            zero_embedding = bytes(1536)
-            iso_time = datetime.now(timezone.utc).isoformat()
-            cursor.execute(
-                "INSERT INTO nodes (id, text, embedding, timestamp) VALUES (?, ?, ?, ?);",
-                (node_id, node_text, zero_embedding, iso_time)
-            )
+        node_id = str(uuid.uuid4())
+        node_text = f"User: {clean_p}\nAssistant: {clean_sol}"
+        # 384 dims float32 = 1536 bytes
+        zero_embedding = bytes(1536)
+        iso_time = datetime.now(timezone.utc).isoformat()
+        cursor.execute(
+            "INSERT INTO nodes (id, text, embedding, timestamp) VALUES (?, ?, ?, ?);",
+            (node_id, node_text, zero_embedding, iso_time)
+        )
 
         # 2. TierBridge memories 테이블 지원
         cursor.execute("""
@@ -98,7 +111,6 @@ class MemoryIngestionWorker:
             );
         """)
         tags_json = json.dumps(tags, ensure_ascii=False)
-        clean_p = prompt.strip()
         cursor.execute("DELETE FROM memories WHERE content LIKE ?;", (f"User: {clean_p}\n%",))
         cursor.execute("INSERT INTO memories (content, tags) VALUES (?, ?);", (f"User: {clean_p}\nAssistant: {clean_sol}", tags_json))
 
