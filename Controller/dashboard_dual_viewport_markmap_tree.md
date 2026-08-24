@@ -28,27 +28,19 @@ Codex 및 고급 개발자 사용자는 복잡한 지식 네트워크를 다각�
 
 ---
 
-## 3. 생각나무 마인드맵 (`Markmap`) 계층형 데이터 생성 규칙
+## 3. 생각나무 마인드맵 (`Markmap`) 계층형 데이터 생성 규칙 및 상세 확인 링크
 
-기억 저장소의 지식 에피소드를 다음의 구조화된 마크다운 트리로 자동 변환하여 `markmap-view`에 전달합니다:
+기억 저장소의 지식 에피소드를 구조화된 마크다운 트리로 자동 변환하며, 각 지식 노드 제목 및 메타 라인에 **원클릭 상세 확인 인터랙티브 링크(`<a class="tb-node-link" onclick="openNodeDetail(...)">...</a>`)**를 삽입합니다:
 
 ```markdown
 # 🌿 TierBridge Thought-Tree (34 Pure Fruits)
 ## 🎫 쿠폰 및 결제 동기화 (MGTT-25938)
-### 📌 #d48fb397 P1 쿠폰 사전 계산 금액 복원 및 XML NPE 방어
+### 📌 #d48fb397 P1 쿠폰 사전 계산 금액 복원 및 XML NPE 방어 <a class="tb-node-link" onclick="openNodeDetail('d48fb397-...')">🔍 상세 확인</a>
 - 💡 **적용 해결책**: `aplAmt` 복원 및 `GmarketGetCoupon` null 안전성 보강
-- 🏷️ **메타**: 등급 `BRONZE` | LOC: 0줄 | 비용: $0.0416
-### 📌 #e8f0cab6 Gmarket 쿠폰 XML 연동 코드 리뷰
+- 🏷️ **메타**: 등급 [BRONZE] | LOC: 0줄 | 비용: $0.0416 | <a class="tb-node-link" onclick="openNodeDetail('d48fb397-...')">📖 전체 에피소드 & 소각 관리</a>
+### 📌 #e8f0cab6 Gmarket 쿠폰 XML 연동 코드 리뷰 <a class="tb-node-link" onclick="openNodeDetail('e8f0cab6-...')">🔍 상세 확인</a>
 - 💡 **적용 해결책**: `usedCupnAmt` vs `CouponType` 매핑 불일치 분석 및 예외 방어 리뷰
-- 🏷️ **메타**: 등급 `BRONZE` | 가중치: 1.97x
-### 📌 #d1ba68cb 쿠폰 리뷰 요약 브리핑
-- 💡 **적용 해결책**: 쿠폰 타입 매핑 보정 및 할인금액 수렴 정책 정리
-
-## 🧭 GNB 가이드 툴팁 API & 캐시 전략 (MGTT-25184)
-### 📌 #0c1c266c 홈 GNB 가이드 툴팁 API 작업지시서 수립
-- 💡 **적용 해결책**: `GET /feed/guide-status` 엔드포인트 설계
-### 📌 #cb84a8a6 Redis State 저장 ➔ @Cacheable 응답 캐시 전환
-- 💡 **적용 해결책**: direct Redis get/set 방식에서 Spring `@Cacheable` 캐시 구조로 리팩토링
+- 🏷️ **메타**: 등급 [BRONZE] | 가중치: 1.97x | <a class="tb-node-link" onclick="openNodeDetail('e8f0cab6-...')">📖 전체 에피소드 & 소각 관리</a>
 ...
 ```
 
@@ -60,8 +52,9 @@ Codex 및 고급 개발자 사용자는 복잡한 지식 네트워크를 다각�
    - `https://cdn.jsdelivr.net/npm/d3@7`
    - `https://cdn.jsdelivr.net/npm/markmap-view@0.15.4`
    - `https://cdn.jsdelivr.net/npm/markmap-lib@0.15.4`
-2. **반응형 테마 지원**:
-   - 다크 모드 / 라이트 모드에 맞춰 SVG 텍스트 및 브랜치 선 색상이 자동으로 전환됩니다.
+2. **반응형 테마 및 클릭 액션**:
+   - 다크 모드 / 라이트 모드에 맞춰 SVG 텍스트 및 링크 뱃지(`.tb-node-link`) 색상이 자동으로 전환됩니다.
+   - 링크 클릭 시 `openNodeDetail(nodeId)`가 호출되어 해당 에피소드의 전체 문제/해결책 전문, 파일 경로, 세션 메타 및 **⚡ Neuralizer 소각 버튼**이 포함된 상세 모달이 즉시 열립니다.
 3. **노드 인터랙션**:
    - 각 브랜치의 원형 버튼 클릭 시 하위 가지 접기/펼치기.
    - 마우스 휠 줌 및 드래그 팬(Pan) 완벽 지원.

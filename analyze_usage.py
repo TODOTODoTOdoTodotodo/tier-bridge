@@ -237,6 +237,39 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         html.light #markmapSvg text {{ fill: #0f172a !important; }}
         #markmapSvg circle {{ cursor: pointer; stroke-width: 2px; }}
         #markmapSvg line, #markmapSvg path {{ stroke-linecap: round; }}
+        
+        .tb-node-link {{
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 1px 7px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            margin-left: 6px;
+            transition: all 0.2s ease;
+        }}
+        html.dark .tb-node-link {{
+            background: rgba(168, 85, 247, 0.25);
+            color: #d8b4fe;
+            border: 1px solid rgba(168, 85, 247, 0.5);
+        }}
+        html.dark .tb-node-link:hover {{
+            background: rgba(168, 85, 247, 0.5);
+            color: #ffffff;
+            box-shadow: 0 0 8px rgba(168, 85, 247, 0.6);
+        }}
+        html.light .tb-node-link {{
+            background: rgba(147, 51, 234, 0.12);
+            color: #7e22ce;
+            border: 1px solid rgba(147, 51, 234, 0.35);
+        }}
+        html.light .tb-node-link:hover {{
+            background: rgba(147, 51, 234, 0.25);
+            color: #581c87;
+        }}
     </style>
 </head>
 <body class="text-slate-100 min-h-screen p-6 md:p-10">
@@ -910,7 +943,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     </div>
 
     <!-- Graph Node Inspector Modal (With Neuralizer Wipe Button) -->
-    <div id="graphNodeModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div id="graphNodeModal" class="hidden fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="glass-card max-w-2xl w-full p-6 rounded-3xl border border-purple-500/40 shadow-2xl relative bg-slate-900/95 max-h-[85vh] overflow-y-auto">
             <button onclick="closeGraphNodeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-lg">
                 <i class="fa-solid fa-xmark"></i>
@@ -2062,11 +2095,12 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 if (cat.items.length === 0) return;
                 md += `## ${{cat.title}}\\n`;
                 cat.items.forEach(item => {{
-                    const pShort = item.prob.length > 60 ? item.prob.substring(0, 60).replace(/[\\n\\r]+/g, ' ') + '...' : item.prob.replace(/[\\n\\r]+/g, ' ');
-                    const sShort = item.sol.length > 85 ? item.sol.substring(0, 85).replace(/[\\n\\r]+/g, ' ') + '...' : item.sol.replace(/[\\n\\r]+/g, ' ');
-                    md += `### 📌 #${{item.mid}} ${{pShort || '(문제 요약)'}}\\n`;
+                    const rawId = String(item.id || '').replace(/^#/, '').trim();
+                    const pShort = item.prob.length > 55 ? item.prob.substring(0, 55).replace(/[\\n\\r]+/g, ' ') + '...' : item.prob.replace(/[\\n\\r]+/g, ' ');
+                    const sShort = item.sol.length > 80 ? item.sol.substring(0, 80).replace(/[\\n\\r]+/g, ' ') + '...' : item.sol.replace(/[\\n\\r]+/g, ' ');
+                    md += `### 📌 #${{item.mid}} ${{pShort || '(문제 요약)'}} <a href="javascript:void(0)" onclick="openNodeDetail('${{rawId}}', event)" class="tb-node-link">🔍 상세 확인</a>\\n`;
                     md += `- 💡 **해결책**: ${{sShort || '(해결책)'}}\\n`;
-                    md += `- 🏷️ **메타**: 등급 [${{item.dec}}] | LOC: ${{item.loc}}줄 | 비용: $${{Number(item.cost).toFixed(4)}} | 가중치: ${{Number(item.weight).toFixed(2)}}x\\n`;
+                    md += `- 🏷️ **메타**: 등급 [${{item.dec}}] | LOC: ${{item.loc}}줄 | 비용: $${{Number(item.cost).toFixed(4)}} | 가중치: ${{Number(item.weight).toFixed(2)}}x <a href="javascript:void(0)" onclick="openNodeDetail('${{rawId}}', event)" class="tb-node-link">📖 에피소드 & 소각</a>\\n`;
                 }});
             }});
 
@@ -2232,15 +2266,25 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
         }}
 
-        // 📖 카드 클릭 시 상세 정보 모달 열기
+        // 📖 카드 또는 마크맵 링크 클릭 시 상세 정보 모달 열기
         function openNodeDetail(nodeId, event) {{
-            if (event) event.stopPropagation();
-            const cleanId = (nodeId || '').replace(/^#/, '').trim();
-            const selectedNode = (currentGraphData.nodes || []).find(n => n.id === cleanId || n.id === nodeId);
+            if (event) {{
+                try {{ event.stopPropagation(); }} catch(e) {{}}
+            }}
+            const cleanId = String(nodeId || '').replace(/^#/, '').trim();
+            const nodes = (currentGraphData && currentGraphData.nodes && currentGraphData.nodes.length > 0)
+                ? currentGraphData.nodes
+                : (currentMemories || []);
+
+            let selectedNode = nodes.find(n => String(n.id || '').replace(/^#/, '').trim() === cleanId);
+            if (!selectedNode && currentMemories) {{
+                selectedNode = currentMemories.find(n => String(n.id || '').replace(/^#/, '').trim() === cleanId);
+            }}
             if (selectedNode) {{
                 openGraphNodeModal(selectedNode);
             }}
         }}
+        window.openNodeDetail = openNodeDetail;
 
         function openGraphNodeModal(node) {{
             const modal = document.getElementById('graphNodeModal');
