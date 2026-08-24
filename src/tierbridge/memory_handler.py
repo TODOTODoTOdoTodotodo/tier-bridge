@@ -517,7 +517,7 @@ class MemoryHandler:
     @classmethod
     def get_memory_stats(cls) -> Dict[str, Any]:
         """
-        기억저장소 통계 산출
+        기억저장소 통계 산출 (누적 기억 수, 태그 수, 코드 수정 수, 엣지 최고 가중치, 회수 적중수 및 절감 크레딧)
         """
         db_path = cls.get_db_path()
         if not db_path:
@@ -527,7 +527,9 @@ class MemoryHandler:
                 "total_tags": 0,
                 "code_modified_count": 0,
                 "max_edge_weight": 1.0,
-                "structured_rate": 100.0
+                "structured_rate": 100.0,
+                "recall_hits": 0,
+                "saved_credits": 0.0
             }
 
         total_count = 0
@@ -562,13 +564,36 @@ class MemoryHandler:
         except Exception:
             pass
 
+        # 4. 실시간 로그 기반 Recall Hits & Saved Credits 산출
+        recall_hits = 0
+        log_candidates = [
+            "harness.log",
+            os.path.expanduser("~/.tierbridge/live/harness.log"),
+            os.path.expanduser("~/.tierbridge/harness.log"),
+            "/Users/HH191_1/Documents/agent-cli/harness.log"
+        ]
+        for log_path in log_candidates:
+            if os.path.exists(log_path):
+                try:
+                    with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                        for line in f:
+                            if "➔ [MEMORY:RECALLED]" in line or "➔ [MEMORY:HINT]" in line:
+                                recall_hits += 1
+                    break
+                except Exception:
+                    pass
+
+        saved_credits = round(recall_hits * 1.5, 2)
+
         return {
             "status": "success",
             "total_memories": total_count,
             "total_tags": max(1, total_count * 2),
             "code_modified_count": code_mod_count,
             "max_edge_weight": max_edge_w,
-            "structured_rate": 100.0
+            "structured_rate": 100.0,
+            "recall_hits": recall_hits,
+            "saved_credits": saved_credits
         }
 
     @classmethod
