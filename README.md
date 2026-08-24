@@ -104,7 +104,6 @@ tierbridge-credit
 
 > 📖 **[상세 기술 문서: 듀얼 뷰포트 마인드맵 생각나무 명세서 (dashboard_dual_viewport_markmap_tree.md)](docs/memory/dashboard_dual_viewport_markmap_tree.md)**  
 > 📖 **[상세 기술 문서: 기억 저장소 대시보드 연동 명세서 (dashboard_memory_integration.md)](docs/memory/dashboard_memory_integration.md)**  
-> 📖 **[상세 기술 문서: 기억 가지치기 및 열매 보존 정책 (memory_pruning_and_fruit_sanitization.md)](docs/memory/memory_pruning_and_fruit_sanitization.md)**  
 > 📖 **[상세 기술 문서: 뉴럴라이저 & 콤팩트 그래프 명세서 (dashboard_neuralizer_and_compact_graph.md)](docs/memory/dashboard_neuralizer_and_compact_graph.md)**
 
 ---
@@ -184,26 +183,19 @@ OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가
 | **기억 저장소 & 듀얼 뷰포트 (`docs/memory/`)** | [dashboard_dual_viewport_markmap_tree.md](docs/memory/dashboard_dual_viewport_markmap_tree.md) | 성단 네트워크 ↔ 접이식 마인드맵 듀얼 뷰포트 명세 |
 | | [dashboard_memory_integration.md](docs/memory/dashboard_memory_integration.md) | 2단 분할 시맨틱 검색 & 실시간 기억 카드 연동 명세 |
 | | [dashboard_neuralizer_and_compact_graph.md](docs/memory/dashboard_neuralizer_and_compact_graph.md) | 콤팩트 미니 그래프 & Neuralizer 정밀 소각 설계 |
-| | [memory_pruning_and_fruit_sanitization.md](docs/memory/memory_pruning_and_fruit_sanitization.md) | 기억 가지치기 및 34개 순수 지식 열매 보존 정책 |
-| | [integration_step1_ingestion.md](docs/memory/integration_step1_ingestion.md) | Step 1 에피소드 자동 수집 엔지니어링 명세 |
-| | [integration_step2_recall.md](docs/memory/integration_step2_recall.md) | Step 2 50ms 사전 회수 샌드박스 설계 |
-| | [integration_step3_reinforcement.md](docs/memory/integration_step3_reinforcement.md) | Step 3 시너지 엣지 가중치 강화 엔진 설계 |
-| | [integration_step4_analytics.md](docs/memory/integration_step4_analytics.md) | Step 4 사용량 분석 & 시각화 파이프라인 명세 |
-| **대시보드 & 분석 (`docs/dashboard/`)** | [dashboard_ui_theme_guideline.md](docs/dashboard/dashboard_ui_theme_guideline.md) | Dark / Light / System 3단 테마 시스템 가이드라인 |
+| **대시보드 & 분석 (`docs/dashboard/`)** | [analyze_usage_guide.md](docs/dashboard/analyze_usage_guide.md) | CLI 사용량 분석 가이드 및 활용법 |
 | | [analyze_usage.md](docs/dashboard/analyze_usage.md) | 사용량 분석 & 대시보드 아키텍처 명세서 |
-| | [analyze_usage_guide.md](docs/dashboard/analyze_usage_guide.md) | CLI 사용량 분석 가이드 및 활용법 |
+| | [dashboard_ui_theme_guideline.md](docs/dashboard/dashboard_ui_theme_guideline.md) | Dark / Light / System 3단 테마 시스템 가이드라인 |
 | | [loc_tracker.md](docs/dashboard/loc_tracker.md) | 소스코드 LOC 추출 및 생산성 지표 설계서 |
-| **모델 관리 & 라우팅 (`docs/model/`)** | [model_healing_factor.md](docs/model/model_healing_factor.md) | 자가치유 핫패칭 및 버전 스냅샷 롤백 엔진 규격 |
-| | [routing_harness.md](docs/model/routing_harness.md) | 6단계 랭크 티어 라우팅 및 분류기 명세서 |
+| **모델 관리 & 라우팅 (`docs/model/`)** | [routing_harness.md](docs/model/routing_harness.md) | 6단계 랭크 티어 라우팅 및 분류기 명세서 |
+| | [model_healing_factor.md](docs/model/model_healing_factor.md) | 자가치유 핫패칭 및 버전 스냅샷 롤백 엔진 규격 |
 | | [delta_credit_interceptor.md](docs/model/delta_credit_interceptor.md) | 델타 크레딧 & 실시간 계정 잔여량 인터셉터 설계 |
 | | [standard_report_directive.md](docs/model/standard_report_directive.md) | 3단 마크다운 보고서 표준 출력 투명 주입 규격 |
 | **배포 및 운영 (`docs/operations/`)** | [deployment_architecture.md](docs/operations/deployment_architecture.md) | 런타임 격리 배포 아키텍처 및 환경변수 설정 가이드 |
 | | [troubleshooting_QA.md](docs/operations/troubleshooting_QA.md) | 트러블슈팅 및 문제해결 QA 전체 가이드 |
-| **결과 보고서 & 지표 (`docs/reports/`)** | [RESULT_REPORT.md](docs/reports/RESULT_REPORT.md) | 최종 하네스 엔지니어링 결과 종합 보고서 |
+| **결과 보고서 & 지표 (`docs/reports/`)** | [RESULT_REPORT.md](docs/reports/RESULT_REPORT.md) | 최종 하네스 엔지니어링 종합 결과 보고서 |
 | | [ROI_검토_지표.md](docs/reports/ROI_검토_지표.md) | 재정적 절감액 및 ROI 핵심 성과 지표 |
-| | [integration_step1_result_report.md](docs/reports/integration_step1_result_report.md) | Step 1 단위 검증 완료 결과 보고서 |
-| | [integration_step2_result_report.md](docs/reports/integration_step2_result_report.md) | Step 2 단위 검증 완료 결과 보고서 |
-| | [integration_step3_result_report.md](docs/reports/integration_step3_result_report.md) | Step 3 단위 검증 완료 결과 보고서 |
-| | [integration_step4_result_report.md](docs/reports/integration_step4_result_report.md) | Step 4 단위 검증 완료 결과 보고서 |
 | **예비 기술 명세서 / RFC (`docs/rfc/`)** | [preliminary_remote_db_extension_spec.md](docs/rfc/preliminary_remote_db_extension_spec.md) | 🌐 원격 DB 확장 및 전사 동기화 예비 기술 명세서 (RFC) |
+
+> 📦 **과거 단계별 개발 지시서 및 중간 검증 보고서**: [docs/archive/](docs/archive/) 디렉토리에 히스토리용으로 안전하게 아카이브 보존되어 있습니다.
 
