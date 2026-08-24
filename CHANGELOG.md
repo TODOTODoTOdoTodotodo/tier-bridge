@@ -1,10 +1,62 @@
 # 📝 TierBridge Changelog
 
-- **[Step 1: Ingestion Pipeline]**: LLM 최종 해결책(`solution_text`)과 세션 로그를 비동기로 수집하는 지식 적재 파이프라인 구축 (`MemoryIngestionWorker`)
-- **[Unified Storage Policy]**: 기억저장소 DB를 `~/.tierbridge/memory.db`로 일원화하고 기존 37건의 Giyeok 지식 자동 무손실 마이그레이션 지원 (`deploy.sh`)
-- **[Dual Table & Session ID]**: Giyeok `nodes` 및 `memories` 테이블 듀얼 지원과 실제 `session_id` 메타데이터 결합 보존 및 파싱 개선 (`MemoryHandler`)
-- **[Quality Noise Gating]**: `[Substep]` 단순 중간 보고 턴 적재를 차단하고 최초 질의·코드 수정(LOC>0)·고난도 에피소드만 선별 적재하도록 게이트 강화
-- **[Step 2: Pre-fetch Recall]**: 50ms Strict Timeout Sandbox 내에서 과거 유사 문제 해결책을 회수하여 프롬프트에 선행 주입하는 모듈 구현 (`MemoryPrefetcher`)
-- **[Real-time Recall & Store Log]**: 기억 적재(`➔ [MEMORY:STORED]`) 및 회수 결과(`➔ [MEMORY:RECALLED]` / `[MEMORY:RECALL_NONE]`) 실시간 하네스 로그 표준화
-- **[LOC Accuracy Enhancement]**: 모든 언어 태그 및 줄바꿈을 지원하는 코드 블록 정규식 개선과 논스트림 모드 및 2중 안전망을 통한 LOC 집계 정확도 강화
-- **[Dashboard Memory Tab]**: 실시간 관제 대시보드에 37건의 축적 지식 열람과 연관 기억 검색이 가능한 장기 기억저장소 탭 추가 (`analyze_usage.py`)
+All notable changes to the TierBridge Enterprise AI Routing & Memory system will be documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+---
+
+## [1.2.0] - 2026-08-24 (Step 4: Thought-Tree Dual Viewport, Neuralizer & Full Documentation Hub)
+
+### 🌟 Added
+* **🌌🌿 Dual Viewport (성단 네트워크 ↔ 생각나무 마인드맵)**:
+  * 전체화면 확대 모달 내에 물리 엔진 기반 **`[🌌 성단 네트워크 (vis)]`** ↔ D3 기반 접이식 **`[🌿 생각나무 마인드맵 (Markmap)]`** 듀얼 뷰포트 원클릭 전환 UX 구축.
+  * 도메인별(쿠폰, GNB 툴팁, 여행네컷, 챌린지 피드 등) 지식을 Root ➔ Branch ➔ Leaf 계층형 마크다운 트리로 자동 변환 및 렌더링.
+* **💻 MacBook Trackpad Smooth Zoom & 툴바 컨트롤러**:
+  * 마우스 휠 없이도 맥북 트랙패드에서 **두 손가락 상/하 스크롤 줌 및 핀치 줌 제스처**를 즉각적이고 부드러운 스케일 변환(`markmapInstance.rescale()`)으로 매핑.
+  * 상단 툴바에 `[🔍+ 확대]`, `[🔍- 축소]`, `[🔍 뷰 맞춤]`, `[📂 모두 펼치기]`, `[📁 모두 접기]` 원클릭 버튼 탑재 (성단 뷰에도 `[🔍+]`, `[🔍-]` 지원).
+* **🔍 Markmap 인라인 상세 확인 및 소각 링크 연동**:
+  * 마인드맵의 모든 지식 노드 제목 및 메타 라인에 **`[🔍 상세 확인]`** 및 **`[📖 에피소드 & 소각]`** 인터랙티브 링크 뱃지(`<a class="tb-node-link">`) 탑재.
+  * 링크 클릭 시 전체화면 위로 최상단 상세 정보 모달(`#graphNodeModal`, `z-[60]`)이 즉시 팝업.
+* **⚡ Neuralizer (기억 정밀 소각 시스템)**:
+  * 잘못되거나 더 이상 유효하지 않은 지식을 클릭 한 번으로 **0ms 즉시 캔버스(성단 & 마인드맵)에서 소각 제거**하고 SQLite DB(`nodes`, `edges`, `memories`)에서 영구 삭제 (`POST /v1/dashboard/memories/neuralize/{id}`).
+  * 소각 실행 시 마인드맵 SVG 트리 실시간 0ms 재연산 및 라이브 폴링 연동.
+* **🔍 2단 분할 시맨틱 실시간 검색 UI & 콤팩트 미니 그래프**:
+  * 키워드 입력 시 100ms 내 일치율 높은 1~5순위 기억 카드를 좌측에 렌더링하고, 카드 클릭 시 우측 미니 그래프 카메라가 1.5배 줌인 포커스 이동.
+* **📂 문서 체계 전면 개편 (`docs/`)**:
+  * 레포지토리 내 25개 문서를 `docs/` 하위 6대 카테고리(총 16개 핵심 문서 + `docs/archive/` 8개)로 완벽 재배치 및 모든 링크 무결성 동기화.
+
+### 🧹 Cleaned
+* 34개의 순수 지식 열매 보존 및 불완전한 레거시 더미 로그/툴 에러 재시도 단편 소각 정리.
+
+---
+
+## [1.1.0] - 2026-08-24 (Step 3: Memory Synergy Reinforcement & Model Healing Factor)
+
+### 🌟 Added
+* **🧠 Step 3: Synergy Edge Reinforcement Engine (`MemoryReinforcer`)**:
+  * 연관 지식 재참조 시 엣지 가중치 강화 (`+0.1x` 가산, 최대 `3.0x` 승격, 15% 자연 감쇠) 및 `GET /v1/dashboard/memories/top-edges` 실시간 랭킹 API 구축.
+* **🩹 Model Healing Factor & 무중단 핫패치**:
+  * OpenAI / ChatGPT Enterprise 백엔드 신규 모델 릴리즈 및 단가 인하 자동 감지.
+  * 원클릭 무중단 핫패칭(`POST /v1/models/heal` ➔ `v1.1.0-healing-hotpatch`) 및 1초 버전 롤백 스위칭(`POST /v1/models/version/switch`).
+* **💳 Delta Credit Interceptor**:
+  * OpenAI 백엔드(`https://chatgpt.com/backend-api/codex/usage`)의 실제 차감 크레딧($\Delta \text{Credit}$)을 비동기 백그라운드로 추적하여 실제 계정 과금액과 로컬 통계를 100% 일치.
+* **🎨 3-Segment 테마 시스템 & 3초 라이브 오토싱크**:
+  * `어두운 (Dark)` / `밝은 (Light)` / `시스템 기본 (System OS)` 3단 테마 원클릭 전환 및 3초 주기 라이브 자동 갱신 대시보드 구축.
+
+---
+
+## [1.0.0] - 2026-08-24 (Step 1 & 2: 6-Tier Routing Harness & Pre-fetch Memory Recall)
+
+### 🌟 Added
+* **🎯 6단계 게이밍 RPG 랭크 티어 라우팅 하네스**:
+  * `BRONZE` (`luna:low`), `SILVER` (`luna:medium`), `GOLD` (`terra:medium`), `PLATINUM` (`terra:high`), `DIAMOND` (`terra:extra_high`), `CHALLENGER` (`sol:extra_high`) 6단계 난이도 자동 분기.
+  * `gpt-5.6-luna:low` 분류기 라우터 전담 추적 (`➔ [USAGE] CLASSIFIER`).
+* **📥 Step 1: Memory Ingestion Pipeline (`MemoryIngestionWorker`)**:
+  * LLM 최종 해결책(`solution_text`)과 세션 로그를 비동기로 수집하여 `~/.tierbridge/memory.db`에 구조화 적재.
+* **⚡ Step 2: 50ms Pre-fetch Recall (`MemoryPrefetcher`)**:
+  * 50ms Strict Timeout Sandbox 내에서 과거 유사 문제 해결책을 회수하여 인바운드 프롬프트 컨텍스트에 안전하게 선행 투명 주입.
+* **🚀 런타임 격리 배포 (`./deploy.sh`) & 4대 글로벌 단축키**:
+  * `$HOME/.tierbridge/live` 독립 런타임 격리 배포 아키텍처.
+  * `tierbridge`, `tierbridge-dash`, `tierbridge-log`, `tierbridge-credit` 글로벌 셸 별칭 제공.
+* **🧪 단위 테스트 스위트 (25/25 통과)**:
+  * 라우터, 인터셉터, 메모리 파이프라인(Step 1~4) 전체 단위 검증 완료.
