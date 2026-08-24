@@ -542,42 +542,61 @@ async def route_harness(request: Request):
     if unified_req.stream:
         async def stream_generator():
             accumulated_buffer = b""
+            has_tracked = False
             
             def append_raw(chunk_bytes: bytes):
                 nonlocal accumulated_buffer
                 accumulated_buffer += chunk_bytes
+
+            def trigger_tracking():
+                nonlocal has_tracked
+                if not has_tracked and accumulated_buffer:
+                    has_tracked = True
+                    try:
+                        global_tracker.parse_and_track_from_buffer(
+                            accumulated_buffer,
+                            target_model,
+                            decision,
+                            prompt_text=stored_prompt_text,
+                            session_id=session_id,
+                            auth_token=enterprise_token,
+                            account_id=get_latest_enterprise_account_id()
+                        )
+                    except Exception as e:
+                        print(f"[Warning] Tracking trigger error: {e}")
                 
             # 클라이언트 요청이 /responses 형태인 경우 100% 바이패스(Pass-through) 처리
             is_passthrough = "responses" in incoming_path
 
-            async with httpx.AsyncClient(timeout=180.0) as client:
-                try:
-                    # 백엔드 비동기 스트림 시작
-                    async with client.stream("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0) as upstream_res:
-                        if upstream_res.status_code != 200:
-                            error_body = await upstream_res.aread()
-                            print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {error_body.decode('utf-8', errors='ignore')}")
-                            upstream_res.raise_for_status()
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    try:
+                        # 백엔드 비동기 스트림 시작
+                        async with client.stream("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0) as upstream_res:
+                            if upstream_res.status_code != 200:
+                                error_body = await upstream_res.aread()
+                                print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {error_body.decode('utf-8', errors='ignore')}")
+                                upstream_res.raise_for_status()
 
-                        if is_passthrough:
-                            # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
-                            async for chunk in upstream_res.aiter_bytes():
-                                accumulated_buffer += chunk
-                                yield chunk
-                        else:
-                            # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
-                            raw_generator = upstream_res.aiter_bytes()
-                            async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
-                                yield transpiled_chunk
-                            
-                    # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적 (Zero-Drop guarantee, 원본 질문 저장)
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=stored_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
-                except Exception as e:
-                    print(f"[Error] Stream routing exception: {e}")
-                    # 스트림 에러 예외 발생 시에도 턴 추적 누락을 방지하기 위해 폴백 추적 실행
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=stored_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
-                    err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
-                    yield f"data: {err_msg}\n\n".encode("utf-8")
+                            if is_passthrough:
+                                # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
+                                async for chunk in upstream_res.aiter_bytes():
+                                    accumulated_buffer += chunk
+                                    yield chunk
+                            else:
+                                # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
+                                raw_generator = upstream_res.aiter_bytes()
+                                async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
+                                    yield transpiled_chunk
+                    except BaseException as e:
+                        if not isinstance(e, (asyncio.CancelledError, GeneratorExit)):
+                            print(f"[Error] Stream routing exception: {e}")
+                            err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
+                            yield f"data: {err_msg}\n\n".encode("utf-8")
+                        raise
+            finally:
+                # 클라이언트 즉시 연결 해제(CancelledError) 상황에서도 100% 누락 없는 사용량/기억 수집 (Zero-Drop Guarantee)
+                trigger_tracking()
 
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
     
