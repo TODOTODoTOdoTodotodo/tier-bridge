@@ -528,7 +528,7 @@ async def route_harness(request: Request):
                 if not in_tok and not out_tok:
                     in_tok = max(100, int(len(raw_prompt_text) * 0.35))
                     out_tok = 150
-                global_tracker.track_request(target_model, decision, in_tok, out_tok, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
+                global_tracker.track_request(target_model, decision, in_tok, out_tok, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id(), prompt_text=raw_prompt_text)
             return res
         except Exception as e:
             return PlainTextResponse(f"Proxy connection failed: {e}", status_code=500)
