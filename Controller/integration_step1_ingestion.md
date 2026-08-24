@@ -16,10 +16,14 @@
   1. **CPU 룰 기반 1차 컷 ($0.00)**: 단순 서브스텝 진행 보고(`[Substep]`, `LOC=0`)는 CPU 레벨에서 0원으로 사전 탈락.
   2. **사용자 실제 질의 100% 수집**: 세션 내 턴 순서(`is_first_turn`)와 무관하게 사용자가 직접 전송한 모든 실제 요구사항은 [문제]로 100% 수집 보존.
   3. **유니버설 SSE 델타 솔루션 추출**: OpenAI, ChatGPT Enterprise, Anthropic의 모든 스트리밍 델타 및 완료 이벤트에서 LLM 실제 답변을 추출하여 [해결책]으로 1:1 매핑.
+- **단순 기억 조회/회상 질의 수집 제외 정책 (Recall Query Filtering Policy)**:
+  - 사용자가 과거 기억을 물어보는 단순 회상 질의(`기억나는거 있어?`, `기억나?`, `작업 어떻게 했지?`, `이력 알려줘` 등)는 새로운 문제 해결 지식이 아니므로 `MemoryIngestionWorker.should_ingest`에서 자동 스킵하여 **메아리(Echo Node) 생성 및 연관도 오염 원천 차단** (`LOC == 0`인 경우).
 - **프로토콜 표준 `finish_reason` / `is_final_answer` 기반 최종 답변 1:1 페어링 정책**:
   - OpenAI/Claude/ChatGPT Enterprise 표준 프로토콜 플래그(`finish_reason == "tool_calls"` vs `"stop"`, `item_type == "function_call"` vs `"message"`)를 파싱.
   - 중간 도구 호출 턴(`finish_reason in ("tool_calls", "function_call", "tool_use")`)은 `is_final_answer=False`로 기억 저장을 자동 스킵.
   - 도구 실행이 모두 완료되고 사용자에게 최종 답변을 전달하는 턴(`finish_reason in ("stop", "end_turn", "completed")`)만 `is_final_answer=True`로 인식하여, 최초 질문과 최종 답변을 **단 1개의 온전한 `User:`-`Assistant:` 지식 쌍**으로 적재.
+- **세션 ID 및 메타데이터 복원 (Session ID Preservation)**:
+  - `memories` 및 `nodes` 간 태그 연동을 통해 세션 ID(`01a03...`)를 손실 없이 태깅하여 대시보드 및 회수 파이프라인에서 `default`가 아닌 실제 활성 세션 식별자를 표시.
 
 ---
 

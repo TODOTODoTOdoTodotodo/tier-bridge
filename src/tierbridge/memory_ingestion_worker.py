@@ -144,18 +144,39 @@ class MemoryIngestionWorker:
         return f"User: {clean_prompt}\nAssistant: {clean_sol}"
 
     @classmethod
+    def is_recall_query(cls, prompt: str) -> bool:
+        """
+        사용자의 입력이 과거 작업이나 기억을 조회/회상하는 단순 질의인지 판별
+        """
+        if not prompt:
+            return False
+        p = prompt.strip().lower()
+        recall_patterns = [
+            "기억나는거", "기억나", "기억도 있", "기억해", "기억하고 있",
+            "작업 이력", "작업 내역", "작업했던", "작업한 적", "수정한 적",
+            "어떻게 했었지", "어떻게 구현했었지", "어떻게 작업했지",
+            "히스토리 알려줘", "기억저장소", "과거 이력", "작업 기억", "작업내용"
+        ]
+        return any(pat in p for pat in recall_patterns)
+
+    @classmethod
     def should_ingest(cls, decision: str, loc: int, is_first_turn: bool, prompt: str) -> bool:
         """
         CPU 룰 기반 기본 퀄리티 게이트 ($0.00)
         - 빈 프롬프트 또는 5자 미만 초단문 배제
-        - [Substep]으로 시작하는 순수 내부 독백 턴만 배제 (코드 수정 턴 제외)
+        - [Substep]으로 시작하는 순수 내부 독백 턴 배제 (코드 수정 턴 제외)
+        - 단순 기억 회상/조회 질의 배제 (메아리 노드 오염 방지, 코드 수정 턴 제외)
         """
         if not prompt or len(prompt.strip()) < 5:
             return False
 
         p_clean = prompt.strip()
-        # [Substep]으로 시작하는 순수 내부 독백 턴만 배제
+        # [Substep]으로 시작하는 순수 내부 독백 턴 배제
         if p_clean.startswith("[Substep]") and loc == 0:
+            return False
+
+        # 단순 기억 회상 질의는 새로운 문제 해결 지식이 아니므로 스킵
+        if cls.is_recall_query(p_clean) and loc == 0:
             return False
 
         return True

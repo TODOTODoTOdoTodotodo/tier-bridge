@@ -41,7 +41,7 @@ class MemoryHandler:
         return None
 
     @classmethod
-    def parse_memory_content(cls, content: str) -> Dict[str, Any]:
+    def parse_memory_content(cls, content: str, tags: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Step 1 3단 지식 에피소드 포맷 또는 Giyeok(User/Assistant) 포맷 문자열 파싱 (Session ID 완벽 보존)
         """
@@ -56,6 +56,15 @@ class MemoryHandler:
         }
         if not content:
             return result
+
+        # 태그 메타데이터에서 세션 ID 및 의사결정 복원
+        if tags:
+            for t in tags:
+                t_str = str(t).strip()
+                if t_str.startswith("sess_") or t_str.startswith("01a") or len(t_str) == 36:
+                    result["session_id"] = t_str
+                if t_str.upper() in ("BRONZE", "SILVER", "GOLD", "PLATINUM", "CHALLENGER", "SOL"):
+                    result["decision"] = t_str.upper()
 
         # 1. 헤더 메타데이터 파싱: [Session: ...] [Decision: ...] [LOC: ...] [Cost: $...]
         sid_match = re.search(r"\[Session:\s*([^\]]+)\]", content)
@@ -157,13 +166,13 @@ class MemoryHandler:
                     cursor.execute("SELECT id, content, tags, created_at FROM memories ORDER BY id DESC LIMIT ?", (limit,))
 
                 for row in cursor.fetchall():
-                    parsed = cls.parse_memory_content(row["content"] or "")
                     item_tags = row["tags"] or []
                     if isinstance(item_tags, str):
                         try:
                             item_tags = json.loads(item_tags)
                         except Exception:
                             item_tags = [t.strip() for t in item_tags.split(",") if t.strip()]
+                    parsed = cls.parse_memory_content(row["content"] or "", tags=item_tags)
                     parsed["id"] = row["id"]
                     parsed["tags"] = item_tags
                     parsed["created_at"] = row["created_at"] or "N/A"
@@ -249,8 +258,15 @@ class MemoryHandler:
             if cursor.fetchone():
                 cursor.execute("SELECT id, content, tags, created_at FROM memories ORDER BY id DESC LIMIT 100;")
                 for row in cursor.fetchall():
-                    parsed = cls.parse_memory_content(row["content"] or "")
+                    item_tags = row["tags"] or []
+                    if isinstance(item_tags, str):
+                        try:
+                            item_tags = json.loads(item_tags)
+                        except Exception:
+                            item_tags = [t.strip() for t in item_tags.split(",") if t.strip()]
+                    parsed = cls.parse_memory_content(row["content"] or "", tags=item_tags)
                     parsed["id"] = row["id"]
+                    parsed["tags"] = item_tags
                     parsed["created_at"] = row["created_at"] or "N/A"
                     candidates.append(parsed)
 
