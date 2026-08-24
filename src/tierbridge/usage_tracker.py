@@ -53,7 +53,7 @@ class UsageTracker:
             loc_count += len(lines)
         return loc_count
 
-    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = "", auth_token: str = "", account_id: str = "", is_first_turn: Optional[bool] = None, prompt_text: str = "", response_text: str = ""):
+    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = "", auth_token: str = "", account_id: str = "", is_first_turn: Optional[bool] = None, prompt_text: str = "", response_text: str = "", is_final_answer: bool = True):
         """
         단일 LLM 호출 턴의 사용량을 기록하고, 실시간 델타 크레딧 인터셉터 및 기억 저장소 워커를 비동기 구동합니다.
         """
@@ -147,7 +147,8 @@ class UsageTracker:
                 "loc": loc,
                 "cost": round(cost_total, 6),
                 "is_first_turn": is_first,
-                "solution": response_text
+                "solution": response_text,
+                "is_final_answer": is_final_answer
             }
             loop.create_task(MemoryIngestionWorker.process_log_event(event_data))
         except Exception:
@@ -163,6 +164,8 @@ class UsageTracker:
             input_tokens = 0
             output_tokens = 0
             response_full_text = ""
+            finish_reason = None
+            has_tool_call = False
             
             for line in text.splitlines():
                 line = line.strip()
@@ -191,9 +194,43 @@ class UsageTracker:
                         if out_val:
                             output_tokens = out_val
                         
-                    # 2. 다각도 응답 텍스트 조각 수집 (OpenAI / Codex responses / Anthropic / Gemini 규격 완벽 지원)
+                    # 2. finish_reason 및 도구 호출 플래그 탐색 (프로토콜 레벨)
                     t_type = event.get("type", "")
                     
+                    # 2-1. OpenAI 표준 choices
+                    if event.get("choices") and event["choices"]:
+                        c = event["choices"][0]
+                        if isinstance(c, dict):
+                            if c.get("finish_reason"):
+                                finish_reason = c.get("finish_reason")
+                            if c.get("delta", {}).get("tool_calls") or c.get("delta", {}).get("function_call"):
+                                has_tool_call = True
+                            if c.get("message", {}).get("tool_calls") or c.get("message", {}).get("function_call"):
+                                has_tool_call = True
+
+                    # 2-2. ChatGPT Enterprise / Codex responses (response.output_item.*, response.done)
+                    if t_type in ("response.output_item.added", "response.output_item.done"):
+                        item = event.get("item", {})
+                        if isinstance(item, dict) and item.get("type") in ("function_call", "tool_call", "custom_tool_call"):
+                            has_tool_call = True
+                    elif t_type in ("response.done", "response.completed"):
+                        resp_obj = event.get("response", {})
+                        if isinstance(resp_obj, dict):
+                            for out_item in resp_obj.get("output", []):
+                                if isinstance(out_item, dict) and out_item.get("type") in ("function_call", "tool_call", "custom_tool_call"):
+                                    has_tool_call = True
+                            if resp_obj.get("status") == "completed" and not has_tool_call:
+                                finish_reason = "stop"
+
+                    # 2-3. Anthropic Claude (message_delta)
+                    if t_type == "message_delta":
+                        d = event.get("delta", {})
+                        if isinstance(d, dict) and d.get("stop_reason"):
+                            finish_reason = d.get("stop_reason")
+                            if finish_reason == "tool_use":
+                                has_tool_call = True
+
+                    # 3. 다각도 응답 텍스트 조각 수집 (OpenAI / Codex responses / Anthropic / Gemini 규격 완벽 지원)
                     if "delta" in event:
                         d = event["delta"]
                         if isinstance(d, str):
@@ -240,6 +277,14 @@ class UsageTracker:
                 else:
                     output_tokens = 150
 
-            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id, auth_token=auth_token, account_id=account_id, prompt_text=prompt_text, response_text=response_full_text)
+            # 4. 최종 사용자 답변 여부 판정 (도구 호출이 없고 정상 완료된 턴)
+            if has_tool_call or finish_reason in ("tool_calls", "function_call", "tool_use"):
+                is_final_answer = False
+            elif finish_reason in ("stop", "end_turn", "completed"):
+                is_final_answer = not ('{"cmd":' in response_full_text or '{"call":' in response_full_text or '{"tool":' in response_full_text)
+            else:
+                is_final_answer = bool(response_full_text) and not ('{"cmd":' in response_full_text or '{"call":' in response_full_text)
+
+            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id, auth_token=auth_token, account_id=account_id, prompt_text=prompt_text, response_text=response_full_text, is_final_answer=is_final_answer)
         except Exception as e:
             print(f"[Warning] Failed to parse usage stats from buffer: {e}")

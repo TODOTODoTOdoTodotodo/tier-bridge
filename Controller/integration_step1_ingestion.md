@@ -16,9 +16,10 @@
   1. **CPU 룰 기반 1차 컷 ($0.00)**: 단순 서브스텝 진행 보고(`[Substep]`, `LOC=0`)는 CPU 레벨에서 0원으로 사전 탈락.
   2. **사용자 실제 질의 100% 수집**: 세션 내 턴 순서(`is_first_turn`)와 무관하게 사용자가 직접 전송한 모든 실제 요구사항은 [문제]로 100% 수집 보존.
   3. **유니버설 SSE 델타 솔루션 추출**: OpenAI, ChatGPT Enterprise, Anthropic의 모든 스트리밍 델타 및 완료 이벤트에서 LLM 실제 답변을 추출하여 [해결책]으로 1:1 매핑.
-- **최종 답변(Final Assistant Answer) 1:1 페어링 & 도구 호출(Tool Call) 배제 정책**:
-  - 에이전트가 내부적으로 수행하는 쉘 명령어/도구 호출 JSON(`{"cmd": ...}`) 등의 중간 작업 턴은 기억저장소 적재에서 완전 배제.
-  - 도구 실행이 모두 완료된 후 사용자에게 전달되는 **실제 최종 자연어/코드 솔루션(Final Response)**만 사용자의 원본 질문과 결합하여 `User: <질문>\nAssistant: <최종답변>`의 **단 1개의 온전한 지식 쌍**으로 적재.
+- **프로토콜 표준 `finish_reason` / `is_final_answer` 기반 최종 답변 1:1 페어링 정책**:
+  - OpenAI/Claude/ChatGPT Enterprise 표준 프로토콜 플래그(`finish_reason == "tool_calls"` vs `"stop"`, `item_type == "function_call"` vs `"message"`)를 파싱.
+  - 중간 도구 호출 턴(`finish_reason in ("tool_calls", "function_call", "tool_use")`)은 `is_final_answer=False`로 기억 저장을 자동 스킵.
+  - 도구 실행이 모두 완료되고 사용자에게 최종 답변을 전달하는 턴(`finish_reason in ("stop", "end_turn", "completed")`)만 `is_final_answer=True`로 인식하여, 최초 질문과 최종 답변을 **단 1개의 온전한 `User:`-`Assistant:` 지식 쌍**으로 적재.
 
 ---
 

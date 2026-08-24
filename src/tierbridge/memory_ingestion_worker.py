@@ -204,10 +204,11 @@ class MemoryIngestionWorker:
             print(f"➔ [MEMORY:SKIPPED] [{decision}] | prompt='{p_snippet}...' (no solution text)", flush=True)
             return False
 
-        # 3. 중간 도구 호출(Tool Call JSON) 턴 배제 (최종 답변만 적재)
-        if cls.is_tool_call_payload(solution_text):
+        # 3. 도구 호출 턴 배제 (프로토콜 레벨 최종 완료 답변 플래그 is_final_answer 검증)
+        is_final_answer = event.get("is_final_answer", True)
+        if not is_final_answer or cls.is_tool_call_payload(solution_text):
             p_snippet = prompt.replace("\n", " ")[:30]
-            print(f"➔ [MEMORY:SKIPPED] [{decision}] | prompt='{p_snippet}...' (intermediate tool call)", flush=True)
+            print(f"➔ [MEMORY:SKIPPED] [{decision}] | prompt='{p_snippet}...' (tool turn / not final answer)", flush=True)
             return False
 
         # 3. 순수 질문-답변 지식 에피소드 생성
