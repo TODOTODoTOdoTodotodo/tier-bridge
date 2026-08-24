@@ -1787,6 +1787,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         let memoryMiniNetwork = null;
         let memoryExpandedNetwork = null;
+        let miniVisNodes = null;
+        let miniVisEdges = null;
+        let modalVisNodes = null;
+        let modalVisEdges = null;
         let isMiniPhysicsEnabled = true;
         let isModalPhysicsEnabled = true;
         let currentModalNodeId = null;
@@ -1803,10 +1807,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 return;
             }}
 
-            const visNodes = new vis.DataSet(nodes);
-            const visEdges = new vis.DataSet(edges);
+            miniVisNodes = new vis.DataSet(nodes);
+            miniVisEdges = new vis.DataSet(edges);
 
-            const data = {{ nodes: visNodes, edges: visEdges }};
+            const data = {{ nodes: miniVisNodes, edges: miniVisEdges }};
             const options = {{
                 nodes: {{
                     shape: 'dot',
@@ -1837,7 +1841,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             memoryMiniNetwork.on('click', function(params) {{
                 if (params.nodes.length > 0) {{
                     const nodeId = params.nodes[0];
-                    const selectedNode = nodes.find(n => n.id === nodeId);
+                    const selectedNode = (currentGraphData.nodes || []).find(n => n.id === nodeId);
                     if (selectedNode) {{
                         openGraphNodeModal(selectedNode);
                         memoryMiniNetwork.focus(nodeId, {{ scale: 1.3, animation: {{ duration: 500, easingFunction: 'easeInOutQuad' }} }});
@@ -1858,10 +1862,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 return;
             }}
 
-            const visNodes = new vis.DataSet(nodes);
-            const visEdges = new vis.DataSet(edges);
+            modalVisNodes = new vis.DataSet(nodes);
+            modalVisEdges = new vis.DataSet(edges);
 
-            const data = {{ nodes: visNodes, edges: visEdges }};
+            const data = {{ nodes: modalVisNodes, edges: modalVisEdges }};
             const options = {{
                 nodes: {{
                     shape: 'dot',
@@ -1892,14 +1896,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             memoryExpandedNetwork.on('click', function(params) {{
                 if (params.nodes.length > 0) {{
                     const nodeId = params.nodes[0];
-                    const selectedNode = nodes.find(n => n.id === nodeId);
+                    const selectedNode = (currentGraphData.nodes || []).find(n => n.id === nodeId);
                     if (selectedNode) {{
                         openGraphNodeModal(selectedNode);
-                        highlightNeighbors(nodeId, visNodes, visEdges, nodes, edges);
+                        highlightNeighbors(nodeId, modalVisNodes, modalVisEdges, nodes, edges);
                     }}
                 }} else {{
-                    visNodes.update(nodes.map(n => ({{ id: n.id, opacity: 1.0 }})));
-                    visEdges.update(edges.map(e => ({{ id: e.id, opacity: 1.0 }})));
+                    if (modalVisNodes) modalVisNodes.update(nodes.map(n => ({{ id: n.id, opacity: 1.0 }})));
+                    if (modalVisEdges) modalVisEdges.update(edges.map(e => ({{ id: e.id, opacity: 1.0 }})));
                 }}
             }});
         }}
@@ -1911,10 +1915,12 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 if (e.to === selectedNodeId) connectedNodeIds.add(e.from);
             }});
 
-            visNodes.update(rawNodes.map(n => ({{
-                id: n.id,
-                opacity: connectedNodeIds.has(n.id) ? 1.0 : 0.2
-            }})));
+            if (visNodes) {{
+                visNodes.update(rawNodes.map(n => ({{
+                    id: n.id,
+                    opacity: connectedNodeIds.has(n.id) ? 1.0 : 0.2
+                }})));
+            }}
         }}
 
         function openExpandedGraphModal() {{
@@ -1991,17 +1997,32 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             initExpandedMemoryGraph({{ nodes: filteredNodes, edges: filteredEdges }});
         }}
 
-        function focusNodeInGraph(nodeId) {{
+        // 🎯 오직 그래프 카메라만 포커스 이동 (모달 팝업 차단)
+        function focusNodeInGraph(nodeId, event) {{
+            if (event) event.stopPropagation();
             if (currentDashboardTab !== 'memory') {{
                 switchDashboardTab('memory');
             }}
             
-            const selectedNode = (currentGraphData.nodes || []).find(n => n.id === nodeId);
+            const cleanId = (nodeId || '').replace(/^#/, '').trim();
+            if (memoryMiniNetwork) {{
+                memoryMiniNetwork.focus(cleanId, {{ scale: 1.5, animation: {{ duration: 600, easingFunction: 'easeInOutQuad' }} }});
+                try {{ memoryMiniNetwork.selectNodes([cleanId]); }} catch(e) {{}}
+            }}
+            const expModal = document.getElementById('expandedGraphModal');
+            if (expModal && !expModal.classList.contains('hidden') && memoryExpandedNetwork) {{
+                memoryExpandedNetwork.focus(cleanId, {{ scale: 1.5, animation: {{ duration: 600, easingFunction: 'easeInOutQuad' }} }});
+                try {{ memoryExpandedNetwork.selectNodes([cleanId]); }} catch(e) {{}}
+            }}
+        }}
+
+        // 📖 카드 클릭 시 상세 정보 모달 열기
+        function openNodeDetail(nodeId, event) {{
+            if (event) event.stopPropagation();
+            const cleanId = (nodeId || '').replace(/^#/, '').trim();
+            const selectedNode = (currentGraphData.nodes || []).find(n => n.id === cleanId || n.id === nodeId);
             if (selectedNode) {{
                 openGraphNodeModal(selectedNode);
-                if (memoryMiniNetwork) {{
-                    memoryMiniNetwork.focus(nodeId, {{ scale: 1.4, animation: {{ duration: 600, easingFunction: 'easeInOutQuad' }} }});
-                }}
             }}
         }}
 
@@ -2009,7 +2030,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const modal = document.getElementById('graphNodeModal');
             if (!modal) return;
 
-            currentModalNodeId = node.id;
+            currentModalNodeId = (node.id || '').replace(/^#/, '').trim();
             const badge = document.getElementById('modalNodeBadge');
             const idEl = document.getElementById('modalNodeId');
             const metaEl = document.getElementById('modalNodeMeta');
@@ -2027,7 +2048,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 badge.className = bClass;
             }}
 
-            if (idEl) idEl.innerText = `#${{node.id}}`;
+            if (idEl) idEl.innerText = `#${{currentModalNodeId}}`;
             if (metaEl) metaEl.innerText = `승격 가중치: ${{node.weight ? node.weight.toFixed(2) : '1.00'}}x | 코드 LOC: ${{node.loc || 0}}줄 | 발생 비용: $${{(node.cost || 0.0).toFixed(4)}} | 시각: ${{node.timestamp || 'N/A'}}`;
             if (probEl) probEl.innerText = node.problem || '(문제 요구사항 없음)';
             if (solEl) solEl.innerText = node.solution || '(해결책 없음)';
@@ -2042,41 +2063,45 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         async function executeNeuralize(nodeId) {{
             if (!nodeId) return;
-            const ok = confirm(`⚡ [Neuralizer] 이 기억 노드(#${{nodeId.substring(0,8)}}...)와 연결선만 정밀 소각하시겠습니까?\n\n(연결된 다른 주변 기억은 안전하게 보존됩니다)`);
+            const cleanId = (nodeId || '').replace(/^#/, '').trim();
+            const ok = confirm(`⚡ [Neuralizer] 이 기억 노드(#${{cleanId.substring(0,8)}}...)와 연결선만 정밀 소각하시겠습니까?\n\n(연결된 다른 주변 기억은 안전하게 보존됩니다)`);
             if (!ok) return;
 
             try {{
-                const res = await fetch(`http://127.0.0.1:18080/v1/dashboard/memories/neuralize/${{encodeURIComponent(nodeId)}}`, {{ method: 'POST' }});
+                const res = await fetch(`http://127.0.0.1:18080/v1/dashboard/memories/neuralize/${{encodeURIComponent(cleanId)}}`, {{ method: 'POST' }});
                 if (res.ok) {{
                     const data = await res.json();
-                    alert(`⚡ Neuralizer 소각 완료!\n- 노드 ID: ${{nodeId.substring(0,8)}}...\n- 제거된 연관 엣지 수: ${{data.deleted_edges_count || 0}}개`);
+                    alert(`⚡ Neuralizer 소각 완료!\n- 노드 ID: ${{cleanId.substring(0,8)}}...\n- 제거된 연관 엣지 수: ${{data.deleted_edges_count || 0}}개`);
                     closeGraphNodeModal();
                     
-                    // 1. 인메모리 데이터셋에서 즉시 필터링
-                    if (currentGraphData && currentGraphData.nodes) {{
-                        currentGraphData.nodes = currentGraphData.nodes.filter(n => n.id !== nodeId);
+                    // 1. vis.DataSet에서 즉각 삭제 (0ms 즉시 화면 제거)
+                    if (miniVisNodes) {{
+                        try {{ miniVisNodes.remove(cleanId); }} catch(e) {{}}
+                        try {{ miniVisNodes.remove(nodeId); }} catch(e) {{}}
                     }}
-                    if (currentGraphData && currentGraphData.edges) {{
-                        currentGraphData.edges = currentGraphData.edges.filter(e => e.from !== nodeId && e.to !== nodeId);
-                    }}
-                    if (currentMemories) {{
-                        currentMemories = currentMemories.filter(m => m.id !== nodeId);
-                    }}
-                    if (currentTopEdges) {{
-                        currentTopEdges = currentTopEdges.filter(e => e.source_id !== nodeId && e.target_id !== nodeId);
+                    if (modalVisNodes) {{
+                        try {{ modalVisNodes.remove(cleanId); }} catch(e) {{}}
+                        try {{ modalVisNodes.remove(nodeId); }} catch(e) {{}}
                     }}
 
-                    // 2. 미니 그래프 및 풀스크린 캔버스 즉시 재렌더링
-                    initMemoryGraph(currentGraphData);
-                    const expModal = document.getElementById('expandedGraphModal');
-                    if (expModal && !expModal.classList.contains('hidden')) {{
-                        initExpandedMemoryGraph(currentGraphData);
+                    // 2. 인메모리 데이터셋 필터링
+                    if (currentGraphData && currentGraphData.nodes) {{
+                        currentGraphData.nodes = currentGraphData.nodes.filter(n => n.id !== cleanId && n.id !== nodeId);
+                    }}
+                    if (currentGraphData && currentGraphData.edges) {{
+                        currentGraphData.edges = currentGraphData.edges.filter(e => e.from !== cleanId && e.to !== cleanId && e.from !== nodeId && e.to !== nodeId);
+                    }}
+                    if (currentMemories) {{
+                        currentMemories = currentMemories.filter(m => m.id !== cleanId && m.id !== nodeId);
+                    }}
+                    if (currentTopEdges) {{
+                        currentTopEdges = currentTopEdges.filter(e => e.source_id !== cleanId && e.target_id !== cleanId && e.source_id !== nodeId && e.target_id !== nodeId);
                     }}
 
                     // 3. 테이블 및 KPI 뷰 즉시 재렌더링
                     renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
                     
-                    // 4. 백그라운드 실시간 동기화
+                    // 4. 백그라운드 동기화
                     setTimeout(fetchLiveDashboardStats, 300);
                 }} else {{
                     alert('Neuralizer 소각 실패: 서버 오류');
@@ -2118,7 +2143,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 else if (dec.includes('SILVER')) badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
 
                 html += `
-                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80 cursor-pointer" onclick="focusNodeInGraph('${{e.source_id}}')">
+                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80 cursor-pointer" onclick="openNodeDetail('${{e.source_id}}', event)">
                     <td class="px-4 py-3 font-mono text-yellow-300 font-bold">#${{idx+1}}</td>
                     <td class="px-4 py-3 font-mono text-purple-300 text-xs" title="${{e.source_id}}">${{sId}}</td>
                     <td class="px-4 py-3 text-center">
@@ -2193,12 +2218,12 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
                 html += `
                 <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
-                    <td class="px-4 py-3 font-mono text-purple-300 font-bold cursor-pointer" onclick="focusNodeInGraph('${{mid}}')">#${{mid.substring(0,8)}}...</td>
+                    <td class="px-4 py-3 font-mono text-purple-300 font-bold cursor-pointer" onclick="openNodeDetail('${{mid}}', event)">#${{mid.substring(0,8)}}...</td>
                     <td class="px-4 py-3 font-mono text-slate-300 text-xs" title="${{sid}}">${{sidShort}}</td>
                     <td class="px-4 py-3 text-center">
                         <span class="px-2 py-0.5 text-xs font-semibold rounded-full border ${{badgeClass}}">${{dec}}</span>
                     </td>
-                    <td class="px-4 py-3 font-medium text-slate-200 max-w-sm truncate cursor-pointer" title="${{prob}}" onclick="focusNodeInGraph('${{mid}}')">
+                    <td class="px-4 py-3 font-medium text-slate-200 max-w-sm truncate cursor-pointer" title="${{prob}}" onclick="openNodeDetail('${{mid}}', event)">
                         <div class="text-xs font-semibold text-slate-200">${{prob}}</div>
                         ${{loc > 0 ? `<div class="text-[10px] text-emerald-400 mt-0.5 font-mono">💻 LOC: ${{loc}}줄 코드 작성됨 ($${{cost.toFixed(4)}})</div>` : ''}}
                     </td>
@@ -2265,23 +2290,32 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const scorePct = r.score ? Math.round(r.score * 100) : 95;
                 const sid = r.session_id || 'sess_default';
                 const sidShort = sid.length > 10 ? sid.substring(0, 10) + '...' : sid;
-                const rid = r.id || `node_${{idx+1}}`;
+                const rid = (r.id || `node_${{idx+1}}`).replace(/^#/, '').trim();
 
                 cardsHtml += `
-                <div onclick="focusNodeInGraph('${{rid}}')" class="p-3.5 rounded-xl bg-slate-800/80 border border-purple-500/30 hover:border-purple-400 transition-all shadow-md cursor-pointer hover:bg-slate-800">
-                    <div class="flex items-center justify-between gap-2 mb-1.5 pb-1.5 border-b border-slate-700/60">
+                <div class="p-3.5 rounded-xl bg-slate-800/80 border border-purple-500/30 hover:border-purple-400 transition-all shadow-md">
+                    <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-700/60">
                         <div class="flex items-center gap-2">
                             <span class="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded font-mono text-xs font-bold">🎯 ${{scorePct}}% 일치</span>
                             <span class="text-xs font-mono text-slate-400">세션: ${{sidShort}}</span>
                             ${{r.decision ? `<span class="px-2 py-0.5 bg-yellow-500/20 text-yellow-300 rounded text-[10px] font-bold border border-yellow-500/30">${{r.decision}}</span>` : ''}}
                         </div>
-                        <span class="text-[10px] text-purple-400 font-mono flex items-center gap-1"><i class="fa-solid fa-crosshairs"></i> 그래프 포커스</span>
+                        <div class="flex items-center gap-1.5">
+                            <button onclick="focusNodeInGraph('${{rid}}', event)" title="우측 생각나무에서 노드 위치로 줌인"
+                                    class="px-2.5 py-1 bg-purple-600/30 hover:bg-purple-600/60 text-purple-200 border border-purple-400/40 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer">
+                                <i class="fa-solid fa-crosshairs text-purple-300"></i> 그래프 포커스
+                            </button>
+                            <button onclick="openNodeDetail('${{rid}}', event)" title="상세 정보 및 소각 모달 열기"
+                                    class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-[10px] font-semibold transition-all cursor-pointer">
+                                상세 보기
+                            </button>
+                        </div>
                     </div>
-                    <div class="mb-1.5">
+                    <div class="mb-1.5 cursor-pointer" onclick="openNodeDetail('${{rid}}', event)">
                         <span class="text-xs font-bold text-purple-300">📌 문제/요구사항:</span>
                         <div class="text-xs text-slate-200 mt-0.5 leading-relaxed line-clamp-2">${{prob}}</div>
                     </div>
-                    <div>
+                    <div class="cursor-pointer" onclick="openNodeDetail('${{rid}}', event)">
                         <span class="text-xs font-bold text-emerald-300">💡 적용 해결책:</span>
                         <div class="text-xs text-slate-300 mt-0.5 font-mono bg-slate-900/70 p-2 rounded-lg border border-slate-700/40 line-clamp-2">${{sol}}</div>
                     </div>
