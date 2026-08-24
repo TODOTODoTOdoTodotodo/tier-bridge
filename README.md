@@ -160,7 +160,7 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가 �
 | **🧠 장기 기억 연동 (TBC)** | [Controller/integration_step1_ingestion.md](Controller/integration_step1_ingestion.md) | Step 1: 비동기 세션 로그 수집 & 퀄리티 게이팅 (✅ 완료) |
 | | [Controller/integration_step2_recall.md](Controller/integration_step2_recall.md) | Step 2: 사전 기억 회수 & 50ms Strict 샌드박싱 (✅ 완료) |
 | | [Controller/standard_report_directive.md](Controller/standard_report_directive.md) | 하네스 투명 최종 보고서 표준 규격 가이드 (✅ 완료) |
-| | [Controller/integration_step3_reinforcement.md](Controller/integration_step3_reinforcement.md) | Step 3: 비용/난이도 기반 기억 가중치 재강화 엔진 (예정) |
+| | [Controller/integration_step3_reinforcement.md](Controller/integration_step3_reinforcement.md) | Step 3: 비용/난이도 기반 기억 가중치 재강화 엔진 (✅ 완료) |
 | | [Controller/integration_step4_analytics.md](Controller/integration_step4_analytics.md) | Step 4: 하네스 ✕ sub-memory 크레딧 시너지 분석 (예정) |
 | **📈 성과 보고서** | [RESULT_REPORT.md](RESULT_REPORT.md) | 6단계 랭크 라우팅 및 하네스 최적화 최종 결과 보고서 |
 | | [ROI_검토_지표.md](ROI_검토_지표.md) | 투자 대비 비용 절감 효과(ROI) 및 안정성 측정 가이드 |
@@ -178,10 +178,11 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가 �
   - 50ms Strict Timeout Sandbox 내 초고속 기억 회수 (`< 5ms`).
   - 한국어 형태소/조사 분리 토크나이저(`extract_search_tokens`) 적용으로 구어체 질의 100% 검색.
   - 투명 시스템 가이드라인(`SystemDirective`) 주입으로 도구 재탐색 없이 즉시 회상 브리핑 및 3단 보고서 출력.
-* **[⏳ 예정] Step 3: 고난도 지식 가중치 재강화 (Cost-Weighted Reinforcement)**:
-  - 고난도(`GOLD`/`PLATINUM`/`CHALLENGER`) 및 고비용 해결 턴의 기억 엣지 가중치를 3~10배로 자동 승격하여 영구 보존.
+* **[✅ 완료] Step 3: 고난도 지식 가중치 재강화 & 보조 힌트 제안**:
+  - `MemoryReinforcer` 모듈을 통한 SQLite `edges` 테이블 가중치(1.0 ➔ 3.0~10.0) 자동 승격.
+  - 35% <= 적합도 < 60% 구간의 잠재 연관 지식을 `[💡 보조 참고 힌트]` 섹션으로 분리 주입하여 자연스러운 확인 제안 유도.
 * **[⏳ 예정] Step 4: 크레딧 시너지 대시보드 연계 (Analytics & ROI Reporting)**:
-  - 사전 기억 주입으로 메인 모델이 다운스케일되어 절감된 실질 크레딧(Cr)을 라이브 대시보드에 연계. *(상세: [Controller/integration_step3_reinforcement.md](Controller/integration_step3_reinforcement.md) ~ [step4_analytics.md](Controller/integration_step4_analytics.md))*
+  - 사전 기억 주입으로 메인 모델이 다운스케일되어 절감된 실질 크레딧(Cr)을 라이브 대시보드에 연계. *(상세: [Controller/integration_step4_analytics.md](Controller/integration_step4_analytics.md))*
 
 ---
 

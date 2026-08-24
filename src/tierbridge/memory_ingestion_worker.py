@@ -104,6 +104,20 @@ class MemoryIngestionWorker:
 
         conn.commit()
         conn.close()
+
+        # Step 3: 비용/난이도 기반 엣지 가중치 강화 트리거 (<5ms)
+        try:
+            from tierbridge.memory_reinforcer import MemoryReinforcer
+            MemoryReinforcer.reinforce_node(
+                node_id=node_id,
+                cost_usd=cost,
+                decision=decision,
+                loc=loc,
+                db_path=db_path
+            )
+        except Exception:
+            pass
+
         return True
 
     @classmethod

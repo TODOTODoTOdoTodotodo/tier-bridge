@@ -179,7 +179,24 @@ class MemoryHandler:
                     memories.append(parsed)
 
             conn.close()
-            return memories[:limit]
+
+            # 인메모리 중복 제거 및 세션 ID 병합 (nodes와 memories 동시 적재 중복 완벽 제거)
+            deduped = {}
+            for m in memories:
+                key = m.get("problem", "").strip()
+                if not key:
+                    continue
+                if key not in deduped:
+                    deduped[key] = m
+                else:
+                    existing = deduped[key]
+                    if existing.get("session_id") == "sess_default" and m.get("session_id") != "sess_default":
+                        existing["session_id"] = m["session_id"]
+                        existing["tags"] = m.get("tags", existing.get("tags", []))
+                        existing["decision"] = m.get("decision", existing.get("decision", "UNKNOWN"))
+
+            final_list = list(deduped.values())
+            return final_list[:limit]
         except Exception as e:
             logger.debug(f"[MemoryHandler] SQLite get_recent_memories error: {e}")
             return []
@@ -270,9 +287,17 @@ class MemoryHandler:
                     parsed["created_at"] = row["created_at"] or "N/A"
                     candidates.append(parsed)
 
+            # 3. edges 테이블에서 가중치 맵 조회
+            edge_weights = {}
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='edges';")
+            if cursor.fetchone():
+                cursor.execute("SELECT source_id, MAX(weight) FROM edges GROUP BY source_id;")
+                for s_id, w in cursor.fetchall():
+                    edge_weights[s_id] = float(w or 1.0)
+
             conn.close()
 
-            # 3. 다단계 유사도 점수 산출 및 랭킹
+            # 4. 다단계 유사도 점수 산출 및 랭킹
             ranked = []
             for item in candidates:
                 prob = (item.get("problem") or "").lower()
@@ -292,12 +317,18 @@ class MemoryHandler:
                     match_ratio = matched_count / max(1, len(keywords))
                     base_score = min(0.85, match_ratio * 0.40 + 0.45)
 
-                # 퀄리티 가중치 보정
+                # 퀄리티 및 엣지 가중치 보정
                 quality_boost = 0.0
                 if item.get("loc", 0) > 0:
                     quality_boost += 0.15  # 실제 코드 수정 에피소드 보너스
                 if item.get("decision") in ("GOLD", "PLATINUM", "CHALLENGER", "SOL"):
                     quality_boost += 0.10  # 고난도 아키텍처 결정 보너스
+                
+                # Step 3: edges 테이블 가중치 승격 가산
+                edge_w = edge_weights.get(str(item.get("id")), 1.0)
+                item["edge_weight"] = edge_w
+                if edge_w > 1.0:
+                    quality_boost += min(0.15, (edge_w - 1.0) * 0.02)
                 
                 # 서브스텝 패널티
                 if prob.startswith("[substep]"):
@@ -307,9 +338,27 @@ class MemoryHandler:
                 item["score"] = final_score
                 ranked.append(item)
 
+            # 5. 인메모리 중복 제거 및 세션 ID / 최고 점수 병합
+            deduped_ranked = {}
+            for item in ranked:
+                key = (item.get("problem") or item.get("raw_content") or "").strip()
+                if not key:
+                    continue
+                if key not in deduped_ranked:
+                    deduped_ranked[key] = item
+                else:
+                    curr = deduped_ranked[key]
+                    if item["score"] > curr["score"]:
+                        curr["score"] = item["score"]
+                    if curr.get("session_id") == "sess_default" and item.get("session_id") != "sess_default":
+                        curr["session_id"] = item["session_id"]
+                        curr["tags"] = item.get("tags", curr.get("tags", []))
+                        curr["decision"] = item.get("decision", curr.get("decision", "UNKNOWN"))
+
+            final_ranked = list(deduped_ranked.values())
             # 점수 및 최신순 정렬
-            ranked.sort(key=lambda x: (x["score"], x.get("created_at", "")), reverse=True)
-            return ranked[:limit]
+            final_ranked.sort(key=lambda x: (x["score"], x.get("created_at", "")), reverse=True)
+            return final_ranked[:limit]
 
         except Exception as e:
             logger.debug(f"[MemoryHandler] SQLite search error: {e}")
