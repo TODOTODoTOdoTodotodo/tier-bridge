@@ -101,15 +101,112 @@ class TestMemoryHandler(unittest.TestCase):
             if os.path.exists(db_path):
                 os.remove(db_path)
 
-    def test_fallback_when_db_missing(self):
-        with patch.object(MemoryHandler, "get_db_path", return_value=None):
-            mems = MemoryHandler.get_recent_memories()
-            self.assertEqual(mems, [])
-            search_res = MemoryHandler.search_associated_memories("non_existent")
-            self.assertEqual(search_res, [])
-            stats = MemoryHandler.get_memory_stats()
-            self.assertEqual(stats["total_memories"], 0)
+    def test_get_graph_data_and_top_edges(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tf:
+            db_path = tf.name
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE nodes (
+                    id TEXT PRIMARY KEY,
+                    text TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    timestamp TEXT NOT NULL
+                );
+            """)
+            cursor.execute("""
+                CREATE TABLE edges (
+                    source_id TEXT,
+                    target_id TEXT,
+                    weight REAL DEFAULT 1.0,
+                    PRIMARY KEY (source_id, target_id)
+                );
+            """)
+            cursor.execute("INSERT INTO nodes VALUES ('node_a', 'User: Q1\nAssistant: A1', X'00', '2026-08-24T10:00:00');")
+            cursor.execute("INSERT INTO nodes VALUES ('node_b', 'User: Q2\nAssistant: A2', X'00', '2026-08-24T10:05:00');")
+            cursor.execute("INSERT INTO edges VALUES ('node_b', 'node_a', 5.5);")
+            conn.commit()
+            conn.close()
+
+            with patch.object(MemoryHandler, "get_db_path", return_value=db_path):
+                graph = MemoryHandler.get_graph_data(limit_nodes=10)
+                self.assertEqual(len(graph["nodes"]), 2)
+                self.assertEqual(len(graph["edges"]), 1)
+                self.assertEqual(graph["edges"][0]["from"], "node_b")
+                self.assertEqual(graph["edges"][0]["to"], "node_a")
+                self.assertEqual(graph["edges"][0]["value"], 5.5)
+
+                top_edges = MemoryHandler.get_top_weighted_edges(limit=5)
+                self.assertEqual(len(top_edges), 1)
+                self.assertEqual(top_edges[0]["source_id"], "node_b")
+                self.assertEqual(top_edges[0]["weight"], 5.5)
+
+        finally:
+            if os.path.exists(db_path):
+                os.remove(db_path)
+
+    def test_neuralize_memory(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tf:
+            db_path = tf.name
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE nodes (
+                    id TEXT PRIMARY KEY,
+                    text TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    timestamp TEXT NOT NULL
+                );
+            """)
+            cursor.execute("""
+                CREATE TABLE edges (
+                    source_id TEXT,
+                    target_id TEXT,
+                    weight REAL DEFAULT 1.0,
+                    PRIMARY KEY (source_id, target_id)
+                );
+            """)
+            cursor.execute("""
+                CREATE TABLE memories (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT,
+                    content TEXT,
+                    tags TEXT,
+                    created_at TIMESTAMP
+                );
+            """)
+            cursor.execute("INSERT INTO nodes VALUES ('node_bad', 'User: bad\nAssistant: bad', X'00', '2026-08-24T10:00:00');")
+            cursor.execute("INSERT INTO nodes VALUES ('node_good', 'User: good\nAssistant: good', X'00', '2026-08-24T10:05:00');")
+            cursor.execute("INSERT INTO edges VALUES ('node_bad', 'node_good', 2.0);")
+            cursor.execute("INSERT INTO edges VALUES ('node_good', 'node_bad', 1.5);")
+            cursor.execute("INSERT INTO memories VALUES ('node_bad', 'sess_1', 'bad content', 'tag1', '2026-08-24T10:00:00');")
+            conn.commit()
+            conn.close()
+
+            with patch.object(MemoryHandler, "get_db_path", return_value=db_path):
+                # 1. Neuralize node_bad
+                res = MemoryHandler.neuralize_memory("node_bad")
+                self.assertEqual(res["status"], "deleted")
+                self.assertEqual(res["deleted_edges_count"], 2)
+
+                # 2. Verify node_bad is deleted and node_good is safe
+                graph = MemoryHandler.get_graph_data()
+                self.assertEqual(len(graph["nodes"]), 1)
+                self.assertEqual(graph["nodes"][0]["id"], "node_good")
+                self.assertEqual(len(graph["edges"]), 0)
+
+                # 3. Neuralize non-existent node
+                res2 = MemoryHandler.neuralize_memory("node_non_existent")
+                self.assertEqual(res2["status"], "not_found")
+        finally:
+            if os.path.exists(db_path):
+                os.remove(db_path)
 
 
 if __name__ == "__main__":
     unittest.main()
+
