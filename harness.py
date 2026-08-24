@@ -17,6 +17,7 @@ from tierbridge.auth_manager import AuthManager
 from tierbridge.usage_tracker import UsageTracker
 from tierbridge.memory_prefetcher import MemoryPrefetcher
 from tierbridge.memory_handler import MemoryHandler
+from tierbridge.system_directive import SystemDirective
 
 import logging
 
@@ -472,6 +473,9 @@ async def route_harness(request: Request):
     # 3-Tier에 기반한 모델 정보 및 추론 수준(reasoning_effort) 적용
     unified_req.model = target_model
     
+    # 최종 답변을 3단 마크다운 보고서 규격으로 출력하도록 시스템 가이드라인 투명 주입
+    unified_req = SystemDirective.inject_into_unified_request(unified_req)
+
     final_payload = target_adapter.from_unified_request(unified_req)
     
     # ChatGPT Enterprise API 특화 파라미터 적용 (reasoning.effort 포맷 및 /responses 규격 변환)
@@ -517,6 +521,9 @@ async def route_harness(request: Request):
                 final_payload["input"] = chatgpt_input
                 if instructions:
                     final_payload["instructions"] = instructions
+
+            # /responses 규격의 instructions 영역에도 표준 보고서 가이드라인 투명 주입
+            final_payload = SystemDirective.inject_into_payload(final_payload)
 
         # /responses API로 향하는 요청의 규격 정화 (변환 여부와 상관없이 항상 적용)
         if not MOCK_MODE or "responses" in incoming_path:
