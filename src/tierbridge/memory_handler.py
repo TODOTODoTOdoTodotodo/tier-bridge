@@ -176,6 +176,40 @@ class MemoryHandler:
             return []
 
     @classmethod
+    def extract_search_tokens(cls, query: str) -> List[str]:
+        """
+        한국어 형태소/서브토큰 분리 및 조사/접미사/질문형 불용어 정제
+        """
+        if not query:
+            return []
+        raw_tokens = re.findall(r"[\w\.\-@#]+", query.lower())
+        meta_stop_words = {
+            "은", "는", "이", "가", "을", "를", "의", "에", "로", "으로", "에서", "와", "과", "도",
+            "하고", "하고있어", "해줘", "확인해줘", "알려줘", "기억나는거", "기억나", "있어", "있니", 
+            "어떻게", "했었지", "했지", "작업", "작업한", "내용", "이력", "히스토리", "관련", "관련된", 
+            "대한", "대해", "대해서", "질의", "질문", "관련해서", "시작", "부탁해", "작업이"
+        }
+        suffixes = [
+            "관련된", "관련해서", "관련", "에대해", "대해서", "대한", "대해",
+            "으로", "에서", "까지", "부터", "에게", "한테",
+            "은", "는", "이", "가", "을", "를", "의", "에", "로", "와", "과", "도"
+        ]
+        tokens = set()
+        for raw in raw_tokens:
+            if raw in meta_stop_words:
+                continue
+            tokens.add(raw)
+            stem = raw
+            for sfx in suffixes:
+                if stem.endswith(sfx) and len(stem) > len(sfx):
+                    stem = stem[:-len(sfx)]
+                    if len(stem) >= 2 and stem not in meta_stop_words:
+                        tokens.add(stem)
+                    break
+
+        return [t for t in tokens if len(t) >= 2]
+
+    @classmethod
     def search_associated_memories(cls, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
         질의어 기반 연관 기억 다단계 시맨틱/키워드 랭킹 검색
@@ -188,12 +222,11 @@ class MemoryHandler:
         if not db_path:
             return []
 
-        # 키워드 토큰화 (2글자 이상)
-        raw_keywords = re.findall(r"[\w\.\-@#]+", clean_q.lower())
-        stop_words = {"은", "는", "이", "가", "을", "를", "의", "에", "로", "으로", "에서", "하고", "하고있어", "해줘", "확인해줘", "관련", "질의"}
-        keywords = [k for k in raw_keywords if len(k) >= 2 and k not in stop_words]
+        # 한국어 형태소 및 어간 토큰화
+        keywords = cls.extract_search_tokens(clean_q)
         if not keywords:
-            keywords = [k for k in raw_keywords if len(k) >= 1]
+            raw_keywords = re.findall(r"[\w\.\-@#]+", clean_q.lower())
+            keywords = [k for k in raw_keywords if len(k) >= 2] or raw_keywords
 
         candidates = []
         try:
@@ -235,11 +268,13 @@ class MemoryHandler:
                 if clean_q.lower() in combined_text:
                     base_score = 0.85
                 else:
-                    # 키워드 매칭 개수 기반 산출
+                    # 키워드 매칭 개수 기반 산출 (어간/토큰 부분 매칭)
                     matched_count = sum(1 for kw in keywords if kw in combined_text)
                     if matched_count == 0:
                         continue
-                    base_score = min(0.80, (matched_count / max(1, len(keywords))) * 0.75 + 0.20)
+                    # 단일 키워드 매칭이라도 고유 키워드(예: '쿠폰') 매칭 시 최소 0.70 보장
+                    match_ratio = matched_count / max(1, len(keywords))
+                    base_score = min(0.85, match_ratio * 0.40 + 0.45)
 
                 # 퀄리티 가중치 보정
                 quality_boost = 0.0

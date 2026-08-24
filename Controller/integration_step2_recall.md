@@ -8,9 +8,12 @@
 
 - **하이브리드 Direct In-process 회수 (5ms Ultra-low Latency)**:
   - `MemoryHandler.search_associated_memories()` 및 `sub_memory.service.MemoryService` 모듈을 직접 호출하여 5ms 이내로 연관 대화 기억 회수.
+- **한국어 형태소/서브토큰 분리 검색 (Korean Morpheme & Sub-keyword Extraction)**:
+  - 한국어 조사/접미사(`관련된`, `관련해서`, `에대해`, `대해서` 등) 및 질문형 불용어(`기억나는거`, `있어`, `작업한` 등)를 자동 분리하여 어간(`쿠폰`, `NPE` 등) 추출 및 부분 일치 검색 지원.
 - **상충점 방지 (Strict 50ms Timeout & 500 Token Cap)**:
   - 인바운드 TTFT 지연 방지를 위한 **50ms Strict Timeout Sandbox** 적용.
   - 토큰 소모 인플레이션 방지를 위한 **최대 500 토큰(상위 1~2개 핵심 조각 / 1,000 자)** 캡핑.
+  - 최소 적합도 임계치: 60% (`MIN_SIMILARITY_THRESHOLD = 0.60`).
   - 현재 활성 세션과 동일한 세션의 직전 턴은 자기 참조 방지를 위해 회수 대상에서 자동 제외.
 - **실시간 회수/주입 하네스 로그 가시화 (Real-time Recall Logging)**:
   - 프롬프트 인입 시 기억 회수 성공 여부와 주입된 지식 내용을 `harness.log`에 실시간 명시적 출력:

@@ -20,7 +20,7 @@ class MemoryPrefetcher:
 
     TIMEOUT_SEC = 0.050    # 50ms Strict Limit (사용자 TTFT 지연 원천 차단)
     MAX_CHAR_LIMIT = 1000  # 약 300~500 토큰 캡핑 (컨텍스트 오염 방지)
-    MIN_SIMILARITY_THRESHOLD = 0.70  # 최소 적합도 임계치 (70% 미만 자동 탈락)
+    MIN_SIMILARITY_THRESHOLD = 0.60  # 최소 적합도 임계치 (60% 미만 자동 탈락)
 
     @classmethod
     def format_soft_reference_block(cls, memories: List[Dict[str, Any]]) -> str:
