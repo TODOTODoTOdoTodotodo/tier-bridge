@@ -43,6 +43,7 @@ TierBridge 시스템 및 연동 모듈에서 사용하는 전체 환경변수 �
 | **`CODEX_OSS_PORT`** | `18080` | Codex 로컬 공급자 수신 포트 |
 | **`ENTERPRISE_API_URL`** | `https://chatgpt.com/backend-api/codex/responses` | 업스트림 OpenAI Enterprise 백엔드 API 엔드포인트 |
 | **`HARNESS_PORT`** | `18080` | 하네스 프록시가 바인딩하여 수신하는 로컬 포트 |
+| **`MEMORY_DB_PATH`** | `~/.tierbridge/memory.db` | Giyeok 생각나무 장기 기억저장소 SQLite DB 파일 경로 |
 | **`AUTH_FILE_PATH`** | `~/.codex/auth.json` | 엔터프라이즈 JWT 인증 토큰 자동 파싱 경로 |
 | **`MODEL_VERSIONS_CONFIG_PATH`** | `~/.tierbridge/live/config/model_versions.json` (우선) | 모델 버전 스냅샷 및 핫패치 설정 파일 경로 |
 | **`SQLITE_VEC_PATH`** | `""` (자동 탐색) | `sub-memory-bootstrap` 벡터 확장 모듈 경로 |
