@@ -270,9 +270,17 @@ class MemoryHandler:
                     parsed["created_at"] = row["created_at"] or "N/A"
                     candidates.append(parsed)
 
+            # 3. edges 테이블에서 가중치 맵 조회
+            edge_weights = {}
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='edges';")
+            if cursor.fetchone():
+                cursor.execute("SELECT source_id, MAX(weight) FROM edges GROUP BY source_id;")
+                for s_id, w in cursor.fetchall():
+                    edge_weights[s_id] = float(w or 1.0)
+
             conn.close()
 
-            # 3. 다단계 유사도 점수 산출 및 랭킹
+            # 4. 다단계 유사도 점수 산출 및 랭킹
             ranked = []
             for item in candidates:
                 prob = (item.get("problem") or "").lower()
@@ -292,12 +300,18 @@ class MemoryHandler:
                     match_ratio = matched_count / max(1, len(keywords))
                     base_score = min(0.85, match_ratio * 0.40 + 0.45)
 
-                # 퀄리티 가중치 보정
+                # 퀄리티 및 엣지 가중치 보정
                 quality_boost = 0.0
                 if item.get("loc", 0) > 0:
                     quality_boost += 0.15  # 실제 코드 수정 에피소드 보너스
                 if item.get("decision") in ("GOLD", "PLATINUM", "CHALLENGER", "SOL"):
                     quality_boost += 0.10  # 고난도 아키텍처 결정 보너스
+                
+                # Step 3: edges 테이블 가중치 승격 가산
+                edge_w = edge_weights.get(str(item.get("id")), 1.0)
+                item["edge_weight"] = edge_w
+                if edge_w > 1.0:
+                    quality_boost += min(0.15, (edge_w - 1.0) * 0.02)
                 
                 # 서브스텝 패널티
                 if prob.startswith("[substep]"):

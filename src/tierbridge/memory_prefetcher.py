@@ -20,12 +20,17 @@ class MemoryPrefetcher:
 
     TIMEOUT_SEC = 0.050    # 50ms Strict Limit (사용자 TTFT 지연 원천 차단)
     MAX_CHAR_LIMIT = 1000  # 약 300~500 토큰 캡핑 (컨텍스트 오염 방지)
-    MIN_SIMILARITY_THRESHOLD = 0.60  # 최소 적합도 임계치 (60% 미만 자동 탈락)
+    MIN_SIMILARITY_THRESHOLD = 0.60  # 핵심 지식 최소 적합도 임계치 (60% 이상 즉시 브리핑)
+    HINT_SIMILARITY_THRESHOLD = 0.35  # 보조 힌트 최소 적합도 임계치 (35% 이상 제안형 힌트)
 
     @classmethod
-    def format_soft_reference_block(cls, memories: List[Dict[str, Any]]) -> str:
+    def format_soft_reference_block(
+        cls,
+        memories: List[Dict[str, Any]],
+        hints: Optional[List[Dict[str, Any]]] = None
+    ) -> str:
         """
-        사용자 회상 질문에 신속하게 응답하고 신규 코드 작성 시 최우선 참고하도록 유도하는 지식 블록 생성
+        사용자 회상 질문에 신속하게 응답하고 잠재 연관 지식 힌트를 함께 제안하는 지식 블록 생성
         """
         lines = [
             "[🧠 Giyeok 장기 기억저장소 연관 지식]",
@@ -36,14 +41,30 @@ class MemoryPrefetcher:
             "   👉 아래 적용 해결책을 검증된 베스트 프랙티스로 적극 참고하여 반영하세요.",
             ""
         ]
-        for idx, m in enumerate(memories, 1):
-            prob = (m.get("problem") or "").strip().replace("\n", " ")
-            sol = (m.get("solution") or "").strip()
-            score_pct = int(m.get("score", 0.95) * 100)
-            lines.append(f"### [참고 사례 #{idx}] (적합도: {score_pct}%)")
-            lines.append(f"- 📌 과거 문제: {prob}")
-            lines.append(f"- 💡 적용 해결책:\n{sol}")
-            lines.append("")
+
+        # 1. 고적합도 핵심 지식 (High Confidence)
+        if memories:
+            for idx, m in enumerate(memories, 1):
+                prob = (m.get("problem") or "").strip().replace("\n", " ")
+                sol = (m.get("solution") or "").strip()
+                score_pct = int(m.get("score", 0.95) * 100)
+                lines.append(f"### [참고 사례 #{idx}] (적합도: {score_pct}%)")
+                lines.append(f"- 📌 과거 문제: {prob}")
+                lines.append(f"- 💡 적용 해결책:\n{sol}")
+                lines.append("")
+
+        # 2. 보조 힌트 지식 (Low Score / Exploratory Hints)
+        if hints:
+            for idx, h in enumerate(hints, 1):
+                prob = (h.get("problem") or "").strip().replace("\n", " ")
+                sol = (h.get("solution") or "").strip()
+                sol_snippet = sol[:120].replace("\n", " ") + "..." if len(sol) > 120 else sol
+                score_pct = int(h.get("score", 0.45) * 100)
+                lines.append(f"### [💡 보조 참고 힌트 #{idx}] (적합도: {score_pct}%)")
+                lines.append(f"- 📌 관련 가능성이 있는 과거 작업: {prob}")
+                lines.append(f"- 💡 해결 요약: {sol_snippet}")
+                lines.append(f"- ℹ️ 참고 지침: 직접적인 일치가 아닐 수 있으므로, 사용자에게 \"혹시 과거 '{prob[:25]}...' 작업과 관련된 것일까요?\" 형태로 가볍게 확인 제안하세요.")
+                lines.append("")
 
         full_text = "\n".join(lines).strip()
         if len(full_text) > cls.MAX_CHAR_LIMIT:
@@ -76,12 +97,13 @@ class MemoryPrefetcher:
 
             # 50ms Strict 타임아웃 샌드박싱 실행 (<5ms 일반 실행)
             results = await asyncio.wait_for(
-                asyncio.to_thread(MemoryHandler.search_associated_memories, query=p_clean[:200], limit=2),
+                asyncio.to_thread(MemoryHandler.search_associated_memories, query=p_clean[:200], limit=4),
                 timeout=cls.TIMEOUT_SEC
             )
 
-            # 현재 세션 직전 턴 자기 참조 배제 & 70% 이상 고유사도 에피소드만 선별
+            # 현재 세션 직전 턴 자기 참조 배제 및 적합도 구간별 선별
             valid_memories = []
+            hint_memories = []
             for r in (results or []):
                 r_sid = r.get("session_id", "")
                 r_score = r.get("score", 0.0)
@@ -90,18 +112,21 @@ class MemoryPrefetcher:
                     continue
                 if r_score >= cls.MIN_SIMILARITY_THRESHOLD:
                     valid_memories.append(r)
+                elif r_score >= cls.HINT_SIMILARITY_THRESHOLD:
+                    hint_memories.append(r)
 
-            if valid_memories:
-                top_m = valid_memories[0]
+            if valid_memories or hint_memories:
+                top_m = valid_memories[0] if valid_memories else hint_memories[0]
                 prob_snippet = (top_m.get("problem") or "")[:35].replace("\n", " ")
                 sol_snippet = (top_m.get("solution") or "")[:35].replace("\n", " ")
                 score_pct = int(top_m.get("score", 0.95) * 100)
                 m_id = str(top_m.get("id", ""))[:8]
 
                 # 실시간 하네스 로그 방출
-                print(f"➔ [MEMORY:RECALLED] (Score: {score_pct}%, ID: {m_id}) 📌 '{prob_snippet}...' 💡 '{sol_snippet}...'", flush=True)
+                log_tag = "RECALLED" if valid_memories else "HINT"
+                print(f"➔ [MEMORY:{log_tag}] (Score: {score_pct}%, ID: {m_id}) 📌 '{prob_snippet}...' 💡 '{sol_snippet}...'", flush=True)
 
-                return cls.format_soft_reference_block(valid_memories[:2])
+                return cls.format_soft_reference_block(valid_memories[:2], hint_memories[:2])
             else:
                 p_summary = p_clean.replace("\n", " ")[:30]
                 print(f"➔ [MEMORY:RECALL_NONE] No associated memory found | query='{p_summary}...'", flush=True)
