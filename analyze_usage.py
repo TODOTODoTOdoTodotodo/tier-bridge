@@ -163,6 +163,20 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             "cost": r["cost"]
         })
     client_records_json = json.dumps(client_records)
+
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        initial_memories = MemoryHandler.get_recent_memories(limit=100)
+        initial_mem_stats = MemoryHandler.get_memory_stats()
+    except Exception:
+        initial_memories = []
+        initial_mem_stats = {"total_memories": 0, "total_tags": 0, "code_modified_count": 0, "structured_rate": 100.0}
+
+    client_memories_json = json.dumps(initial_memories)
+    client_mem_stats_json = json.dumps(initial_mem_stats)
     
     has_healing_banner = healing_status.get("has_new_healing", False)
     banner_hidden_class = "" if has_healing_banner else "hidden"
@@ -268,7 +282,23 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
     </header>
 
-    <!-- Healing Factor Banner -->
+    <!-- Dashboard Tab Navigation -->
+    <div class="flex items-center gap-3 mb-6 border-b border-slate-800 pb-3">
+        <button id="tabBtnUsage" onclick="switchDashboardTab('usage')"
+                class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-indigo-500 text-indigo-300 bg-indigo-500/10 shadow-lg cursor-pointer">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>📊 AI 사용량 & 크레딧 관제</span>
+        </button>
+        <button id="tabBtnMemory" onclick="switchDashboardTab('memory')"
+                class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer">
+            <i class="fa-solid fa-brain text-purple-400"></i>
+            <span>🧠 Giyeok 장기 기억저장소 & 연관 검색</span>
+            <span id="memTabCountBadge" class="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-mono font-bold">0건</span>
+        </button>
+    </div>
+
+    <!-- Tab 1: AI Usage & Credit Analytics View -->
+    <div id="usageView">
     <div id="healingBanner" class="{banner_hidden_class} mb-8 p-4 rounded-2xl glass-card border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-3">
             <span class="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-xl text-xl">
@@ -473,6 +503,109 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </table>
         </div>
     </div>
+    </div><!-- end #usageView -->
+
+    <!-- Tab 2: Giyeok Long-term Memory Explorer View -->
+    <div id="memoryView" class="hidden">
+        <!-- Memory KPI Cards Row -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="glass-card p-6 rounded-2xl border border-purple-500/30">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold text-purple-300">누적 지식 에피소드</span>
+                    <i class="fa-solid fa-boxes-stacked text-purple-400"></i>
+                </div>
+                <div class="text-2xl font-bold text-slate-100 font-mono" id="kpiMemTotal">0 <span class="text-sm font-normal text-slate-400">Episodes</span></div>
+                <p class="text-xs text-slate-400 mt-2">Problem-Solution 3단 구조화 보존</p>
+            </div>
+
+            <div class="glass-card p-6 rounded-2xl border border-emerald-500/30">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold text-emerald-300">활성 도메인 태그</span>
+                    <i class="fa-solid fa-tags text-emerald-400"></i>
+                </div>
+                <div class="text-2xl font-bold text-slate-100 font-mono" id="kpiMemTags">0 <span class="text-sm font-normal text-slate-400">Tags</span></div>
+                <p class="text-xs text-slate-400 mt-2">#GOLD, #code_modified, #Session_...</p>
+            </div>
+
+            <div class="glass-card p-6 rounded-2xl border border-sky-500/30">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold text-sky-300">코드 생성/수정 지식</span>
+                    <i class="fa-solid fa-code text-sky-400"></i>
+                </div>
+                <div class="text-2xl font-bold text-slate-100 font-mono" id="kpiMemCodeMod">0 <span class="text-sm font-normal text-slate-400">Items</span></div>
+                <p class="text-xs text-slate-400 mt-2">LOC > 0 실전 코드 솔루션 축적</p>
+            </div>
+        </div>
+
+        <!-- Semantic Memory Search Section -->
+        <div class="glass-card p-6 rounded-2xl mb-8 border border-purple-500/40 bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/20">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-magnifying-glass-location text-purple-400"></i>
+                        연관 기억 실시간 시맨틱 검색기 (Recall Explorer)
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">
+                        개발 중인 에러 문구나 키워드를 검색하면, Step 1에 저장된 문제-해결 에피소드를 유사도 랭킹순으로 즉시 회수합니다.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="text" id="memSearchInput" placeholder="질의어/에러문구/도메인 검색 (예: Lombok, jCustNo, DTO)..." 
+                           onkeyup="onMemorySearchInput(event)"
+                           class="bg-slate-900/90 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2.5 focus:outline-none focus:border-purple-400 w-72 md:w-96">
+                    <button onclick="performMemorySearch()"
+                            class="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-slate-100 text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-search"></i>
+                        <span>검색</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search Results Area -->
+            <div id="memSearchResults" class="space-y-3">
+                <div class="text-center py-6 text-xs text-slate-500 font-mono">
+                    💡 검색어를 입력하고 엔터를 누르거나 [검색] 버튼을 클릭하세요.
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Memory Stream Table -->
+        <div class="glass-card p-6 rounded-2xl mb-8 border border-slate-800">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-database text-sky-400"></i>
+                        실시간 적재 기억 에피소드 스트림 (Live Memory Stream)
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">
+                        하네스 퀄리티 게이트를 통과하여 memory.db에 축적된 3단 지식 에피소드 목록입니다. (상단 세션 필터와 실시간 연동)
+                    </p>
+                </div>
+                <span class="text-xs px-3 py-1.5 bg-purple-500/20 text-purple-300 font-mono font-bold rounded-xl border border-purple-500/30">
+                    Direct SQLite / In-process
+                </span>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="memoryStreamTable">
+                    <thead>
+                        <tr class="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
+                            <th class="px-4 py-3 rounded-tl-xl font-mono">ID</th>
+                            <th class="px-4 py-3">Session ID</th>
+                            <th class="px-4 py-3 text-center">등급</th>
+                            <th class="px-4 py-3">📌 문제 및 요구사항</th>
+                            <th class="px-4 py-3">💡 해결 등급 / 코드</th>
+                            <th class="px-4 py-3">🏷️ 태그</th>
+                            <th class="px-4 py-3 text-right rounded-tr-xl">저장 시각</th>
+                        </tr>
+                    </thead>
+                    <tbody id="memoryStreamTableBody" class="divide-y divide-slate-800 text-xs">
+                        <!-- Populated dynamically via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div><!-- end #memoryView -->
 
     <!-- Healing Factor Comparison Modal -->
     <div id="healingModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -1134,7 +1267,6 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
             document.getElementById('promptTableBody').innerHTML = tableHtml;
 
-            // Load More 버튼 제어
             const loadMoreBtn = document.getElementById('loadMoreBtn');
             const countInfo = document.getElementById('promptDisplayCountInfo');
 
@@ -1146,12 +1278,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 countInfo.innerText = `표시 중: Top ${{visiblePrompts.length.toLocaleString()}} / 전체 ${{totalPromptsCount.toLocaleString()}}개`;
             }}
 
-            // 필터링 적용 시 테이블 검색도 즉시 연동
             filterTable();
         }}
 
         function onFilterChange() {{
-            currentPromptLimit = 15; // 필터 조작 시 15개 기본 초기화
+            currentPromptLimit = 15;
             const targetMonth = document.getElementById('monthSelect').value;
             const targetSession = document.getElementById('sessionSelect').value;
             renderDashboard(targetMonth, targetSession);
@@ -1172,7 +1303,6 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
                 if (isMatch) {{
                     visibleCount++;
-                    // 세션 ID 검색 시 세션 전용 랭크 (Session Rank 1, 2, 3...) 로 재계산
                     if (input.includes('sess_') || input.length >= 6) {{
                         row.querySelector('td').innerText = visibleCount;
                     }}
@@ -1180,7 +1310,175 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }});
         }}
 
-        // 3초 주기 실시간 라이브 자동 갱신 (Real-time Live Auto-Sync Polling)
+        let currentMemories = {client_memories_json};
+        let currentMemStats = {client_mem_stats_json};
+        let currentDashboardTab = 'usage';
+
+        function switchDashboardTab(tab) {{
+            currentDashboardTab = tab;
+            const btnUsage = document.getElementById('tabBtnUsage');
+            const btnMemory = document.getElementById('tabBtnMemory');
+            const viewUsage = document.getElementById('usageView');
+            const viewMemory = document.getElementById('memoryView');
+
+            if (tab === 'usage') {{
+                if (viewUsage) viewUsage.classList.remove('hidden');
+                if (viewMemory) viewMemory.classList.add('hidden');
+                if (btnUsage) btnUsage.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-indigo-500 text-indigo-300 bg-indigo-500/10 shadow-lg cursor-pointer';
+                if (btnMemory) btnMemory.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer';
+            }} else {{
+                if (viewUsage) viewUsage.classList.add('hidden');
+                if (viewMemory) viewMemory.classList.remove('hidden');
+                if (btnMemory) btnMemory.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-purple-500 text-purple-300 bg-purple-500/10 shadow-lg cursor-pointer';
+                if (btnUsage) btnUsage.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer';
+                renderMemoryView(currentMemories, currentMemStats);
+            }}
+        }}
+
+        function renderMemoryView(memoriesList, memStats) {{
+            const list = memoriesList || currentMemories || [];
+            const stats = memStats || currentMemStats || {{}};
+
+            const totalEl = document.getElementById('kpiMemTotal');
+            const tagsEl = document.getElementById('kpiMemTags');
+            const codeModEl = document.getElementById('kpiMemCodeMod');
+            const badgeEl = document.getElementById('memTabCountBadge');
+
+            if (totalEl) totalEl.innerHTML = `${{stats.total_memories || list.length}} <span class="text-sm font-normal text-slate-400">Episodes</span>`;
+            if (tagsEl) tagsEl.innerHTML = `${{stats.total_tags || 0}} <span class="text-sm font-normal text-slate-400">Tags</span>`;
+            if (codeModEl) codeModEl.innerHTML = `${{stats.code_modified_count || 0}} <span class="text-sm font-normal text-slate-400">Items</span>`;
+            if (badgeEl) badgeEl.innerText = `${{stats.total_memories || list.length}}건`;
+
+            const sessionSelect = document.getElementById('sessionSelect');
+            const targetSession = sessionSelect ? sessionSelect.value : 'ALL';
+
+            const filtered = (targetSession && targetSession !== 'ALL')
+                ? list.filter(m => (m.session_id && m.session_id.toLowerCase().includes(targetSession.toLowerCase())) || (m.tags && m.tags.includes(targetSession)))
+                : list;
+
+            const tbody = document.getElementById('memoryStreamTableBody');
+            if (!tbody) return;
+
+            if (filtered.length === 0) {{
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500 font-mono">기억저장소에 적재된 문제-해결 에피소드가 아직 없습니다. (첫 프롬프트 요청 후 3초 내 실시간 자동 반영됩니다)</td></tr>';
+                return;
+            }}
+
+            let html = '';
+            filtered.forEach((m, idx) => {{
+                const sid = m.session_id || 'sess_default';
+                const sidShort = sid.length > 12 ? sid.substring(0, 12) + '...' : sid;
+                const dec = m.decision || 'UNKNOWN';
+                const loc = m.loc || 0;
+                const cost = m.cost || 0.0;
+                const prob = (m.problem || m.raw_content || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const sol = (m.solution || dec).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const timeStr = m.created_at || 'N/A';
+
+                let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
+                if (dec.includes('GOLD')) badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
+                else if (dec.includes('SILVER')) badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
+                else if (dec.includes('BRONZE')) badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
+                else if (dec.includes('PLATINUM')) badgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
+
+                let tagsHtml = '';
+                (m.tags || []).forEach(t => {{
+                    tagsHtml += `<span class="px-1.5 py-0.5 bg-slate-800 text-slate-300 border border-slate-700 rounded text-[10px] mr-1">#${{t}}</span>`;
+                }});
+
+                html += `
+                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
+                    <td class="px-4 py-3 font-mono text-purple-300 font-bold">#${{m.id || idx+1}}</td>
+                    <td class="px-4 py-3 font-mono text-slate-300 text-xs" title="${{sid}}">${{sidShort}}</td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full border ${{badgeClass}}">${{dec}}</span>
+                    </td>
+                    <td class="px-4 py-3 font-medium text-slate-200 max-w-sm truncate" title="${{prob}}">
+                        <div class="text-xs font-semibold text-slate-200">${{prob}}</div>
+                        ${{loc > 0 ? `<div class="text-[10px] text-emerald-400 mt-0.5 font-mono">💻 LOC: ${{loc}}줄 코드 작성됨 ($${{cost.toFixed(4)}})</div>` : ''}}
+                    </td>
+                    <td class="px-4 py-3 text-slate-300 font-mono text-xs max-w-xs truncate" title="${{sol}}">${{sol}}</td>
+                    <td class="px-4 py-3">${{tagsHtml || '-'}}</td>
+                    <td class="px-4 py-3 text-right font-mono text-slate-400 whitespace-nowrap">${{timeStr}}</td>
+                </tr>
+                `;
+            }});
+            tbody.innerHTML = html;
+        }}
+
+        function onMemorySearchInput(event) {{
+            if (event.key === 'Enter') {{
+                performMemorySearch();
+            }}
+        }}
+
+        async function performMemorySearch() {{
+            const input = document.getElementById('memSearchInput');
+            if (!input) return;
+            const query = input.value.trim();
+            const resultsContainer = document.getElementById('memSearchResults');
+            if (!resultsContainer) return;
+
+            if (!query) {{
+                resultsContainer.innerHTML = '<div class="text-center py-6 text-xs text-slate-500 font-mono">💡 검색어를 입력하고 엔터를 누르거나 [검색] 버튼을 클릭하세요.</div>';
+                return;
+            }}
+
+            resultsContainer.innerHTML = '<div class="text-center py-6 text-xs text-purple-400 font-mono animate-pulse"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 연관 기억 시맨틱 검색 중...</div>';
+
+            let searchResults = [];
+            try {{
+                let res = await fetch(`http://127.0.0.1:18080/v1/dashboard/memories/search?q=${{encodeURIComponent(query)}}`);
+                if (res.ok) {{
+                    const data = await res.json();
+                    searchResults = data.results || [];
+                }}
+            }} catch (e) {{
+                const qLower = query.toLowerCase();
+                searchResults = currentMemories.filter(m => 
+                    (m.problem && m.problem.toLowerCase().includes(qLower)) ||
+                    (m.raw_content && m.raw_content.toLowerCase().includes(qLower)) ||
+                    (m.tags && m.tags.some(t => t.toLowerCase().includes(qLower)))
+                );
+            }}
+
+            if (searchResults.length === 0) {{
+                resultsContainer.innerHTML = `<div class="text-center py-6 text-xs text-slate-500 font-mono">❌ "${{query}}" 와 일치하거나 연관된 기억이 없습니다.</div>`;
+                return;
+            }}
+
+            let cardsHtml = '';
+            searchResults.forEach((r, idx) => {{
+                const prob = (r.problem || r.raw_content || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const sol = (r.solution || r.decision || 'N/A').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const scorePct = r.score ? Math.round(r.score * 100) : 95;
+                const sid = r.session_id || 'sess_default';
+                const sidShort = sid.length > 10 ? sid.substring(0, 10) + '...' : sid;
+
+                cardsHtml += `
+                <div class="p-4 rounded-xl bg-slate-800/80 border border-purple-500/30 hover:border-purple-400/60 transition-all shadow-md">
+                    <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-700/60">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded font-mono text-xs font-bold">🎯 연관도: ${{scorePct}}%</span>
+                            <span class="text-xs font-mono text-slate-400">세션: ${{sidShort}}</span>
+                            ${{r.decision ? `<span class="px-2 py-0.5 bg-yellow-500/20 text-yellow-300 rounded text-[10px] font-bold border border-yellow-500/30">${{r.decision}}</span>` : ''}}
+                        </div>
+                        <span class="text-[11px] text-slate-400 font-mono">${{r.created_at || '최근 적재'}}</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-xs font-bold text-purple-300">📌 문제/요구사항:</span>
+                        <div class="text-xs text-slate-200 mt-0.5 leading-relaxed">${{prob}}</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-xs font-bold text-emerald-300">💡 적용 해결책:</span>
+                        <div class="text-xs text-slate-300 mt-0.5 font-mono bg-slate-900/60 p-2 rounded-lg border border-slate-700/40">${{sol}}</div>
+                    </div>
+                </div>
+                `;
+            }});
+            resultsContainer.innerHTML = cardsHtml;
+        }}
+
         async function fetchLiveDashboardStats() {{
             let res = null;
             try {{
@@ -1211,13 +1509,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     healingHistoryData = data.healing_history;
                     renderHealingHistory(data.healing_history);
                 }}
+                if (data.memory_stats) {{
+                    currentMemStats = data.memory_stats;
+                }}
                 if (data.enterprise_balance) {{
                     const eb = data.enterprise_balance;
                     const limitVal = parseFloat(eb.limit) || 0;
                     const usedVal = parseFloat(eb.used) || 0;
                     const remVal = (limitVal > 0) ? Math.max(0, limitVal - usedVal) : (parseFloat(eb.remaining) || 0);
                     
-                    // 어드민이 수시로 조정하는 유동적 limit을 기준으로 실시간 비율 계산
                     const usedPct = limitVal > 0 ? ((usedVal / limitVal) * 100) : 0;
                     const remPct = Math.max(0, 100 - usedPct);
 
@@ -1238,6 +1538,19 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const currentMonth = document.getElementById('monthSelect').value;
                 const currentSession = document.getElementById('sessionSelect').value;
                 renderDashboard(currentMonth, currentSession);
+
+                try {{
+                    let memRes = await fetch('http://127.0.0.1:18080/v1/dashboard/memories');
+                    if (memRes.ok) {{
+                        const memData = await memRes.json();
+                        if (memData.memories) {{
+                            currentMemories = memData.memories;
+                            if (currentDashboardTab === 'memory') {{
+                                renderMemoryView(currentMemories, currentMemStats);
+                            }}
+                        }}
+                    }}
+                }} catch(me) {{ }}
             }} else {{
                 if (badge) {{
                     badge.className = "flex items-center gap-2 bg-rose-950/60 border border-rose-500/40 px-3 py-1.5 rounded-xl shadow-lg text-rose-400 text-xs font-bold";
@@ -1249,6 +1562,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         window.onload = function() {{
             initVersionSelector();
             renderHealingHistory(healingHistoryData);
+            renderMemoryView(currentMemories, currentMemStats);
             const initialMonth = document.getElementById('monthSelect').value;
             const initialSession = document.getElementById('sessionSelect').value;
             renderDashboard(initialMonth, initialSession);
