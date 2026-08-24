@@ -60,24 +60,22 @@ class MemoryIngestionWorker:
         cost: float = 0.0
     ) -> bool:
         """
-        SQLite memory.db 테이블 직접 Insert (Giyeok nodes 및 TierBridge memories 테이블 듀얼 지원, Session ID 완벽 결합)
+        SQLite memory.db 테이블 직접 Insert (submemory 표준 규격: 순수 User/Assistant 지식 쌍 보존)
         """
+        clean_sol = (solution_text or content).strip()
+        if not clean_sol or clean_sol in ("(답변 수집 완료)", f"라우팅 등급: {decision}"):
+            return False
+
         conn = sqlite3.connect(db_path, timeout=5.0)
         cursor = conn.cursor()
 
-        # 1. Giyeok nodes 테이블이 존재하는지 확인
+        # 1. Giyeok nodes 테이블 지원 (순수 User / Assistant 텍스트만 보존)
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='nodes';")
         has_nodes = cursor.fetchone() is not None
 
         if has_nodes:
             node_id = str(uuid.uuid4())
-            clean_solution = solution_text.strip() if solution_text else content
-            # 세션 ID, 라우팅 등급, 코드 라인 수, 비용 메타데이터를 헤더로 결합
-            node_text = (
-                f"[Session: {session_id}] [Decision: {decision}] [LOC: {loc}] [Cost: ${cost:.4f}]\n"
-                f"User: {prompt.strip()}\n"
-                f"Assistant: {clean_solution}"
-            )
+            node_text = f"User: {prompt.strip()}\nAssistant: {clean_sol}"
             # 384 dims float32 = 1536 bytes
             zero_embedding = bytes(1536)
             iso_time = datetime.now(timezone.utc).isoformat()
@@ -96,7 +94,7 @@ class MemoryIngestionWorker:
             );
         """)
         tags_json = json.dumps(tags, ensure_ascii=False)
-        cursor.execute("INSERT INTO memories (content, tags) VALUES (?, ?);", (content, tags_json))
+        cursor.execute("INSERT INTO memories (content, tags) VALUES (?, ?);", (f"User: {prompt.strip()}\nAssistant: {clean_sol}", tags_json))
 
         conn.commit()
         conn.close()
@@ -113,19 +111,11 @@ class MemoryIngestionWorker:
         solution_text: str = ""
     ) -> str:
         """
-        사용자의 고민과 LLM의 최종 해결책/코드를 3단 지식 포맷으로 표준화
+        사용자의 고민과 LLM의 최종 해결책/코드를 순수 질문-답변 지식 포맷으로 표준화
         """
         clean_prompt = prompt.strip()
-        clean_sol = solution_text.strip() if solution_text else "(답변 수집 완료)"
-        if len(clean_sol) > 1500:
-            clean_sol = clean_sol[:1500] + "\n... (이하 생략)"
-
-        return (
-            f"[Session: {session_id}] [Decision: {decision}] [LOC: {loc}] [Cost: ${cost:.4f}]\n"
-            f"- 📌 문제 및 요구사항: {clean_prompt}\n"
-            f"- 💡 적용 해결책 및 LLM 응답: {clean_sol}\n"
-            f"- 🏷️ 태그: #{decision} #Session_{session_id[:8]} #TierBridge"
-        )
+        clean_sol = solution_text.strip()
+        return f"User: {clean_prompt}\nAssistant: {clean_sol}"
 
     @classmethod
     def should_ingest(cls, decision: str, loc: int, is_first_turn: bool, prompt: str) -> bool:
@@ -179,10 +169,16 @@ class MemoryIngestionWorker:
         # 1. 1차 퀄리티 게이트 필터링
         if not cls.should_ingest(decision, loc, is_first_turn, prompt):
             p_snippet = prompt.replace("\n", " ")[:30]
-            print(f"➔ [MEMORY:SKIPPED] [{decision}] loc={loc} is_first={is_first_turn} | prompt='{p_snippet}...'", flush=True)
+            print(f"➔ [MEMORY:SKIPPED] [{decision}] loc={loc} | prompt='{p_snippet}...' (quality gate)", flush=True)
             return False
 
-        # 2. 3단 지식 에피소드 콘텐츠 및 태그 생성
+        # 2. 답변 내용 유효성 검증 (답변이 비어있는 껍데기 턴은 저장 배제)
+        if not solution_text or len(solution_text.strip()) < 5:
+            p_snippet = prompt.replace("\n", " ")[:30]
+            print(f"➔ [MEMORY:SKIPPED] [{decision}] | prompt='{p_snippet}...' (no solution text)", flush=True)
+            return False
+
+        # 3. 순수 질문-답변 지식 에피소드 생성
         content = cls.format_problem_solution_episode(session_id, prompt, decision, loc, cost, solution_text)
         tags: List[str] = [session_id, decision, "tierbridge_auto_ingest"]
         if loc > 0:
@@ -190,7 +186,7 @@ class MemoryIngestionWorker:
         if is_first_turn:
             tags.append("initial_request")
 
-        # 3. 1순위: sub_memory Direct Module 임포트 및 저장 시도 (<5ms)
+        # 4. 1순위: sub_memory Direct Module 임포트 및 저장 시도 (<5ms)
         try:
             from sub_memory.service import MemoryService
             service = MemoryService()
@@ -202,10 +198,10 @@ class MemoryIngestionWorker:
         except Exception as e:
             logger.debug(f"[MemoryIngestion] Service store failed, trying SQLite fallback: {e}")
 
-        # 4. 2순위: 로컬 SQLite DB(memory.db) 직접 Insert Fallback (100% 무중단 적재 보장)
+        # 5. 2순위: 로컬 SQLite DB(memory.db) 직접 Insert Fallback (100% 무중단 적재 보장)
         try:
             db_path = cls.get_db_path()
-            await asyncio.to_thread(
+            success = await asyncio.to_thread(
                 cls.store_to_sqlite,
                 db_path,
                 content,
@@ -217,8 +213,11 @@ class MemoryIngestionWorker:
                 loc,
                 cost
             )
-            print(f"➔ [MEMORY:STORED] [SQLite Direct] session={session_id[:8]} [{decision}] loc={loc} lines | cost=${cost:.4f} | db={os.path.basename(db_path)}", flush=True)
-            return True
+            if success:
+                print(f"➔ [MEMORY:STORED] [SQLite Direct] session={session_id[:8]} [{decision}] loc={loc} lines | cost=${cost:.4f} | db={os.path.basename(db_path)}", flush=True)
+                return True
+            else:
+                return False
         except Exception as e:
             print(f"➔ [MEMORY:ERROR] session={session_id[:8]} [{decision}] storage failed: {e}", flush=True)
             return False

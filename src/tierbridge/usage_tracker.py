@@ -194,18 +194,21 @@ class UsageTracker:
                     # 2. 다각도 응답 텍스트 조각 수집 (OpenAI / Codex responses / Anthropic / Gemini 규격 완벽 지원)
                     t_type = event.get("type", "")
                     
-                    if t_type in ("response.text.delta", "response.output_text.delta", "response.output_item.delta"):
-                        d = event.get("delta")
+                    if "delta" in event:
+                        d = event["delta"]
                         if isinstance(d, str):
                             response_full_text += d
                         elif isinstance(d, dict):
                             response_full_text += d.get("text", "") or d.get("content", "")
-                    elif t_type in ("response.content_part.delta", "content_block_delta"):
-                        d = event.get("delta", {})
-                        if isinstance(d, dict):
-                            response_full_text += d.get("text", "") or d.get("content", "")
-                        elif isinstance(d, str):
-                            response_full_text += d
+                    elif event.get("choices") and event["choices"]:
+                        c = event["choices"][0]
+                        if isinstance(c, dict):
+                            delta_c = c.get("delta", {})
+                            if isinstance(delta_c, dict) and delta_c.get("content"):
+                                response_full_text += delta_c["content"]
+                            elif isinstance(c.get("message"), dict) and c["message"].get("content"):
+                                if not response_full_text:
+                                    response_full_text = c["message"]["content"]
                     elif t_type in ("response.done", "response.completed"):
                         # 완료 이벤트에서 전체 텍스트 보강
                         resp_obj = event.get("response", {})
@@ -220,14 +223,6 @@ class UsageTracker:
                                             if isinstance(c_item, dict) and "text" in c_item:
                                                 if not response_full_text:
                                                     response_full_text += c_item.get("text", "")
-                    elif event.get("choices"):
-                        c = event["choices"][0]
-                        delta_c = c.get("delta", {})
-                        if isinstance(delta_c, dict) and delta_c.get("content"):
-                            response_full_text += delta_c["content"]
-                        elif isinstance(c.get("message"), dict) and c["message"].get("content"):
-                            if not response_full_text:
-                                response_full_text = c["message"]["content"]
                 except Exception:
                     continue
             

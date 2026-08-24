@@ -54,7 +54,7 @@ class TestMemoryIngestionWorker(unittest.IsolatedAsyncioTestCase):
         ))
 
     def test_format_problem_solution_episode(self):
-        """문제-해결 3단 지식 에피소드 포맷팅 검증 (LLM 응답 솔루션 포함)"""
+        """순수 질문-답변 지식 에피소드 포맷팅 검증 (submemory 표준 규격)"""
         episode = MemoryIngestionWorker.format_problem_solution_episode(
             session_id="019ffec0-eef3-7692-801c-60dae4e386bd",
             prompt="jCustNo 필드를 affCustNo로 변경하고 암호화 분기를 우회해줘",
@@ -63,13 +63,8 @@ class TestMemoryIngestionWorker(unittest.IsolatedAsyncioTestCase):
             cost=0.1523,
             solution_text="UserService.java 에서 affCustNo 필드로 매핑하고 RSA 암호화 모듈을 호출하도록 수정했습니다."
         )
-        self.assertIn("[Session: 019ffec0-eef3-7692-801c-60dae4e386bd]", episode)
-        self.assertIn("[Decision: GOLD]", episode)
-        self.assertIn("[LOC: 42]", episode)
-        self.assertIn("[Cost: $0.1523]", episode)
-        self.assertIn("📌 문제 및 요구사항: jCustNo 필드를 affCustNo로 변경하고 암호화 분기를 우회해줘", episode)
-        self.assertIn("💡 적용 해결책 및 LLM 응답: UserService.java 에서 affCustNo 필드로 매핑", episode)
-        self.assertIn("🏷️ 태그: #GOLD #Session_019ffec0 #TierBridge", episode)
+        self.assertIn("User: jCustNo 필드를 affCustNo로 변경하고 암호화 분기를 우회해줘", episode)
+        self.assertIn("Assistant: UserService.java 에서 affCustNo 필드로 매핑", episode)
 
     async def test_process_log_event_with_mock_service(self):
         """MemoryService 모듈이 존재할 때 인프로세스 직접 저장 검증"""
@@ -124,7 +119,7 @@ class TestMemoryIngestionWorker(unittest.IsolatedAsyncioTestCase):
                 import sqlite3
                 conn = sqlite3.connect(temp_db)
                 cursor = conn.cursor()
-                cursor.execute("SELECT content, tags FROM memories WHERE content LIKE '%sess_test_sqlite_fallback%';")
+                cursor.execute("SELECT content, tags FROM memories WHERE tags LIKE '%sess_test_sqlite_fallback%';")
                 row = cursor.fetchone()
                 self.assertIsNotNone(row)
                 self.assertIn("SQLite DB에 성공적으로 저장된 솔루션 본문", row[0])
