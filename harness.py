@@ -413,13 +413,15 @@ async def route_harness(request: Request):
         user_prompt = str(raw_body.get("instructions", "")) + str(raw_body.get("input", ""))
 
     # Step 2: 사전 기억 회수 (Pre-fetch Recall, 50ms Strict Timeout Sandbox)
-    try:
-        recalled_context = await MemoryPrefetcher.fetch_associated_context(user_prompt, current_session_id=session_id)
-        if recalled_context:
-            if unified_req and hasattr(unified_req, "messages") and unified_req.messages:
-                unified_req.messages.insert(0, Message(role="system", content=recalled_context))
-    except Exception as e:
-        log.debug(f"[RecallHook] Memory prefetch bypassed: {e}")
+    # 사용자의 신규 턴(is_new_user_turn == True) 인입 시에만 1회 회수하여 내부 서브스텝 중복 주입 및 토큰 낭비 방지
+    if is_new_user_turn:
+        try:
+            recalled_context = await MemoryPrefetcher.fetch_associated_context(user_prompt, current_session_id=session_id)
+            if recalled_context:
+                if unified_req and hasattr(unified_req, "messages") and unified_req.messages:
+                    unified_req.messages.insert(0, Message(role="system", content=recalled_context))
+        except Exception as e:
+            log.debug(f"[RecallHook] Memory prefetch bypassed: {e}")
 
     decision, target_model, effort = await Router.classify_request(
         unified_request=unified_req,
