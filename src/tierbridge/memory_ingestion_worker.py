@@ -71,11 +71,12 @@ class MemoryIngestionWorker:
 
         if has_nodes:
             node_id = str(uuid.uuid4())
+            clean_solution = solution_text.strip() if solution_text else content
             # 세션 ID, 라우팅 등급, 코드 라인 수, 비용 메타데이터를 헤더로 결합
             node_text = (
                 f"[Session: {session_id}] [Decision: {decision}] [LOC: {loc}] [Cost: ${cost:.4f}]\n"
-                f"User: {prompt}\n"
-                f"Assistant: {solution_text if solution_text else content}"
+                f"User: {prompt.strip()}\n"
+                f"Assistant: {clean_solution}"
             )
             # 384 dims float32 = 1536 bytes
             zero_embedding = bytes(1536)
@@ -115,9 +116,9 @@ class MemoryIngestionWorker:
         사용자의 고민과 LLM의 최종 해결책/코드를 3단 지식 포맷으로 표준화
         """
         clean_prompt = prompt.strip()
-        clean_sol = solution_text.strip() if solution_text else f"라우팅 등급: {decision}"
-        if len(clean_sol) > 1200:
-            clean_sol = clean_sol[:1200] + "\n... (이하 생략)"
+        clean_sol = solution_text.strip() if solution_text else "(답변 수집 완료)"
+        if len(clean_sol) > 1500:
+            clean_sol = clean_sol[:1500] + "\n... (이하 생략)"
 
         return (
             f"[Session: {session_id}] [Decision: {decision}] [LOC: {loc}] [Cost: ${cost:.4f}]\n"
@@ -132,22 +133,34 @@ class MemoryIngestionWorker:
         CPU 룰 기반 정밀 퀄리티 게이트 필터링 ($0.00)
         - 빈 프롬프트 또는 5자 미만 초단문 배제
         - 서브스텝 / 중간 진행 보고 턴 노이즈 차단 ([Substep], [이전 대화 요약 등)
-        - 사용자의 원본 고민(is_first_turn), 실제 코드 작성(loc > 0), 고난도 결정(GOLD/PLATINUM/CHALLENGER)만 선별 보존
+        - 사용자의 실제 질의(서브스텝이 아닌 모든 프롬프트) 및 코드 작성 턴(LOC > 0)은 100% 보존
         """
         if not prompt or len(prompt.strip()) < 5:
             return False
 
         p_clean = prompt.strip()
+        is_substep = (
+            p_clean.startswith("[Substep]")
+            or "[이전 대화 요약" in p_clean
+            or "[대화 요약" in p_clean
+        )
 
         # 1. 서브스텝 / 단순 진행 보고 턴은 노이즈 방어를 위해 스킵 (코드 수정한 턴 제외)
-        if (p_clean.startswith("[Substep]") or "[이전 대화 요약" in p_clean) and loc == 0:
+        if is_substep and loc == 0:
             return False
 
-        # 2. 핵심 가치 턴 판정
-        if is_first_turn or loc > 0 or decision.upper() in ("GOLD", "PLATINUM", "CHALLENGER", "SOL"):
+        # 2. 사용자의 실제 질문/요구사항(서브스텝이 아닌 모든 질문)은 턴 순서와 무관하게 무조건 수집
+        if not is_substep:
             return True
 
-        # 3. 단순 BRONZE/SILVER 확인 턴 배제
+        # 3. 서브스텝 중이라도 실제 코드가 작성/수정된 턴(LOC > 0)은 수집
+        if loc > 0:
+            return True
+
+        # 4. 고난도 아키텍처 결정 수집
+        if decision.upper() in ("GOLD", "PLATINUM", "CHALLENGER", "SOL"):
+            return True
+
         return False
 
     @classmethod

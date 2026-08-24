@@ -191,25 +191,43 @@ class UsageTracker:
                         if out_val:
                             output_tokens = out_val
                         
-                    # 2. 응답 텍스트 조각 수집 (LOC 파싱 및 출력 토큰 추정용)
-                    if event.get("type") == "response.content_part.delta":
-                        delta_part = event.get("delta", {})
-                        if isinstance(delta_part, dict) and delta_part.get("type") == "text":
-                            response_full_text += delta_part.get("text", "")
-                    elif event.get("type") == "response.output_text.delta":
-                        delta_text = event.get("delta")
-                        if isinstance(delta_text, str):
-                            response_full_text += delta_text
-                    elif event.get("type") == "content_block_delta":
-                        # Anthropic Claude 스트리밍 규격 지원
-                        delta_part = event.get("delta", {})
-                        if isinstance(delta_part, dict) and delta_part.get("text"):
-                            response_full_text += delta_part.get("text", "")
+                    # 2. 다각도 응답 텍스트 조각 수집 (OpenAI / Codex responses / Anthropic / Gemini 규격 완벽 지원)
+                    t_type = event.get("type", "")
+                    
+                    if t_type in ("response.text.delta", "response.output_text.delta", "response.output_item.delta"):
+                        d = event.get("delta")
+                        if isinstance(d, str):
+                            response_full_text += d
+                        elif isinstance(d, dict):
+                            response_full_text += d.get("text", "") or d.get("content", "")
+                    elif t_type in ("response.content_part.delta", "content_block_delta"):
+                        d = event.get("delta", {})
+                        if isinstance(d, dict):
+                            response_full_text += d.get("text", "") or d.get("content", "")
+                        elif isinstance(d, str):
+                            response_full_text += d
+                    elif t_type in ("response.done", "response.completed"):
+                        # 완료 이벤트에서 전체 텍스트 보강
+                        resp_obj = event.get("response", {})
+                        if isinstance(resp_obj, dict):
+                            if "output_text" in resp_obj and isinstance(resp_obj["output_text"], str) and resp_obj["output_text"]:
+                                if not response_full_text:
+                                    response_full_text = resp_obj["output_text"]
+                            elif "output" in resp_obj and isinstance(resp_obj["output"], list):
+                                for out_item in resp_obj["output"]:
+                                    if isinstance(out_item, dict) and "content" in out_item:
+                                        for c_item in out_item.get("content", []):
+                                            if isinstance(c_item, dict) and "text" in c_item:
+                                                if not response_full_text:
+                                                    response_full_text += c_item.get("text", "")
                     elif event.get("choices"):
                         c = event["choices"][0]
                         delta_c = c.get("delta", {})
-                        if delta_c.get("content"):
+                        if isinstance(delta_c, dict) and delta_c.get("content"):
                             response_full_text += delta_c["content"]
+                        elif isinstance(c.get("message"), dict) and c["message"].get("content"):
+                            if not response_full_text:
+                                response_full_text = c["message"]["content"]
                 except Exception:
                     continue
             
