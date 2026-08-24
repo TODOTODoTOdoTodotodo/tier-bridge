@@ -58,6 +58,18 @@ if os.path.exists(dev_log):
 " 2>/dev/null || true
 fi
 
+# 2-2. 기억저장소(memory.db) TierBridge 런타임($HOME/.tierbridge/memory.db) 일원화 및 자동 마이그레이션
+TIERBRIDGE_MEM_DB="$HOME/.tierbridge/memory.db"
+if [ ! -f "$TIERBRIDGE_MEM_DB" ]; then
+    if [ -f "$HOME/.codex/sub-memory/memory.db" ]; then
+        echo "🧠 기존 Giyeok 기억저장소(~/.codex/sub-memory/memory.db) ➔ $TIERBRIDGE_MEM_DB 자동 마이그레이션 중..."
+        cp "$HOME/.codex/sub-memory/memory.db" "$TIERBRIDGE_MEM_DB"
+    elif [ -f "$HOME/.sub-memory/memory.db" ]; then
+        echo "🧠 기존 기억저장소(~/.sub-memory/memory.db) ➔ $TIERBRIDGE_MEM_DB 자동 마이그레이션 중..."
+        cp "$HOME/.sub-memory/memory.db" "$TIERBRIDGE_MEM_DB"
+    fi
+fi
+
 # 3. 라이브 가상환경(.venv) 및 의존성 패키지 정비
 cd "$LIVE_DIR"
 if [ ! -d ".venv" ]; then
@@ -89,14 +101,14 @@ fi
 
 # 5. 라이브 런타임에서 하네스 백그라운드 가동 (PYTHONPATH=src 설정 & --log-level warning 적용, append 모드 >>)
 echo "⚡ 라이브 하네스 프록시 서버 가동 중 (Port: $PORT, LogLevel: WARNING)..."
-PYTHONPATH="$LIVE_DIR/src:$PYTHONPATH" nohup .venv/bin/python -m uvicorn harness:app --host 0.0.0.0 --port $PORT --log-level warning >> "$LIVE_DIR/harness.log" 2>&1 &
+MEMORY_DB_PATH="$TIERBRIDGE_MEM_DB" PYTHONPATH="$LIVE_DIR/src:$PYTHONPATH" nohup .venv/bin/python -m uvicorn harness:app --host 0.0.0.0 --port $PORT --log-level warning >> "$LIVE_DIR/harness.log" 2>&1 &
 NEW_PID=$!
 echo "$NEW_PID" > "$PID_FILE"
 
 sleep 2
 
 # 대시보드 HTML 사전 동기화 생성
-PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$LIVE_DIR/analyze_usage.py" "$LIVE_DIR/harness.log" --html --no-open >/dev/null 2>&1 || true
+MEMORY_DB_PATH="$TIERBRIDGE_MEM_DB" PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$LIVE_DIR/analyze_usage.py" "$LIVE_DIR/harness.log" --html --no-open >/dev/null 2>&1 || true
 
 # 6. 배포 헬스체크 및 결과 검증
 HEALTH_CHECK=$(curl -s http://localhost:$PORT/v1/models || true)

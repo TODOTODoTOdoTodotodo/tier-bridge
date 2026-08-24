@@ -46,17 +46,21 @@ class UsageTracker:
             return 0
         
         loc_count = 0
-        code_blocks = re.findall(r"```(?:\w+)?\n(.*?)```", full_text, re.DOTALL)
+        # 모든 프로그래밍 언어 태그(ts, vue, java, bash 등) 및 줄바꿈 지원
+        code_blocks = re.findall(r"```[^\n]*\r?\n(.*?)```", full_text, re.DOTALL)
         for block in code_blocks:
             lines = [line for line in block.splitlines() if line.strip()]
             loc_count += len(lines)
         return loc_count
 
-    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = "", auth_token: str = "", account_id: str = "", prompt_text: str = "", is_first_turn: Optional[bool] = None):
+    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = "", auth_token: str = "", account_id: str = "", is_first_turn: Optional[bool] = None, prompt_text: str = "", response_text: str = "", is_final_answer: bool = True):
         """
-        토큰 소모량 및 코드 작성 줄 수(LOC)를 전달받아 예상 비용을 계산하고,
-        비동기 델타 크레딧 인터셉터 및 기억저장소(MemoryIngestionWorker)를 백그라운드로 실행합니다.
+        단일 LLM 호출 턴의 사용량을 기록하고, 실시간 델타 크레딧 인터셉터 및 기억 저장소 워커를 비동기 구동합니다.
         """
+        # LOC 2중 안전망: loc가 0이고 response_text가 제공된 경우 자동 계산
+        if loc == 0 and response_text:
+            loc = self.extract_code_lines(response_text)
+
         # 모델명 소문자 매핑
         model_key = model.lower()
         matched_catalog = self.PRICE_CATALOG.get("unknown")
@@ -70,7 +74,7 @@ class UsageTracker:
         cost_in = (input_tokens * matched_catalog["input"]) / 1_000_000.0
         cost_out = (output_tokens * matched_catalog["output"]) / 1_000_000.0
         cost_total = cost_in + cost_out
-        
+
         now = datetime.now()
         timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
         iso_timestamp = now.isoformat()
@@ -142,7 +146,9 @@ class UsageTracker:
                 "decision": decision,
                 "loc": loc,
                 "cost": round(cost_total, 6),
-                "is_first_turn": is_first
+                "is_first_turn": is_first,
+                "solution": response_text,
+                "is_final_answer": is_final_answer
             }
             loop.create_task(MemoryIngestionWorker.process_log_event(event_data))
         except Exception:
@@ -158,6 +164,8 @@ class UsageTracker:
             input_tokens = 0
             output_tokens = 0
             response_full_text = ""
+            finish_reason = None
+            has_tool_call = False
             
             for line in text.splitlines():
                 line = line.strip()
@@ -186,20 +194,72 @@ class UsageTracker:
                         if out_val:
                             output_tokens = out_val
                         
-                    # 2. 응답 텍스트 조각 수집 (LOC 파싱 및 출력 토큰 추정용)
-                    if event.get("type") == "response.content_part.delta":
-                        delta_part = event.get("delta", {})
-                        if isinstance(delta_part, dict) and delta_part.get("type") == "text":
-                            response_full_text += delta_part.get("text", "")
-                    elif event.get("type") == "response.output_text.delta":
-                        delta_text = event.get("delta")
-                        if isinstance(delta_text, str):
-                            response_full_text += delta_text
-                    elif event.get("choices"):
+                    # 2. finish_reason 및 도구 호출 플래그 탐색 (프로토콜 레벨)
+                    t_type = event.get("type", "")
+                    
+                    # 2-1. OpenAI 표준 choices
+                    if event.get("choices") and event["choices"]:
                         c = event["choices"][0]
-                        delta_c = c.get("delta", {})
-                        if delta_c.get("content"):
-                            response_full_text += delta_c["content"]
+                        if isinstance(c, dict):
+                            if c.get("finish_reason"):
+                                finish_reason = c.get("finish_reason")
+                            if c.get("delta", {}).get("tool_calls") or c.get("delta", {}).get("function_call"):
+                                has_tool_call = True
+                            if c.get("message", {}).get("tool_calls") or c.get("message", {}).get("function_call"):
+                                has_tool_call = True
+
+                    # 2-2. ChatGPT Enterprise / Codex responses (response.output_item.*, response.done)
+                    if t_type in ("response.output_item.added", "response.output_item.done"):
+                        item = event.get("item", {})
+                        if isinstance(item, dict) and item.get("type") in ("function_call", "tool_call", "custom_tool_call"):
+                            has_tool_call = True
+                    elif t_type in ("response.done", "response.completed"):
+                        resp_obj = event.get("response", {})
+                        if isinstance(resp_obj, dict):
+                            for out_item in resp_obj.get("output", []):
+                                if isinstance(out_item, dict) and out_item.get("type") in ("function_call", "tool_call", "custom_tool_call"):
+                                    has_tool_call = True
+                            if resp_obj.get("status") == "completed" and not has_tool_call:
+                                finish_reason = "stop"
+
+                    # 2-3. Anthropic Claude (message_delta)
+                    if t_type == "message_delta":
+                        d = event.get("delta", {})
+                        if isinstance(d, dict) and d.get("stop_reason"):
+                            finish_reason = d.get("stop_reason")
+                            if finish_reason == "tool_use":
+                                has_tool_call = True
+
+                    # 3. 다각도 응답 텍스트 조각 수집 (OpenAI / Codex responses / Anthropic / Gemini 규격 완벽 지원)
+                    if "delta" in event:
+                        d = event["delta"]
+                        if isinstance(d, str):
+                            response_full_text += d
+                        elif isinstance(d, dict):
+                            response_full_text += d.get("text", "") or d.get("content", "")
+                    elif event.get("choices") and event["choices"]:
+                        c = event["choices"][0]
+                        if isinstance(c, dict):
+                            delta_c = c.get("delta", {})
+                            if isinstance(delta_c, dict) and delta_c.get("content"):
+                                response_full_text += delta_c["content"]
+                            elif isinstance(c.get("message"), dict) and c["message"].get("content"):
+                                if not response_full_text:
+                                    response_full_text = c["message"]["content"]
+                    elif t_type in ("response.done", "response.completed"):
+                        # 완료 이벤트에서 전체 텍스트 보강
+                        resp_obj = event.get("response", {})
+                        if isinstance(resp_obj, dict):
+                            if "output_text" in resp_obj and isinstance(resp_obj["output_text"], str) and resp_obj["output_text"]:
+                                if not response_full_text:
+                                    response_full_text = resp_obj["output_text"]
+                            elif "output" in resp_obj and isinstance(resp_obj["output"], list):
+                                for out_item in resp_obj["output"]:
+                                    if isinstance(out_item, dict) and "content" in out_item:
+                                        for c_item in out_item.get("content", []):
+                                            if isinstance(c_item, dict) and "text" in c_item:
+                                                if not response_full_text:
+                                                    response_full_text += c_item.get("text", "")
                 except Exception:
                     continue
             
@@ -217,6 +277,14 @@ class UsageTracker:
                 else:
                     output_tokens = 150
 
-            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id, auth_token=auth_token, account_id=account_id, prompt_text=prompt_text)
+            # 4. 최종 사용자 답변 여부 판정 (도구 호출이 없고 정상 완료된 턴)
+            if has_tool_call or finish_reason in ("tool_calls", "function_call", "tool_use"):
+                is_final_answer = False
+            elif finish_reason in ("stop", "end_turn", "completed"):
+                is_final_answer = not ('{"cmd":' in response_full_text or '{"call":' in response_full_text or '{"tool":' in response_full_text)
+            else:
+                is_final_answer = bool(response_full_text) and not ('{"cmd":' in response_full_text or '{"call":' in response_full_text)
+
+            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id, auth_token=auth_token, account_id=account_id, prompt_text=prompt_text, response_text=response_full_text, is_final_answer=is_final_answer)
         except Exception as e:
             print(f"[Warning] Failed to parse usage stats from buffer: {e}")

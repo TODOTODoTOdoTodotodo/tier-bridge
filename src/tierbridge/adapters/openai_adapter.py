@@ -103,19 +103,28 @@ class OpenAIAdapter(BaseAdapter):
             data_json = json.loads(data_str)
             
             # 1. 표준 OpenAI chat completions 규격
-            if "choices" in data_json:
-                choices = data_json.get("choices", [])
-                if choices:
-                    delta = choices[0].get("delta", {})
-                    content = delta.get("content", "")
-                    return content, False
+            if "choices" in data_json and data_json["choices"]:
+                c = data_json["choices"][0]
+                if isinstance(c, dict):
+                    delta = c.get("delta", {})
+                    if isinstance(delta, dict):
+                        return delta.get("content", "") or "", False
+                    elif isinstance(c.get("message"), dict):
+                        return c["message"].get("content", "") or "", False
                     
-            # 2. ChatGPT Enterprise 규격 (response.content_part.delta 등)
-            elif "delta" in data_json:
-                delta = data_json.get("delta", {})
-                if delta.get("type") == "text":
-                    return delta.get("text", ""), False
-                return delta.get("text", ""), False
+            # 2. ChatGPT Enterprise / Codex responses 규격 (delta가 string 또는 dict)
+            if "delta" in data_json:
+                delta = data_json["delta"]
+                if isinstance(delta, str):
+                    return delta, False
+                elif isinstance(delta, dict):
+                    return delta.get("text", "") or delta.get("content", "") or "", False
+                    
+            # 3. response.completed / response.done 전체 텍스트
+            if data_json.get("type") in ("response.completed", "response.done"):
+                resp = data_json.get("response", {})
+                if isinstance(resp, dict) and "output_text" in resp:
+                    return resp["output_text"] or "", False
                 
         except Exception:
             pass

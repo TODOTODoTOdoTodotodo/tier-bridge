@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import asyncio
 import httpx
 from datetime import datetime
 from fastapi import FastAPI, Request
@@ -8,12 +9,15 @@ from fastapi.responses import StreamingResponse, PlainTextResponse
 from dotenv import load_dotenv
 
 # TierBridge 패키지 임포트
-from tierbridge.models import UnifiedRequest
+from tierbridge.models import UnifiedRequest, Message
 from tierbridge.adapters.factory import AdapterFactory
 from tierbridge.stream_transpiler import StreamTranspiler
 from tierbridge.router import Router
 from tierbridge.auth_manager import AuthManager
 from tierbridge.usage_tracker import UsageTracker
+from tierbridge.memory_prefetcher import MemoryPrefetcher
+from tierbridge.memory_handler import MemoryHandler
+from tierbridge.system_directive import SystemDirective
 
 import logging
 
@@ -275,12 +279,64 @@ async def get_dashboard_stats():
     except Exception:
         ent_balance = None
 
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        mem_stats = MemoryHandler.get_memory_stats()
+    except Exception:
+        mem_stats = {"total_memories": 0, "total_tags": 0, "code_modified_count": 0, "structured_rate": 100.0}
+
     return {
         "records": records,
         "healing_status": HealingEngine.get_healing_status(),
         "healing_history": list(reversed(healing_history)),
-        "enterprise_balance": ent_balance
+        "enterprise_balance": ent_balance,
+        "memory_stats": mem_stats
     }
+
+# ==========================================
+# GiyEOK (SUB-MEMORY) DASHBOARD APIS
+# ==========================================
+
+@app.get("/v1/dashboard/memories")
+async def get_dashboard_memories(limit: int = 50, session_id: Optional[str] = None):
+    """ 기억저장소(memory.db)에 적재된 최근 문제-해결 지식 에피소드 목록 조회 """
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        memories = MemoryHandler.get_recent_memories(limit=limit, session_id=session_id)
+        return {"status": "success", "total_count": len(memories), "memories": memories}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "memories": []}
+
+@app.get("/v1/dashboard/memories/search")
+async def search_dashboard_memories(q: str = "", limit: int = 10):
+    """ 질의어(키워드/시맨틱) 기반 연관 기억 및 유사도 검색 """
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        results = MemoryHandler.search_associated_memories(query=q, limit=limit)
+        return {"status": "success", "query": q, "results_count": len(results), "results": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "results": []}
+
+@app.get("/v1/dashboard/memories/stats")
+async def get_dashboard_memory_stats():
+    """ 기억저장소 통계 지표 조회 """
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        return MemoryHandler.get_memory_stats()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # ==========================================
 # 핵심 라우팅 하네스 엔드포인트
@@ -358,6 +414,18 @@ async def route_harness(request: Request):
     if not user_prompt:
         user_prompt = str(raw_body.get("instructions", "")) + str(raw_body.get("input", ""))
 
+    # Step 2: 사전 기억 회수 (Pre-fetch Recall, 50ms Strict Timeout Sandbox)
+    # 사용자의 신규 턴(is_new_user_turn == True) 인입 시에만 1회 회수하여 내부 서브스텝 중복 주입 및 토큰 낭비 방지
+    recalled_context = None
+    if is_new_user_turn:
+        try:
+            recalled_context = await MemoryPrefetcher.fetch_associated_context(user_prompt, current_session_id=session_id)
+            if recalled_context:
+                if unified_req and hasattr(unified_req, "messages") and unified_req.messages:
+                    unified_req.messages.insert(0, Message(role="system", content=recalled_context))
+        except Exception as e:
+            log.debug(f"[RecallHook] Memory prefetch bypassed: {e}")
+
     decision, target_model, effort = await Router.classify_request(
         unified_request=unified_req,
         auth_token=enterprise_token,
@@ -406,6 +474,9 @@ async def route_harness(request: Request):
     # 3-Tier에 기반한 모델 정보 및 추론 수준(reasoning_effort) 적용
     unified_req.model = target_model
     
+    # 최종 답변을 3단 마크다운 보고서 규격으로 출력하도록 시스템 가이드라인 투명 주입
+    unified_req = SystemDirective.inject_into_unified_request(unified_req)
+
     final_payload = target_adapter.from_unified_request(unified_req)
     
     # ChatGPT Enterprise API 특화 파라미터 적용 (reasoning.effort 포맷 및 /responses 규격 변환)
@@ -452,6 +523,15 @@ async def route_harness(request: Request):
                 if instructions:
                     final_payload["instructions"] = instructions
 
+            # 사전 회수된 장기 기억 지식이 있는 경우 instructions 최상단에 투명 주입
+            if recalled_context:
+                curr_inst = final_payload.get("instructions", "")
+                if recalled_context not in curr_inst:
+                    final_payload["instructions"] = f"{recalled_context}\n\n{curr_inst}".strip()
+
+            # /responses 규격의 instructions 영역에도 표준 보고서 가이드라인 투명 주입
+            final_payload = SystemDirective.inject_into_payload(final_payload)
+
         # /responses API로 향하는 요청의 규격 정화 (변환 여부와 상관없이 항상 적용)
         if not MOCK_MODE or "responses" in incoming_path:
             # 불필요한 파라미터 삭제 및 필수 stream 주입 (stream_options는 /responses API에서 400 에러를 유발하므로 제거)
@@ -472,46 +552,66 @@ async def route_harness(request: Request):
         upstream_url = f"{base_domain}/backend-api/codex/responses"
 
     # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
-    raw_prompt_text = user_prompt if is_new_user_turn else (substep_prompt or user_prompt)
+    # 지식 저장소의 문제(Problem)는 항상 사용자의 실제 원본 질문(user_prompt)을 보존
+    stored_prompt_text = user_prompt if user_prompt else (substep_prompt or raw_prompt_text)
     if unified_req.stream:
         async def stream_generator():
             accumulated_buffer = b""
+            has_tracked = False
             
             def append_raw(chunk_bytes: bytes):
                 nonlocal accumulated_buffer
                 accumulated_buffer += chunk_bytes
+
+            def trigger_tracking():
+                nonlocal has_tracked
+                if not has_tracked and accumulated_buffer:
+                    has_tracked = True
+                    try:
+                        global_tracker.parse_and_track_from_buffer(
+                            accumulated_buffer,
+                            target_model,
+                            decision,
+                            prompt_text=stored_prompt_text,
+                            session_id=session_id,
+                            auth_token=enterprise_token,
+                            account_id=get_latest_enterprise_account_id()
+                        )
+                    except Exception as e:
+                        print(f"[Warning] Tracking trigger error: {e}")
                 
             # 클라이언트 요청이 /responses 형태인 경우 100% 바이패스(Pass-through) 처리
             is_passthrough = "responses" in incoming_path
 
-            async with httpx.AsyncClient(timeout=180.0) as client:
-                try:
-                    # 백엔드 비동기 스트림 시작
-                    async with client.stream("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0) as upstream_res:
-                        if upstream_res.status_code != 200:
-                            error_body = await upstream_res.aread()
-                            print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {error_body.decode('utf-8', errors='ignore')}")
-                            upstream_res.raise_for_status()
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    try:
+                        # 백엔드 비동기 스트림 시작
+                        async with client.stream("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0) as upstream_res:
+                            if upstream_res.status_code != 200:
+                                error_body = await upstream_res.aread()
+                                print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {error_body.decode('utf-8', errors='ignore')}")
+                                upstream_res.raise_for_status()
 
-                        if is_passthrough:
-                            # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
-                            async for chunk in upstream_res.aiter_bytes():
-                                accumulated_buffer += chunk
-                                yield chunk
-                        else:
-                            # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
-                            raw_generator = upstream_res.aiter_bytes()
-                            async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
-                                yield transpiled_chunk
-                            
-                    # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적 (Zero-Drop guarantee)
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
-                except Exception as e:
-                    print(f"[Error] Stream routing exception: {e}")
-                    # 스트림 에러 예외 발생 시에도 턴 추적 누락을 방지하기 위해 폴백 추적 실행
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
-                    err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
-                    yield f"data: {err_msg}\n\n".encode("utf-8")
+                            if is_passthrough:
+                                # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
+                                async for chunk in upstream_res.aiter_bytes():
+                                    accumulated_buffer += chunk
+                                    yield chunk
+                            else:
+                                # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
+                                raw_generator = upstream_res.aiter_bytes()
+                                async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
+                                    yield transpiled_chunk
+                    except BaseException as e:
+                        if not isinstance(e, (asyncio.CancelledError, GeneratorExit)):
+                            print(f"[Error] Stream routing exception: {e}")
+                            err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
+                            yield f"data: {err_msg}\n\n".encode("utf-8")
+                        raise
+            finally:
+                # 클라이언트 즉시 연결 해제(CancelledError) 상황에서도 100% 누락 없는 사용량/기억 수집 (Zero-Drop Guarantee)
+                trigger_tracking()
 
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
     
@@ -526,9 +626,19 @@ async def route_harness(request: Request):
                 in_tok = usage.get("prompt_tokens", usage.get("input_tokens", 0))
                 out_tok = usage.get("completion_tokens", usage.get("output_tokens", 0))
                 if not in_tok and not out_tok:
-                    in_tok = max(100, int(len(raw_prompt_text) * 0.35))
+                    in_tok = max(100, int(len(stored_prompt_text) * 0.35))
                     out_tok = 150
-                global_tracker.track_request(target_model, decision, in_tok, out_tok, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id(), prompt_text=raw_prompt_text)
+                
+                resp_text = ""
+                if isinstance(res_data, dict):
+                    if "choices" in res_data and res_data["choices"]:
+                        msg = res_data["choices"][0].get("message", {})
+                        resp_text = msg.get("content", "")
+                    elif "output_text" in res_data:
+                        resp_text = str(res_data["output_text"])
+
+                loc = global_tracker.extract_code_lines(resp_text)
+                global_tracker.track_request(target_model, decision, in_tok, out_tok, loc=loc, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id(), prompt_text=stored_prompt_text, response_text=resp_text)
             return res
         except Exception as e:
             return PlainTextResponse(f"Proxy connection failed: {e}", status_code=500)

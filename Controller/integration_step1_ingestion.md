@@ -6,14 +6,24 @@
 
 ## 1. 작업 개요 및 목적 (Objectives)
 
+- **TierBridge 단일 통합 레포 및 런타임 일원화 (Unified Storage Policy)**:
+  - 분리된 외부 레포/경로(`~/.codex/sub-memory/`) 대신, TierBridge 런타임 홈 **`~/.tierbridge/memory.db`** 로 장기 기억 저장소 DB를 일원화하여 단일 패키지로 관리.
+  - 기존 `~/.codex/sub-memory/memory.db`의 지식 데이터는 `~/.tierbridge/memory.db`로 자동 무손실 마이그레이션.
 - **하이브리드 아키텍처 (Hybrid Dual Architecture)**:
-  1. **하네스 비동기 수집 (Direct Module In-process 5ms)**: 하네스 내부에서는 MCP HTTP 오버헤드 없이 `sub_memory.service.MemoryService` 파이썬 모듈을 직접 호출하여 5ms 이내 비동기 인메모리/DB 직접 수집.
+  1. **하네스 비동기 수집 (Direct Module In-process 5ms)**: 하네스 내부에서는 MCP HTTP 오버헤드 없이 파이썬 모듈 및 SQLite 직결로 5ms 이내 비동기 인메모리/DB 직접 수집.
   2. **MCP 인터페이스 유지**: 에이전트 자율 툴 호출 및 `sub-memory-web` UI 연동을 위해 MCP Protocol(Port 8766)도 듀얼 노출.
 - **비용 절감 & 초저비용 지식 증류 (Zero-Cost / Low-Cost Distillation)**:
-  1. **CPU 룰 기반 1차 컷 ($0.00)**: 단순 조회/오타/단문 스크립트(`BRONZE`, `LOC=0`)는 CPU 레벨에서 0원으로 사전 탈락.
-  2. **LUNA 경량 모델 3단 정제 (건당 ~$0.0001 / 0.0005 Cr)**: 선별된 20%의 핵심 에피소드만 `[문제]-[해결책]-[메타태그]` 3단 구조로 정제하여 벡터화.
-- **문제-해결 에피소드 번들링 (Problem-Solution Episode Bundling)**:
-  - 단편적인 턴 수집의 한계를 극복하고, 사용자의 최초 고민과 최종 코드 해결 결과를 1개의 에피소드 단위로 결합 보존.
+  1. **CPU 룰 기반 1차 컷 ($0.00)**: 단순 서브스텝 진행 보고(`[Substep]`, `LOC=0`)는 CPU 레벨에서 0원으로 사전 탈락.
+  2. **사용자 실제 질의 100% 수집**: 세션 내 턴 순서(`is_first_turn`)와 무관하게 사용자가 직접 전송한 모든 실제 요구사항은 [문제]로 100% 수집 보존.
+  3. **유니버설 SSE 델타 솔루션 추출**: OpenAI, ChatGPT Enterprise, Anthropic의 모든 스트리밍 델타 및 완료 이벤트에서 LLM 실제 답변을 추출하여 [해결책]으로 1:1 매핑.
+- **단순 기억 조회/회상 질의 수집 제외 정책 (Recall Query Filtering Policy)**:
+  - 사용자가 과거 기억을 물어보는 단순 회상 질의(`기억나는거 있어?`, `기억나?`, `작업 어떻게 했지?`, `이력 알려줘` 등)는 새로운 문제 해결 지식이 아니므로 `MemoryIngestionWorker.should_ingest`에서 자동 스킵하여 **메아리(Echo Node) 생성 및 연관도 오염 원천 차단** (`LOC == 0`인 경우).
+- **프로토콜 표준 `finish_reason` / `is_final_answer` 기반 최종 답변 1:1 페어링 정책**:
+  - OpenAI/Claude/ChatGPT Enterprise 표준 프로토콜 플래그(`finish_reason == "tool_calls"` vs `"stop"`, `item_type == "function_call"` vs `"message"`)를 파싱.
+  - 중간 도구 호출 턴(`finish_reason in ("tool_calls", "function_call", "tool_use")`)은 `is_final_answer=False`로 기억 저장을 자동 스킵.
+  - 도구 실행이 모두 완료되고 사용자에게 최종 답변을 전달하는 턴(`finish_reason in ("stop", "end_turn", "completed")`)만 `is_final_answer=True`로 인식하여, 최초 질문과 최종 답변을 **단 1개의 온전한 `User:`-`Assistant:` 지식 쌍**으로 적재.
+- **세션 ID 및 메타데이터 복원 (Session ID Preservation)**:
+  - `memories` 및 `nodes` 간 태그 연동을 통해 세션 ID(`01a03...`)를 손실 없이 태깅하여 대시보드 및 회수 파이프라인에서 `default`가 아닌 실제 활성 세션 식별자를 표시.
 
 ---
 
@@ -35,7 +45,7 @@
                [Direct In-process Python Import: MemoryService.store_memory()]
                       │
                       ▼
-             [SQLite memory.db / sqlite-vec Direct Update (<5ms, 비용 $0.00)]
+             [SQLite ~/.tierbridge/memory.db Direct Update (<5ms, 비용 $0.00)]
 ```
 
 ---
@@ -52,59 +62,79 @@ logger = logging.getLogger("TierBridge.MemoryIngestion")
 
 class MemoryIngestionWorker:
     @classmethod
-    def format_problem_solution_episode(cls, session_id: str, prompt: str, decision: str, loc: int, cost: float) -> str:
+    def format_problem_solution_episode(
+        cls,
+        session_id: str,
+        prompt: str,
+        decision: str,
+        loc: int,
+        cost: float,
+        solution_text: str = ""
+    ) -> str:
         """
-        문제-해결 3단 지식 표준 포맷 생성
+        문제-해결 3단 지식 표준 포맷 생성 (사용자 고민 + LLM 최종 해결책/코드 + 메타태그)
         """
+        clean_prompt = prompt.strip()
+        clean_sol = solution_text.strip() if solution_text else f"라우팅 등급: {decision}"
+        if len(clean_sol) > 1000:
+            clean_sol = clean_sol[:1000] + "... (이하 생략)"
+
         return (
             f"[Session: {session_id}] [Decision: {decision}] [LOC: {loc}] [Cost: ${cost:.4f}]\n"
-            f"- 📌 문제 및 요구사항: {prompt.strip()}\n"
-            f"- 💡 적용 등급 및 라우팅: {decision}\n"
+            f"- 📌 문제 및 요구사항: {clean_prompt}\n"
+            f"- 💡 적용 해결책 및 LLM 응답: {clean_sol}\n"
             f"- 🏷️ 태그: #{decision} #Session_{session_id[:8]} #TierBridge"
         )
 
     @classmethod
-    async def process_log_event(cls, event: Dict[str, Any]):
+    async def process_log_event(cls, event: Dict[str, Any]) -> bool:
         """
-        Direct Module In-process Store (Non-blocking <5ms, Zero/Low Cost)
+        Direct Module In-process Store + SQLite Direct Insert Fallback + 실시간 로깅
         """
-        decision = event.get("decision", "")
+        decision = event.get("decision", "UNKNOWN")
         loc = event.get("loc", 0)
         is_first_turn = event.get("is_first_turn", False)
-
-        # 1차 CPU 룰 기반 노이즈 컷 (비용 $0.00): BRONZE이면서 LOC=0이고 첫 턴이 아닌 경우 제외
-        if decision == "BRONZE" and loc == 0 and not is_first_turn:
-            return
-
-        session_id = event.get("session_id", "sess_default")
         prompt = event.get("prompt", "")
+        session_id = event.get("session_id", "sess_default")
         cost = event.get("cost", 0.0)
+        solution_text = event.get("solution", "")
 
-        if not prompt or len(prompt.strip()) < 5:
-            return
+        # 1차 CPU 룰 기반 노이즈 컷 ($0.00): 5자 미만 초단문만 배제
+        if not cls.should_ingest(decision, loc, is_first_turn, prompt):
+            print(f"➔ [MEMORY:SKIPPED] [{decision}] loc={loc} is_first={is_first_turn} | prompt='{prompt[:40]}...'", flush=True)
+            return False
 
-        # 3단 구조화 에피소드 콘텐츠 생성
-        content = cls.format_problem_solution_episode(session_id, prompt, decision, loc, cost)
+        content = cls.format_problem_solution_episode(session_id, prompt, decision, loc, cost, solution_text)
         tags = [session_id, decision, "tierbridge_auto_ingest"]
         if loc > 0:
             tags.append("code_modified")
+        if is_first_turn:
+            tags.append("initial_request")
 
+        # 1순위: sub_memory 파이썬 패키지 직결 호출
         try:
-            # Direct In-process Import로 HTTP 오버헤드 0ms 달성
             from sub_memory.service import MemoryService
             service = MemoryService()
-            
-            # 비동기 인메모리/DB 저장 실행 (<5ms)
             await asyncio.to_thread(service.store_memory, content=content, tags=tags)
-            logger.debug(f"Direct In-process Memory Store Success: {session_id} [{decision}]")
+            print(f"➔ [MEMORY:STORED] [In-Process Service] session={session_id[:8]} [{decision}] loc={loc} lines | cost=${cost:.4f}", flush=True)
+            return True
         except ImportError:
-            logger.warning("sub_memory module not found. Skipping memory ingestion.")
+            pass
         except Exception as e:
-            logger.warning(f"Memory Ingestion Direct Store Failed: {e}")
-```
+            logger.debug(f"Service store failed, falling back to SQLite: {e}")
 
-### 3.2 `harness.py` 이벤트 연동 지점
-* `harness.py` 내 `route_harness` 함수의 StreamingResponse 완료 시점 또는 `UsageTracker` 호출 직후에:
+        # 2순위: 로컬 SQLite DB(memory.db) 직접 Insert Fallback (100% 무중단 적재 보장)
+        try:
+            db_path = cls.get_db_path()
+            await asyncio.to_thread(cls.store_to_sqlite, db_path, content, tags)
+            print(f"➔ [MEMORY:STORED] [SQLite Direct] session={session_id[:8]} [{decision}] loc={loc} lines | cost=${cost:.4f} | db={db_path}", flush=True)
+            return True
+        except Exception as e:
+            print(f"➔ [MEMORY:ERROR] session={session_id[:8]} failed: {e}", flush=True)
+            return False
+
+### 3.2 `harness.py` & `UsageTracker` 이벤트 연동 지점
+* `UsageTracker.parse_and_track_from_buffer`에서 파싱된 `response_full_text`(LLM 최종 응답)를 `track_request(..., response_text=response_full_text)`로 온전히 전달:
   ```python
   event_data = {
       "session_id": session_id,
@@ -112,7 +142,8 @@ class MemoryIngestionWorker:
       "decision": decision,
       "loc": loc_lines,
       "cost": cost_usd,
-      "is_first_turn": is_first_turn
+      "is_first_turn": is_first_turn,
+      "solution": response_full_text
   }
   asyncio.create_task(MemoryIngestionWorker.process_log_event(event_data))
   ```

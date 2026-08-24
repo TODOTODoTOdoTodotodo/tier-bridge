@@ -6,31 +6,46 @@
 
 ## 1. 작업 개요 및 목적 (Objectives)
 
+- **적극적 기억 회상 브리핑 지침 (Active Recall Briefing Policy)**:
+  - 사용자가 과거 작업이나 기억을 묻는 질문(`기억나는거 있어?`, `어떻게 작업했지?` 등) 시, 에이전트가 불필요하게 쉘/파일 탐색 도구(`rg`, `git log` 등)를 중복 호출하지 않고 주입된 장기 기억 지식을 최우선 활용하여 `"이러한 작업이 진행된 적이 있습니다. 더 상세한 내용이 필요하신가요?"` 형태로 신속하게 브리핑하도록 유도.
 - **하이브리드 Direct In-process 회수 (5ms Ultra-low Latency)**:
-  - `sub_memory.service.MemoryService` 파이썬 모듈을 직접 임포트하여 5ms 이내로 연관 대화 기억 회수.
+  - `MemoryHandler.search_associated_memories()` 및 `sub_memory.service.MemoryService` 모듈을 직접 호출하여 5ms 이내로 연관 대화 기억 회수.
+- **한국어 형태소/서브토큰 분리 검색 (Korean Morpheme & Sub-keyword Extraction)**:
+  - 한국어 조사/접미사(`관련된`, `관련해서`, `에대해`, `대해서` 등) 및 질문형 불용어(`기억나는거`, `있어`, `작업한` 등)를 자동 분리하여 어간(`쿠폰`, `NPE` 등) 추출 및 부분 일치 검색 지원.
 - **상충점 방지 (Strict 50ms Timeout & 500 Token Cap)**:
   - 인바운드 TTFT 지연 방지를 위한 **50ms Strict Timeout Sandbox** 적용.
-  - 토큰 소모 인플레이션 방지를 위한 **최대 500 토큰(상위 2~3개 조각 / 1,500 자)** 캡핑.
+  - 토큰 소모 인플레이션 방지를 위한 **최대 500 토큰(상위 1~2개 핵심 조각 / 1,000 자)** 캡핑.
+  - 최소 적합도 임계치: 60% (`MIN_SIMILARITY_THRESHOLD = 0.60`).
+  - 현재 활성 세션과 동일한 세션의 직전 턴은 자기 참조 방지를 위해 회수 대상에서 자동 제외.
+- **실시간 회수/주입 하네스 로그 가시화 (Real-time Recall Logging)**:
+  - 프롬프트 인입 시 기억 회수 성공 여부와 주입된 지식 내용을 `harness.log`에 실시간 명시적 출력:
+    - `➔ [MEMORY:RECALLED] (Score: 95%, ID: 0fde4777) 📌 "Lombok 호환 문제..." 💡 "affCustNo 매핑..."`
+    - `➔ [MEMORY:RECALL_NONE] No associated memory found for query='...'`
 
 ---
 
 ## 2. 연동 아키텍처 및 흐름
 
 ```
-[Inbound Request] ➔ [harness.py]
-                        │
-                        ▼ [MemoryPrefetcher.fetch_context()]
-                        │ - Direct Python Import: MemoryService.recall_associated_memory()
-                        │ - Speed: ~5ms (Timeout: 50ms strict)
-                        │ - Token Cap: Max 500 tokens
-                        │
-         ┌──────────────┴──────────────┐
-         ▼ (Within 50ms)               ▼ (Timeout or Failed)
-   [Memory Context Retrieved]    [Pass Original Prompt]
-         │                             │
-         └──────────────┬──────────────┘
-                        ▼
-            [Forward to LLM Backend]
+[Inbound User Prompt] ➔ [harness.py]
+                             │
+                             ▼ [MemoryPrefetcher.fetch_associated_context()]
+                             │ - Speed: ~5ms (Timeout: 50ms strict sandbox)
+                             │ - Token Cap: Max 500 tokens (Top 1~2 High-Score Episodes)
+                             │ - Self-Session Exclude (자기 참조 방지)
+                             │
+              ┌──────────────┴──────────────┐
+              ▼ (Within 50ms & Match >= 75%) ▼ (No Match / Timeout > 50ms)
+        [Memory Context Found]         [Pass Original Prompt]
+              │                              │
+              ▼                              ▼
+    [Log: MEMORY:RECALLED]         [Log: MEMORY:RECALL_NONE]
+              │                              │
+    [Inject Context Block]                   │
+              │                              │
+              └──────────────┬───────────────┘
+                             ▼
+                 [Forward to LLM Backend]
 ```
 
 ---
@@ -41,39 +56,62 @@
 ```python
 import asyncio
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger("TierBridge.MemoryPrefetcher")
 
 class MemoryPrefetcher:
-    TIMEOUT_SEC = 0.050  # 50ms Strict Limit
-    MAX_CHAR_LIMIT = 1500 # 약 500 토큰 캡핑
+    TIMEOUT_SEC = 0.050    # 50ms Strict Limit
+    MAX_CHAR_LIMIT = 1000  # 약 300~500 토큰 캡핑
 
     @classmethod
-    async def fetch_associated_context(cls, user_prompt: str) -> Optional[str]:
+    async def fetch_associated_context(cls, user_prompt: str, current_session_id: str = "") -> Optional[str]:
         """
-        Direct In-process 5ms 이내 연관 장기 기억 회수 (Strict Sandbox)
+        50ms Strict Sandbox 내에서 연관 장기 기억 회수 및 실시간 로그 방출
         """
         if not user_prompt or len(user_prompt.strip()) < 5:
             return None
 
+        # 서브스텝 단순 진행 보고는 회수 트리거 제외
+        if user_prompt.strip().startswith("[Substep]"):
+            return None
+
         try:
-            from sub_memory.service import MemoryService
-            service = MemoryService()
+            from tierbridge.memory_handler import MemoryHandler
             
-            # Direct In-process Memory Recall 실행 (<5ms)
+            # 50ms Strict 타임아웃 샌드박싱
             results = await asyncio.wait_for(
-                asyncio.to_thread(service.recall_associated_memory, query=user_prompt[:200], limit=3),
+                asyncio.to_thread(MemoryHandler.search_associated_memories, query=user_prompt[:200], limit=2),
                 timeout=cls.TIMEOUT_SEC
             )
             
-            if results:
-                recalled_text = "\n".join([str(r) for r in results])
+            # 현재 세션 자기 참조 배제 및 유효성 검사
+            valid_memories = [
+                r for r in (results or [])
+                if r.get("session_id") != current_session_id and r.get("score", 0.0) >= 0.75
+            ]
+
+            if valid_memories:
+                top_m = valid_memories[0]
+                prob_snippet = (top_m.get("problem") or "")[:35].replace("\n", " ")
+                sol_snippet = (top_m.get("solution") or "")[:35].replace("\n", " ")
+                score_pct = int(top_m.get("score", 0.95) * 100)
+                m_id = str(top_m.get("id", ""))[:8]
+                
+                # 실시간 하네스 로그 방출
+                print(f"➔ [MEMORY:RECALLED] (Score: {score_pct}%, ID: {m_id}) 📌 '{prob_snippet}...' 💡 '{sol_snippet}...'", flush=True)
+
+                injected_lines = ["[🧠 Giyeok 장기 기억저장소 참조 지식]"]
+                for m in valid_memories[:2]:
+                    injected_lines.append(f"- 과거 문제: {m.get('problem')}")
+                    injected_lines.append(f"- 해결 방안: {m.get('solution')}")
+                
+                recalled_text = "\n".join(injected_lines)
                 return recalled_text[:cls.MAX_CHAR_LIMIT]
+            else:
+                print(f"➔ [MEMORY:RECALL_NONE] No associated memory found | query='{user_prompt[:30]}...'", flush=True)
         except asyncio.TimeoutError:
-            logger.debug("Memory Prefetch timed out (>50ms). Fallback to original prompt.")
-        except ImportError:
-            logger.warning("sub_memory module not imported. Skipping prefetch.")
+            print("➔ [MEMORY:RECALL_TIMEOUT] Memory Prefetch timed out (>50ms). Fallback to original prompt.", flush=True)
         except Exception as e:
             logger.debug(f"Memory Prefetch skipped: {e}")
 
@@ -81,8 +119,13 @@ class MemoryPrefetcher:
 ```
 
 ### 3.2 `harness.py` 연동 지점
-* `harness.py`에서 `unified_req` 수신 직후 `recalled_context = await MemoryPrefetcher.fetch_associated_context(user_prompt)` 호출.
-* `recalled_context`가 존재할 경우, `unified_req.messages` 상단에 `[Retrieved Long-term Memory Context]` 시스템 블록으로 안전하게 병합.
+* `harness.py`에서 `unified_req` 수신 직후:
+  ```python
+  recalled_context = await MemoryPrefetcher.fetch_associated_context(user_prompt, current_session_id=session_id)
+  if recalled_context:
+      # unified_req 메시지 상단에 참조 시스템 컨텍스트로 결합 주입
+      unified_req.messages.insert(0, Message(role="system", content=recalled_context))
+  ```
 
 ---
 
