@@ -46,7 +46,8 @@ class UsageTracker:
             return 0
         
         loc_count = 0
-        code_blocks = re.findall(r"```(?:\w+)?\n(.*?)```", full_text, re.DOTALL)
+        # 모든 프로그래밍 언어 태그(ts, vue, java, bash 등) 및 줄바꿈 지원
+        code_blocks = re.findall(r"```[^\n]*\r?\n(.*?)```", full_text, re.DOTALL)
         for block in code_blocks:
             lines = [line for line in block.splitlines() if line.strip()]
             loc_count += len(lines)
@@ -56,6 +57,10 @@ class UsageTracker:
         """
         단일 LLM 호출 턴의 사용량을 기록하고, 실시간 델타 크레딧 인터셉터 및 기억 저장소 워커를 비동기 구동합니다.
         """
+        # LOC 2중 안전망: loc가 0이고 response_text가 제공된 경우 자동 계산
+        if loc == 0 and response_text:
+            loc = self.extract_code_lines(response_text)
+
         # 모델명 소문자 매핑
         model_key = model.lower()
         matched_catalog = self.PRICE_CATALOG.get("unknown")
@@ -195,6 +200,11 @@ class UsageTracker:
                         delta_text = event.get("delta")
                         if isinstance(delta_text, str):
                             response_full_text += delta_text
+                    elif event.get("type") == "content_block_delta":
+                        # Anthropic Claude 스트리밍 규격 지원
+                        delta_part = event.get("delta", {})
+                        if isinstance(delta_part, dict) and delta_part.get("text"):
+                            response_full_text += delta_part.get("text", "")
                     elif event.get("choices"):
                         c = event["choices"][0]
                         delta_c = c.get("delta", {})
