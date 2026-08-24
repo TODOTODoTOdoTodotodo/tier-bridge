@@ -2063,15 +2063,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         async function executeNeuralize(nodeId) {{
             if (!nodeId) return;
-            const cleanId = (nodeId || '').replace(/^#/, '').trim();
-            const ok = confirm(`⚡ [Neuralizer] 이 기억 노드(#${{cleanId.substring(0,8)}}...)와 연결선만 정밀 소각하시겠습니까?\n\n(연결된 다른 주변 기억은 안전하게 보존됩니다)`);
+            const cleanId = String(nodeId).replace(/^#/, '').trim();
+            const shortId = cleanId.length > 8 ? cleanId.substring(0, 8) : cleanId;
+            const ok = confirm(`⚡ [Neuralizer] 이 기억 노드(#${{shortId}}...)와 연결선만 정밀 소각하시겠습니까?\n\n(연결된 다른 주변 기억은 안전하게 보존됩니다)`);
             if (!ok) return;
 
             try {{
                 const res = await fetch(`http://127.0.0.1:18080/v1/dashboard/memories/neuralize/${{encodeURIComponent(cleanId)}}`, {{ method: 'POST' }});
                 if (res.ok) {{
                     const data = await res.json();
-                    alert(`⚡ Neuralizer 소각 완료!\n- 노드 ID: ${{cleanId.substring(0,8)}}...\n- 제거된 연관 엣지 수: ${{data.deleted_edges_count || 0}}개`);
+                    alert(`⚡ Neuralizer 소각 완료!\n- 노드 ID: #${{shortId}}...\n- 제거된 연관 엣지 수: ${{data.deleted_edges_count || 0}}개`);
                     closeGraphNodeModal();
                     
                     // 1. vis.DataSet에서 즉각 삭제 (0ms 즉시 화면 제거)
@@ -2086,16 +2087,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
                     // 2. 인메모리 데이터셋 필터링
                     if (currentGraphData && currentGraphData.nodes) {{
-                        currentGraphData.nodes = currentGraphData.nodes.filter(n => n.id !== cleanId && n.id !== nodeId);
+                        currentGraphData.nodes = currentGraphData.nodes.filter(n => String(n.id) !== cleanId && String(n.id) !== String(nodeId));
                     }}
                     if (currentGraphData && currentGraphData.edges) {{
-                        currentGraphData.edges = currentGraphData.edges.filter(e => e.from !== cleanId && e.to !== cleanId && e.from !== nodeId && e.to !== nodeId);
+                        currentGraphData.edges = currentGraphData.edges.filter(e => String(e.from) !== cleanId && String(e.to) !== cleanId && String(e.from) !== String(nodeId) && String(e.to) !== String(nodeId));
                     }}
                     if (currentMemories) {{
-                        currentMemories = currentMemories.filter(m => m.id !== cleanId && m.id !== nodeId);
+                        currentMemories = currentMemories.filter(m => String(m.id) !== cleanId && String(m.id) !== String(nodeId));
                     }}
                     if (currentTopEdges) {{
-                        currentTopEdges = currentTopEdges.filter(e => e.source_id !== cleanId && e.target_id !== cleanId && e.source_id !== nodeId && e.target_id !== nodeId);
+                        currentTopEdges = currentTopEdges.filter(e => String(e.source_id) !== cleanId && String(e.target_id) !== cleanId && String(e.source_id) !== String(nodeId) && String(e.target_id) !== String(nodeId));
                     }}
 
                     // 3. 테이블 및 KPI 뷰 즉시 재렌더링
@@ -2129,13 +2130,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
             let html = '';
             list.forEach((e, idx) => {{
-                const sId = (e.source_id || '').substring(0, 10) + '...';
-                const tId = (e.target_id || '').substring(0, 10) + '...';
+                const sId = String(e.source_id || '');
+                const sIdShort = sId.length > 10 ? sId.substring(0, 10) + '...' : sId;
+                const tId = String(e.target_id || '');
+                const tIdShort = tId.length > 10 ? tId.substring(0, 10) + '...' : tId;
                 const dec = e.decision || 'BRONZE';
                 const loc = e.loc || 0;
                 const cost = e.cost || 0.0;
                 const weight = e.weight || 1.0;
-                const prob = (e.problem || '').substring(0, 45) + '...';
+                const prob = String(e.problem || '');
+                const probShort = prob.length > 45 ? prob.substring(0, 45) + '...' : prob;
 
                 let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
                 if (dec.includes('GOLD')) badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
@@ -2143,17 +2147,17 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 else if (dec.includes('SILVER')) badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
 
                 html += `
-                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80 cursor-pointer" onclick="openNodeDetail('${{e.source_id}}', event)">
+                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80 cursor-pointer" onclick="openNodeDetail('${{sId}}', event)">
                     <td class="px-4 py-3 font-mono text-yellow-300 font-bold">#${{idx+1}}</td>
-                    <td class="px-4 py-3 font-mono text-purple-300 text-xs" title="${{e.source_id}}">${{sId}}</td>
+                    <td class="px-4 py-3 font-mono text-purple-300 text-xs" title="${{sId}}">${{sIdShort}}</td>
                     <td class="px-4 py-3 text-center">
                         <span class="px-2 py-0.5 text-xs font-semibold rounded-full border ${{badgeClass}}">${{dec}}</span>
                     </td>
                     <td class="px-4 py-3 text-right font-mono text-emerald-400">${{loc}}줄</td>
                     <td class="px-4 py-3 text-right font-mono text-slate-300">$${{cost.toFixed(4)}}</td>
                     <td class="px-4 py-3 text-right font-mono font-extrabold text-amber-300">${{weight.toFixed(2)}}x</td>
-                    <td class="px-4 py-3 font-mono text-slate-400 text-xs" title="${{e.target_id}}">${{tId}}</td>
-                    <td class="px-4 py-3 text-slate-200 text-xs truncate max-w-xs" title="${{e.problem}}">${{prob}}</td>
+                    <td class="px-4 py-3 font-mono text-slate-400 text-xs" title="${{tId}}">${{tIdShort}}</td>
+                    <td class="px-4 py-3 text-slate-200 text-xs truncate max-w-xs" title="${{prob}}">${{probShort}}</td>
                 </tr>
                 `;
             }});
@@ -2182,7 +2186,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const targetSession = sessionSelect ? sessionSelect.value : 'ALL';
 
             const filtered = (targetSession && targetSession !== 'ALL')
-                ? list.filter(m => (m.session_id && m.session_id.toLowerCase().includes(targetSession.toLowerCase())) || (m.tags && m.tags.includes(targetSession)))
+                ? list.filter(m => (m.session_id && String(m.session_id).toLowerCase().includes(targetSession.toLowerCase())) || (m.tags && m.tags.includes(targetSession)))
                 : list;
 
             const tbody = document.getElementById('memoryStreamTableBody');
@@ -2195,15 +2199,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
             let html = '';
             filtered.forEach((m, idx) => {{
-                const sid = m.session_id || 'sess_default';
+                const sid = String(m.session_id || 'sess_default');
                 const sidShort = sid.length > 12 ? sid.substring(0, 12) + '...' : sid;
                 const dec = m.decision || 'UNKNOWN';
                 const loc = m.loc || 0;
                 const cost = m.cost || 0.0;
-                const prob = (m.problem || m.raw_content || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                const sol = (m.solution || dec).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                const timeStr = m.created_at || 'N/A';
-                const mid = m.id || `node_${{idx+1}}`;
+                const prob = String(m.problem || m.raw_content || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const sol = String(m.solution || dec).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const timeStr = String(m.created_at || 'N/A');
+                const mid = String(m.id || `node_${{idx+1}}`);
+                const midShort = mid.length > 8 ? mid.substring(0, 8) + '...' : mid;
 
                 let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
                 if (dec.includes('GOLD')) badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
@@ -2218,7 +2223,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
                 html += `
                 <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
-                    <td class="px-4 py-3 font-mono text-purple-300 font-bold cursor-pointer" onclick="openNodeDetail('${{mid}}', event)">#${{mid.substring(0,8)}}...</td>
+                    <td class="px-4 py-3 font-mono text-purple-300 font-bold cursor-pointer" onclick="openNodeDetail('${{mid}}', event)">#${{midShort}}</td>
                     <td class="px-4 py-3 font-mono text-slate-300 text-xs" title="${{sid}}">${{sidShort}}</td>
                     <td class="px-4 py-3 text-center">
                         <span class="px-2 py-0.5 text-xs font-semibold rounded-full border ${{badgeClass}}">${{dec}}</span>
