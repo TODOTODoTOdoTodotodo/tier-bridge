@@ -6,6 +6,8 @@
 
 ## 1. 작업 개요 및 목적 (Objectives)
 
+- **적극적 기억 회상 브리핑 지침 (Active Recall Briefing Policy)**:
+  - 사용자가 과거 작업이나 기억을 묻는 질문(`기억나는거 있어?`, `어떻게 작업했지?` 등) 시, 에이전트가 불필요하게 쉘/파일 탐색 도구(`rg`, `git log` 등)를 중복 호출하지 않고 주입된 장기 기억 지식을 최우선 활용하여 `"이러한 작업이 진행된 적이 있습니다. 더 상세한 내용이 필요하신가요?"` 형태로 신속하게 브리핑하도록 유도.
 - **하이브리드 Direct In-process 회수 (5ms Ultra-low Latency)**:
   - `MemoryHandler.search_associated_memories()` 및 `sub_memory.service.MemoryService` 모듈을 직접 호출하여 5ms 이내로 연관 대화 기억 회수.
 - **한국어 형태소/서브토큰 분리 검색 (Korean Morpheme & Sub-keyword Extraction)**:

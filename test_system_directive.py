@@ -12,7 +12,7 @@ class TestSystemDirective(unittest.TestCase):
         updated = SystemDirective.inject_into_unified_request(req)
         self.assertEqual(len(updated.messages), 2)
         self.assertEqual(updated.messages[0].role, "system")
-        self.assertIn("최종 답변 작성 시 표준 보고서 포맷 준수", updated.messages[0].content)
+        self.assertIn("최종 답변 작성 시 표준 보고서 포맷 및 기억저장소 활용 원칙", updated.messages[0].content)
 
     def test_inject_into_unified_request_with_existing_system(self):
         req = UnifiedRequest(
@@ -26,7 +26,7 @@ class TestSystemDirective(unittest.TestCase):
         self.assertEqual(len(updated.messages), 2)
         self.assertEqual(updated.messages[0].role, "system")
         self.assertIn("You are a helpful assistant.", updated.messages[0].content)
-        self.assertIn("최종 답변 작성 시 표준 보고서 포맷 준수", updated.messages[0].content)
+        self.assertIn("최종 답변 작성 시 표준 보고서 포맷 및 기억저장소 활용 원칙", updated.messages[0].content)
 
     def test_inject_into_payload_responses_format(self):
         payload = {
@@ -34,7 +34,7 @@ class TestSystemDirective(unittest.TestCase):
         }
         updated = SystemDirective.inject_into_payload(payload)
         self.assertIn("Original system instructions.", updated["instructions"])
-        self.assertIn("최종 답변 작성 시 표준 보고서 포맷 준수", updated["instructions"])
+        self.assertIn("최종 답변 작성 시 표준 보고서 포맷 및 기억저장소 활용 원칙", updated["instructions"])
 
 
 if __name__ == "__main__":

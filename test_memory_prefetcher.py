@@ -42,7 +42,7 @@ class TestMemoryPrefetcher(unittest.IsolatedAsyncioTestCase):
                 current_session_id="sess_current_active"
             )
             self.assertIsNotNone(result)
-            self.assertIn("[🧠 Giyeok 장기 기억저장소 참고 지식]", result)
+            self.assertIn("[🧠 Giyeok 장기 기억저장소 연관 지식]", result)
             self.assertIn("Lombok @Getter 호환성 오류", result)
             self.assertIn("UserService.java에서 @Builder 대신", result)
             self.assertIn("적합도: 95%", result)
