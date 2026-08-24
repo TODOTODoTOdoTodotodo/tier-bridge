@@ -179,7 +179,24 @@ class MemoryHandler:
                     memories.append(parsed)
 
             conn.close()
-            return memories[:limit]
+
+            # 인메모리 중복 제거 및 세션 ID 병합 (nodes와 memories 동시 적재 중복 완벽 제거)
+            deduped = {}
+            for m in memories:
+                key = m.get("problem", "").strip()
+                if not key:
+                    continue
+                if key not in deduped:
+                    deduped[key] = m
+                else:
+                    existing = deduped[key]
+                    if existing.get("session_id") == "sess_default" and m.get("session_id") != "sess_default":
+                        existing["session_id"] = m["session_id"]
+                        existing["tags"] = m.get("tags", existing.get("tags", []))
+                        existing["decision"] = m.get("decision", existing.get("decision", "UNKNOWN"))
+
+            final_list = list(deduped.values())
+            return final_list[:limit]
         except Exception as e:
             logger.debug(f"[MemoryHandler] SQLite get_recent_memories error: {e}")
             return []
@@ -321,9 +338,27 @@ class MemoryHandler:
                 item["score"] = final_score
                 ranked.append(item)
 
+            # 5. 인메모리 중복 제거 및 세션 ID / 최고 점수 병합
+            deduped_ranked = {}
+            for item in ranked:
+                key = (item.get("problem") or item.get("raw_content") or "").strip()
+                if not key:
+                    continue
+                if key not in deduped_ranked:
+                    deduped_ranked[key] = item
+                else:
+                    curr = deduped_ranked[key]
+                    if item["score"] > curr["score"]:
+                        curr["score"] = item["score"]
+                    if curr.get("session_id") == "sess_default" and item.get("session_id") != "sess_default":
+                        curr["session_id"] = item["session_id"]
+                        curr["tags"] = item.get("tags", curr.get("tags", []))
+                        curr["decision"] = item.get("decision", curr.get("decision", "UNKNOWN"))
+
+            final_ranked = list(deduped_ranked.values())
             # 점수 및 최신순 정렬
-            ranked.sort(key=lambda x: (x["score"], x.get("created_at", "")), reverse=True)
-            return ranked[:limit]
+            final_ranked.sort(key=lambda x: (x["score"], x.get("created_at", "")), reverse=True)
+            return final_ranked[:limit]
 
         except Exception as e:
             logger.debug(f"[MemoryHandler] SQLite search error: {e}")
