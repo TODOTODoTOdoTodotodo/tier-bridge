@@ -361,8 +361,18 @@ async def get_dashboard_top_edges(limit: int = 10):
             from src.tierbridge.memory_handler import MemoryHandler
         edges = MemoryHandler.get_top_weighted_edges(limit=limit)
         return {"status": "success", "total_count": len(edges), "edges": edges}
+@app.post("/v1/dashboard/memories/neuralize/{node_id}")
+async def neuralize_dashboard_memory(node_id: str):
+    """ Neuralizer: 특정 기억 노드를 안전하게 삭제하고 연결된 엣지만 정밀 소각 """
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        result = MemoryHandler.neuralize_memory(node_id)
+        return result
     except Exception as e:
-        return {"status": "error", "message": str(e), "edges": []}
+        return {"status": "error", "message": str(e), "node_id": node_id}
 
 # ==========================================
 # 핵심 라우팅 하네스 엔드포인트

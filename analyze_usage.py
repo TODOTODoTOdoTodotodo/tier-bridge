@@ -634,58 +634,90 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
         </div>
 
-        <!-- Interactive Association Graph Network Canvas Section (생각나무) -->
-        <div class="glass-card p-6 rounded-2xl mb-8 border border-purple-500/40 bg-gradient-to-br from-slate-900 via-slate-950 to-purple-950/20">
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
-                <div>
-                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-                        <i class="fa-solid fa-network-wired text-purple-400"></i>
-                        🧠 Giyeok 생각나무 연상 기억 노드 연결망 (Association Network Graph)
-                    </h2>
-                    <p class="text-xs text-slate-400 mt-1">
-                        노드 크기/발광: 엣지 가중치 비례 • 선 굵기: 연결 강도 • 노드를 클릭하면 상세 문제-해결 내용과 연관 트리가 즉시 표시됩니다.
-                    </p>
+        <!-- 2-Column Side-by-Side Section: Recall Explorer (Left) & Compact Thought-Tree Mini Graph (Right) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 items-start">
+            
+            <!-- Left Column: Semantic Memory Search (Recall Explorer) -->
+            <div class="lg:col-span-7 glass-card p-6 rounded-2xl border border-purple-500/40 bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/20 flex flex-col h-[520px]">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                            <i class="fa-solid fa-magnifying-glass-location text-purple-400"></i>
+                            연관 기억 실시간 시맨틱 검색기 (Recall Explorer)
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">
+                            검색 카드를 클릭하면 우측 생각나무 노드로 자동 포커스 이동합니다.
+                        </p>
+                    </div>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <button onclick="fitMemoryGraph()" 
-                            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1 cursor-pointer">
-                        <i class="fa-solid fa-arrows-to-eye"></i> 전체 보기
+
+                <div class="flex items-center gap-2 mb-3">
+                    <input type="text" id="memSearchInput" placeholder="질의어/에러문구/도메인 검색 (예: Lombok, 쿠폰, DTO, auth)..." 
+                           onkeyup="onMemorySearchInput(event)"
+                           class="bg-slate-900/90 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2.5 focus:outline-none focus:border-purple-400 flex-1">
+                    <button onclick="performMemorySearch()"
+                            class="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-slate-100 text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-search"></i>
+                        <span>검색</span>
                     </button>
-                    <button id="togglePhysicsBtn" onclick="toggleGraphPhysics()" 
-                            class="px-3 py-1.5 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1 cursor-pointer">
-                        <i class="fa-solid fa-atom"></i> 물리엔진 끄기
-                    </button>
-                    <select id="graphTierFilter" onchange="filterMemoryGraph()" 
-                            class="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-purple-400">
-                        <option value="ALL">전체 등급 (All Tiers)</option>
-                        <option value="GOLD">GOLD 노드만</option>
-                        <option value="PLATINUM">PLATINUM 노드만</option>
-                        <option value="SILVER">SILVER 노드만</option>
-                        <option value="BRONZE">BRONZE 노드만</option>
-                    </select>
+                </div>
+
+                <!-- Search Results Scroll Area -->
+                <div id="memSearchResults" class="space-y-3 flex-1 overflow-y-auto pr-1">
+                    <div class="text-center py-10 text-xs text-slate-500 font-mono">
+                        💡 검색어를 입력하고 엔터를 누르거나 [검색] 버튼을 클릭하세요.
+                    </div>
                 </div>
             </div>
 
-            <!-- Network Canvas -->
-            <div id="memoryGraphCanvas" class="w-full h-[500px] rounded-2xl bg-slate-950/90 border border-slate-800 relative flex items-center justify-center">
-                <div class="text-slate-500 text-xs font-mono animate-pulse">
-                    <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> 생각나무 그래프 캔버스 렌더링 중...
+            <!-- Right Column: Compact Thought-Tree Mini Graph Canvas -->
+            <div class="lg:col-span-5 glass-card p-6 rounded-2xl border border-purple-500/40 bg-gradient-to-br from-slate-900 via-slate-950 to-purple-950/20 flex flex-col h-[520px]">
+                <div class="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-800">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                            <i class="fa-solid fa-network-wired text-purple-400"></i>
+                            🌿 생각나무 미니 캔버스
+                        </h2>
+                        <p class="text-[11px] text-slate-400 mt-0.5">
+                            노드 클릭: 상세/소각 모달
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="fitMemoryGraph()" title="화면 중앙 맞춤"
+                                class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1 cursor-pointer">
+                            <i class="fa-solid fa-arrows-to-eye"></i>
+                        </button>
+                        <button id="toggleMiniPhysicsBtn" onclick="toggleGraphPhysics()" title="물리 시뮬레이션 토글"
+                                class="px-2.5 py-1.5 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1 cursor-pointer">
+                            <i class="fa-solid fa-atom"></i>
+                        </button>
+                        <button onclick="openExpandedGraphModal()" title="전체 화면으로 확대 보기"
+                                class="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-expand"></i>
+                            <span>확대</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Mini Graph Canvas -->
+                <div id="memoryGraphCanvas" class="w-full flex-1 rounded-2xl bg-slate-950/90 border border-slate-800 relative flex items-center justify-center overflow-hidden">
+                    <div class="text-slate-500 text-xs font-mono animate-pulse">
+                        <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> 생각나무 그래프 캔버스 렌더링 중...
+                    </div>
+                </div>
+
+                <!-- Mini Legend -->
+                <div class="flex items-center justify-between mt-3 pt-2 border-t border-slate-800/80 text-[10px] text-slate-400">
+                    <div class="flex items-center gap-2">
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> GOLD</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-500"></span> PLATINUM</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span> SILVER</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-800"></span> BRONZE</span>
+                    </div>
+                    <span class="font-mono text-purple-300">클릭 시 포커스</span>
                 </div>
             </div>
 
-            <!-- Graph Legend -->
-            <div class="flex flex-wrap items-center justify-between gap-4 mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400">
-                <div class="flex items-center gap-3">
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> GOLD</span>
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cyan-500"></span> PLATINUM</span>
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> SILVER</span>
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-800"></span> BRONZE</span>
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> CHALLENGER</span>
-                </div>
-                <div class="font-mono text-purple-300">
-                    💡 휠 스크롤: 줌 인/아웃 | 드래그: 이동 및 노드 물리 상호작용
-                </div>
-            </div>
         </div>
 
         <!-- Top-Ranked Knowledge Graph Table Section (TOP 10 엣지 가중치) -->
@@ -726,39 +758,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
         </div>
 
-        <!-- Semantic Memory Search Section -->
-        <div class="glass-card p-6 rounded-2xl mb-8 border border-purple-500/40 bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/20">
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
-                <div>
-                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-                        <i class="fa-solid fa-magnifying-glass-location text-purple-400"></i>
-                        연관 기억 실시간 시맨틱 검색기 (Recall Explorer)
-                    </h2>
-                    <p class="text-xs text-slate-400 mt-1">
-                        개발 중인 에러 문구나 키워드를 검색하면, Step 1~3에 저장된 문제-해결 에피소드를 유사도 랭킹순으로 즉시 회수합니다.
-                    </p>
-                </div>
-                <div class="flex items-center gap-2">
-                    <input type="text" id="memSearchInput" placeholder="질의어/에러문구/도메인 검색 (예: Lombok, jCustNo, 쿠폰, DTO)..." 
-                           onkeyup="onMemorySearchInput(event)"
-                           class="bg-slate-900/90 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2.5 focus:outline-none focus:border-purple-400 w-72 md:w-96">
-                    <button onclick="performMemorySearch()"
-                            class="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-slate-100 text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
-                        <i class="fa-solid fa-search"></i>
-                        <span>검색</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Search Results Area -->
-            <div id="memSearchResults" class="space-y-3">
-                <div class="text-center py-6 text-xs text-slate-500 font-mono">
-                    💡 검색어를 입력하고 엔터를 누르거나 [검색] 버튼을 클릭하세요.
-                </div>
-            </div>
-        </div>
-
-        <!-- Live Memory Stream Table -->
+        <!-- Live Memory Stream Table with Neuralizer Action -->
         <div class="glass-card p-6 rounded-2xl mb-8 border border-slate-800">
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                 <div>
@@ -767,7 +767,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         실시간 적재 기억 에피소드 스트림 (Live Memory Stream)
                     </h2>
                     <p class="text-xs text-slate-400 mt-1">
-                        하네스 퀄리티 게이트를 통과하여 memory.db에 축적된 3단 지식 에피소드 목록입니다. (상단 세션 필터와 실시간 연동)
+                        하네스 퀄리티 게이트를 통과하여 memory.db에 축적된 3단 지식 에피소드 목록입니다. 불필요한 노드는 [소각] 버튼으로 안전하게 정밀 삭제할 수 있습니다.
                     </p>
                 </div>
                 <span class="text-xs px-3 py-1.5 bg-purple-500/20 text-purple-300 font-mono font-bold rounded-xl border border-purple-500/30">
@@ -785,7 +785,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             <th class="px-4 py-3">📌 문제 및 요구사항</th>
                             <th class="px-4 py-3">💡 해결 등급 / 코드</th>
                             <th class="px-4 py-3">🏷️ 태그</th>
-                            <th class="px-4 py-3 text-right rounded-tr-xl">저장 시각</th>
+                            <th class="px-4 py-3 text-right">저장 시각</th>
+                            <th class="px-4 py-3 text-center rounded-tr-xl">기억 관리</th>
                         </tr>
                     </thead>
                     <tbody id="memoryStreamTableBody" class="divide-y divide-slate-800 text-xs">
@@ -796,22 +797,87 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
     </div><!-- end #memoryView -->
 
-    <!-- Graph Node Inspector Modal -->
+    <!-- Fullscreen Expanded Graph Modal -->
+    <div id="expandedGraphModal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex flex-col p-4 md:p-6">
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+            <div class="flex items-center gap-3">
+                <span class="p-2 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-xl">
+                    <i class="fa-solid fa-network-wired text-lg"></i>
+                </span>
+                <div>
+                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                        🧠 Giyeok 생각나무 연상 기억 노드망 (전체 화면 탐색기)
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-0.5">
+                        노드 크기: 엣지 가중치 • 선 굵기: 연결 강도 • 노드를 클릭하면 1-hop 연관 노드가 하이라이트되며 상세 정보가 열립니다.
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Controls in Expanded Modal -->
+            <div class="flex items-center gap-2">
+                <select id="modalGraphTierFilter" onchange="filterExpandedMemoryGraph()" 
+                        class="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-purple-400">
+                    <option value="ALL">전체 등급 (All Tiers)</option>
+                    <option value="GOLD">GOLD 노드만</option>
+                    <option value="PLATINUM">PLATINUM 노드만</option>
+                    <option value="SILVER">SILVER 노드만</option>
+                    <option value="BRONZE">BRONZE 노드만</option>
+                </select>
+                <button onclick="fitExpandedMemoryGraph()" 
+                        class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-arrows-to-eye"></i> 중앙 맞춤
+                </button>
+                <button id="toggleModalPhysicsBtn" onclick="toggleModalGraphPhysics()" 
+                        class="px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-atom"></i> 물리엔진 끄기
+                </button>
+                <button onclick="closeExpandedGraphModal()" 
+                        class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-600 transition-all flex items-center gap-1.5 cursor-pointer ml-2">
+                    <i class="fa-solid fa-xmark text-sm"></i> 닫기 (ESC)
+                </button>
+            </div>
+        </div>
+
+        <!-- Fullscreen Canvas -->
+        <div id="expandedMemoryGraphCanvas" class="w-full flex-1 rounded-2xl bg-slate-950/95 border border-slate-800 relative flex items-center justify-center overflow-hidden">
+            <div class="text-slate-500 text-xs font-mono animate-pulse">
+                <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> 생각나무 고해상도 캔버스 초기화 중...
+            </div>
+        </div>
+
+        <!-- Expanded Footer Legend -->
+        <div class="flex items-center justify-between pt-3 mt-3 border-t border-slate-800 text-xs text-slate-400">
+            <div class="flex items-center gap-4">
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500"></span> GOLD</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-cyan-500"></span> PLATINUM</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-400"></span> SILVER</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-800"></span> BRONZE</span>
+            </div>
+            <div class="font-mono text-purple-300 text-xs">
+                💡 휠 스크롤: 줌 인/아웃 | 캔버스 드래그: 패닝 | 노드 클릭: 상세 모달 & 1-hop 하이라이트
+            </div>
+        </div>
+    </div>
+
+    <!-- Graph Node Inspector Modal (With Neuralizer Wipe Button) -->
     <div id="graphNodeModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="glass-card max-w-2xl w-full p-6 rounded-3xl border border-purple-500/40 shadow-2xl relative bg-slate-900/95 max-h-[85vh] overflow-y-auto">
             <button onclick="closeGraphNodeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-lg">
                 <i class="fa-solid fa-xmark"></i>
             </button>
-            <div class="flex items-center gap-3 mb-4">
-                <span id="modalNodeBadge" class="px-3 py-1 bg-purple-500/20 text-purple-300 font-bold rounded-xl text-xs border border-purple-500/30">
-                    GOLD
-                </span>
-                <div>
-                    <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
-                        🧠 지식 노드 상세 정보
-                        <span id="modalNodeId" class="text-xs font-mono text-purple-300">#id</span>
-                    </h2>
-                    <p id="modalNodeMeta" class="text-xs text-slate-400 mt-0.5 font-mono">가중치: 1.0x | LOC: 0줄 | $0.0000</p>
+            <div class="flex items-center justify-between gap-3 mb-4 pr-8">
+                <div class="flex items-center gap-3">
+                    <span id="modalNodeBadge" class="px-3 py-1 bg-purple-500/20 text-purple-300 font-bold rounded-xl text-xs border border-purple-500/30">
+                        GOLD
+                    </span>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                            🧠 지식 노드 상세 정보
+                            <span id="modalNodeId" class="text-xs font-mono text-purple-300">#id</span>
+                        </h2>
+                        <p id="modalNodeMeta" class="text-xs text-slate-400 mt-0.5 font-mono">가중치: 1.0x | LOC: 0줄 | $0.0000</p>
+                    </div>
                 </div>
             </div>
             <div class="space-y-4 text-xs">
@@ -824,10 +890,18 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     <div id="modalNodeSolution" class="text-xs text-slate-300 mt-1 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto"></div>
                 </div>
             </div>
-            <div class="mt-5 pt-3 border-t border-slate-800 flex justify-end">
-                <button onclick="closeGraphNodeModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl">
-                    닫기
+            <div class="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between">
+                <!-- ⚡ Neuralizer Action Button -->
+                <button id="modalNeuralizeBtn" onclick="onModalNeuralizeClick()" 
+                        class="px-3.5 py-2 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/50 text-rose-300 text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer">
+                    <i class="fa-solid fa-bolt-lightning text-amber-400"></i>
+                    <span>⚡ Neuralizer (기억 소각)</span>
                 </button>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeGraphNodeModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl cursor-pointer">
+                        닫기
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1711,6 +1785,12 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
         }}
 
+        let memoryMiniNetwork = null;
+        let memoryExpandedNetwork = null;
+        let isMiniPhysicsEnabled = true;
+        let isModalPhysicsEnabled = true;
+        let currentModalNodeId = null;
+
         function initMemoryGraph(graphData) {{
             const container = document.getElementById('memoryGraphCanvas');
             if (!container || !window.vis) return;
@@ -1730,62 +1810,175 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const options = {{
                 nodes: {{
                     shape: 'dot',
-                    scaling: {{ min: 16, max: 38, label: {{ min: 10, max: 13 }} }},
+                    scaling: {{ min: 14, max: 32, label: {{ min: 9, max: 12 }} }},
                     font: {{ color: '#ffffff', face: 'Pretendard, -apple-system, sans-serif' }},
                     borderWidth: 2,
-                    shadow: {{ enabled: true, color: 'rgba(0,0,0,0.6)', size: 8, x: 2, y: 2 }}
+                    shadow: {{ enabled: true, color: 'rgba(0,0,0,0.6)', size: 6, x: 2, y: 2 }}
                 }},
                 edges: {{
-                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.6 }} }},
+                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
                     color: {{ color: 'rgba(168, 85, 247, 0.4)', highlight: '#ec4899', hover: '#a855f7' }},
                     smooth: {{ type: 'continuous' }}
                 }},
                 physics: {{
-                    enabled: isPhysicsEnabled,
-                    stabilization: {{ iterations: 120 }},
-                    barnesHut: {{ gravitationalConstant: -3000, springConstant: 0.04, springLength: 130 }}
+                    enabled: isMiniPhysicsEnabled,
+                    stabilization: {{ iterations: 100 }},
+                    barnesHut: {{ gravitationalConstant: -2400, springConstant: 0.04, springLength: 100 }}
                 }},
                 interaction: {{ hover: true, tooltipDelay: 80, zoomView: true, dragView: true }}
             }};
 
-            if (memoryNetwork) {{
-                memoryNetwork.destroy();
+            if (memoryMiniNetwork) {{
+                memoryMiniNetwork.destroy();
             }}
 
-            memoryNetwork = new vis.Network(container, data, options);
+            memoryMiniNetwork = new vis.Network(container, data, options);
 
-            memoryNetwork.on('click', function(params) {{
+            memoryMiniNetwork.on('click', function(params) {{
                 if (params.nodes.length > 0) {{
                     const nodeId = params.nodes[0];
                     const selectedNode = nodes.find(n => n.id === nodeId);
                     if (selectedNode) {{
                         openGraphNodeModal(selectedNode);
+                        memoryMiniNetwork.focus(nodeId, {{ scale: 1.3, animation: {{ duration: 500, easingFunction: 'easeInOutQuad' }} }});
                     }}
                 }}
             }});
         }}
 
+        function initExpandedMemoryGraph(graphData) {{
+            const container = document.getElementById('expandedMemoryGraphCanvas');
+            if (!container || !window.vis) return;
+
+            const nodes = (graphData && graphData.nodes) || (currentGraphData && currentGraphData.nodes) || [];
+            const edges = (graphData && graphData.edges) || (currentGraphData && currentGraphData.edges) || [];
+
+            if (nodes.length === 0) {{
+                container.innerHTML = '<div class="text-slate-500 text-xs font-mono">기억 저장소에 연결된 노드가 아직 없습니다.</div>';
+                return;
+            }}
+
+            const visNodes = new vis.DataSet(nodes);
+            const visEdges = new vis.DataSet(edges);
+
+            const data = {{ nodes: visNodes, edges: visEdges }};
+            const options = {{
+                nodes: {{
+                    shape: 'dot',
+                    scaling: {{ min: 18, max: 40, label: {{ min: 11, max: 14 }} }},
+                    font: {{ color: '#ffffff', face: 'Pretendard, -apple-system, sans-serif' }},
+                    borderWidth: 2,
+                    shadow: {{ enabled: true, color: 'rgba(0,0,0,0.6)', size: 8, x: 2, y: 2 }}
+                }},
+                edges: {{
+                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.7 }} }},
+                    color: {{ color: 'rgba(168, 85, 247, 0.45)', highlight: '#ec4899', hover: '#a855f7' }},
+                    smooth: {{ type: 'continuous' }}
+                }},
+                physics: {{
+                    enabled: isModalPhysicsEnabled,
+                    stabilization: {{ iterations: 120 }},
+                    barnesHut: {{ gravitationalConstant: -3500, springConstant: 0.04, springLength: 140 }}
+                }},
+                interaction: {{ hover: true, tooltipDelay: 80, zoomView: true, dragView: true }}
+            }};
+
+            if (memoryExpandedNetwork) {{
+                memoryExpandedNetwork.destroy();
+            }}
+
+            memoryExpandedNetwork = new vis.Network(container, data, options);
+
+            memoryExpandedNetwork.on('click', function(params) {{
+                if (params.nodes.length > 0) {{
+                    const nodeId = params.nodes[0];
+                    const selectedNode = nodes.find(n => n.id === nodeId);
+                    if (selectedNode) {{
+                        openGraphNodeModal(selectedNode);
+                        highlightNeighbors(nodeId, visNodes, visEdges, nodes, edges);
+                    }}
+                }} else {{
+                    visNodes.update(nodes.map(n => ({{ id: n.id, opacity: 1.0 }})));
+                    visEdges.update(edges.map(e => ({{ id: e.id, opacity: 1.0 }})));
+                }}
+            }});
+        }}
+
+        function highlightNeighbors(selectedNodeId, visNodes, visEdges, rawNodes, rawEdges) {{
+            const connectedNodeIds = new Set([selectedNodeId]);
+            rawEdges.forEach(e => {{
+                if (e.from === selectedNodeId) connectedNodeIds.add(e.to);
+                if (e.to === selectedNodeId) connectedNodeIds.add(e.from);
+            }});
+
+            visNodes.update(rawNodes.map(n => ({{
+                id: n.id,
+                opacity: connectedNodeIds.has(n.id) ? 1.0 : 0.2
+            }})));
+        }}
+
+        function openExpandedGraphModal() {{
+            const modal = document.getElementById('expandedGraphModal');
+            if (modal) {{
+                modal.classList.remove('hidden');
+                setTimeout(() => {{
+                    initExpandedMemoryGraph(currentGraphData);
+                }}, 60);
+            }}
+        }}
+
+        function closeExpandedGraphModal() {{
+            const modal = document.getElementById('expandedGraphModal');
+            if (modal) modal.classList.add('hidden');
+        }}
+
+        document.addEventListener('keydown', e => {{
+            if (e.key === 'Escape') {{
+                closeExpandedGraphModal();
+                closeGraphNodeModal();
+            }}
+        }});
+
         function toggleGraphPhysics() {{
-            isPhysicsEnabled = !isPhysicsEnabled;
-            const btn = document.getElementById('togglePhysicsBtn');
-            if (memoryNetwork) {{
-                memoryNetwork.setOptions({{ physics: {{ enabled: isPhysicsEnabled }} }});
+            isMiniPhysicsEnabled = !isMiniPhysicsEnabled;
+            const btn = document.getElementById('toggleMiniPhysicsBtn');
+            if (memoryMiniNetwork) {{
+                memoryMiniNetwork.setOptions({{ physics: {{ enabled: isMiniPhysicsEnabled }} }});
             }}
             if (btn) {{
-                btn.innerHTML = isPhysicsEnabled 
+                btn.className = isMiniPhysicsEnabled 
+                    ? 'px-2.5 py-1.5 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1 cursor-pointer'
+                    : 'px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1 cursor-pointer';
+            }}
+        }}
+
+        function toggleModalGraphPhysics() {{
+            isModalPhysicsEnabled = !isModalPhysicsEnabled;
+            const btn = document.getElementById('toggleModalPhysicsBtn');
+            if (memoryExpandedNetwork) {{
+                memoryExpandedNetwork.setOptions({{ physics: {{ enabled: isModalPhysicsEnabled }} }});
+            }}
+            if (btn) {{
+                btn.innerHTML = isModalPhysicsEnabled 
                     ? '<i class="fa-solid fa-atom"></i> 물리엔진 끄기'
                     : '<i class="fa-solid fa-play text-emerald-400"></i> 물리엔진 켜기';
             }}
         }}
 
         function fitMemoryGraph() {{
-            if (memoryNetwork) {{
-                memoryNetwork.fit({{ animation: {{ duration: 600, easingFunction: 'easeInOutQuad' }} }});
+            if (memoryMiniNetwork) {{
+                memoryMiniNetwork.fit({{ animation: {{ duration: 500, easingFunction: 'easeInOutQuad' }} }});
             }}
         }}
 
-        function filterMemoryGraph() {{
-            const filterVal = document.getElementById('graphTierFilter').value;
+        function fitExpandedMemoryGraph() {{
+            if (memoryExpandedNetwork) {{
+                memoryExpandedNetwork.fit({{ animation: {{ duration: 600, easingFunction: 'easeInOutQuad' }} }});
+            }}
+        }}
+
+        function filterExpandedMemoryGraph() {{
+            const filterVal = document.getElementById('modalGraphTierFilter').value;
             if (!currentGraphData || !currentGraphData.nodes) return;
 
             let filteredNodes = currentGraphData.nodes;
@@ -1795,13 +1988,28 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const filteredIds = new Set(filteredNodes.map(n => n.id));
             const filteredEdges = (currentGraphData.edges || []).filter(e => filteredIds.has(e.from) && filteredIds.has(e.to));
 
-            initMemoryGraph({{ nodes: filteredNodes, edges: filteredEdges }});
+            initExpandedMemoryGraph({{ nodes: filteredNodes, edges: filteredEdges }});
+        }}
+
+        function focusNodeInGraph(nodeId) {{
+            if (currentDashboardTab !== 'memory') {{
+                switchDashboardTab('memory');
+            }}
+            
+            const selectedNode = (currentGraphData.nodes || []).find(n => n.id === nodeId);
+            if (selectedNode) {{
+                openGraphNodeModal(selectedNode);
+                if (memoryMiniNetwork) {{
+                    memoryMiniNetwork.focus(nodeId, {{ scale: 1.4, animation: {{ duration: 600, easingFunction: 'easeInOutQuad' }} }});
+                }}
+            }}
         }}
 
         function openGraphNodeModal(node) {{
             const modal = document.getElementById('graphNodeModal');
             if (!modal) return;
 
+            currentModalNodeId = node.id;
             const badge = document.getElementById('modalNodeBadge');
             const idEl = document.getElementById('modalNodeId');
             const metaEl = document.getElementById('modalNodeMeta');
@@ -1832,6 +2040,34 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             if (modal) modal.classList.add('hidden');
         }}
 
+        async function executeNeuralize(nodeId) {{
+            if (!nodeId) return;
+            const ok = confirm(`⚡ [Neuralizer] 이 기억 노드(#${{nodeId.substring(0,8)}}...)와 연결선만 정밀 소각하시겠습니까?\n\n(연결된 다른 주변 기억은 안전하게 보존됩니다)`);
+            if (!ok) return;
+
+            try {{
+                const res = await fetch(`http://127.0.0.1:18080/v1/dashboard/memories/neuralize/${{encodeURIComponent(nodeId)}}`, {{ method: 'POST' }});
+                if (res.ok) {{
+                    const data = await res.json();
+                    alert(`⚡ Neuralizer 소각 완료!\n- 노드 ID: ${{nodeId.substring(0,8)}}...\n- 제거된 연관 엣지 수: ${{data.deleted_edges_count || 0}}개`);
+                    closeGraphNodeModal();
+                    
+                    // 즉시 라이브 데이터 재조회 및 렌더링
+                    fetchLiveDashboardStats();
+                }} else {{
+                    alert('Neuralizer 소각 실패: 서버 오류');
+                }}
+            }} catch(e) {{
+                alert(`Neuralizer 소각 오류: ${{e.message}}`);
+            }}
+        }}
+
+        function onModalNeuralizeClick() {{
+            if (currentModalNodeId) {{
+                executeNeuralize(currentModalNodeId);
+            }}
+        }}
+
         function renderTopEdges(edgesList) {{
             const tbody = document.getElementById('topEdgesTableBody');
             if (!tbody) return;
@@ -1858,7 +2094,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 else if (dec.includes('SILVER')) badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
 
                 html += `
-                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
+                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80 cursor-pointer" onclick="focusNodeInGraph('${{e.source_id}}')">
                     <td class="px-4 py-3 font-mono text-yellow-300 font-bold">#${{idx+1}}</td>
                     <td class="px-4 py-3 font-mono text-purple-300 text-xs" title="${{e.source_id}}">${{sId}}</td>
                     <td class="px-4 py-3 text-center">
@@ -1904,7 +2140,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             if (!tbody) return;
 
             if (filtered.length === 0) {{
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500 font-mono">기억저장소에 적재된 문제-해결 에피소드가 아직 없습니다. (첫 프롬프트 요청 후 3초 내 실시간 자동 반영됩니다)</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-500 font-mono">기억저장소에 적재된 문제-해결 에피소드가 아직 없습니다. (첫 프롬프트 요청 후 3초 내 실시간 자동 반영됩니다)</td></tr>';
                 return;
             }}
 
@@ -1918,6 +2154,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const prob = (m.problem || m.raw_content || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 const sol = (m.solution || dec).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 const timeStr = m.created_at || 'N/A';
+                const mid = m.id || `node_${{idx+1}}`;
 
                 let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
                 if (dec.includes('GOLD')) badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
@@ -1932,18 +2169,24 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
                 html += `
                 <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
-                    <td class="px-4 py-3 font-mono text-purple-300 font-bold">#${{m.id || idx+1}}</td>
+                    <td class="px-4 py-3 font-mono text-purple-300 font-bold cursor-pointer" onclick="focusNodeInGraph('${{mid}}')">#${{mid.substring(0,8)}}...</td>
                     <td class="px-4 py-3 font-mono text-slate-300 text-xs" title="${{sid}}">${{sidShort}}</td>
                     <td class="px-4 py-3 text-center">
                         <span class="px-2 py-0.5 text-xs font-semibold rounded-full border ${{badgeClass}}">${{dec}}</span>
                     </td>
-                    <td class="px-4 py-3 font-medium text-slate-200 max-w-sm truncate" title="${{prob}}">
+                    <td class="px-4 py-3 font-medium text-slate-200 max-w-sm truncate cursor-pointer" title="${{prob}}" onclick="focusNodeInGraph('${{mid}}')">
                         <div class="text-xs font-semibold text-slate-200">${{prob}}</div>
                         ${{loc > 0 ? `<div class="text-[10px] text-emerald-400 mt-0.5 font-mono">💻 LOC: ${{loc}}줄 코드 작성됨 ($${{cost.toFixed(4)}})</div>` : ''}}
                     </td>
                     <td class="px-4 py-3 text-slate-300 font-mono text-xs max-w-xs truncate" title="${{sol}}">${{sol}}</td>
                     <td class="px-4 py-3">${{tagsHtml || '-'}}</td>
                     <td class="px-4 py-3 text-right font-mono text-slate-400 whitespace-nowrap">${{timeStr}}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="executeNeuralize('${{mid}}')" title="이 기억 노드만 정밀 소각"
+                                class="px-2 py-1 bg-rose-950/40 hover:bg-rose-900 border border-rose-500/40 text-rose-300 rounded-lg text-xs font-bold transition-all cursor-pointer">
+                            <i class="fa-solid fa-bolt-lightning text-amber-400 mr-1"></i>소각
+                        </button>
+                    </td>
                 </tr>
                 `;
             }});
@@ -1964,11 +2207,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             if (!resultsContainer) return;
 
             if (!query) {{
-                resultsContainer.innerHTML = '<div class="text-center py-6 text-xs text-slate-500 font-mono">💡 검색어를 입력하고 엔터를 누르거나 [검색] 버튼을 클릭하세요.</div>';
+                resultsContainer.innerHTML = '<div class="text-center py-10 text-xs text-slate-500 font-mono">💡 검색어를 입력하고 엔터를 누르거나 [검색] 버튼을 클릭하세요.</div>';
                 return;
             }}
 
-            resultsContainer.innerHTML = '<div class="text-center py-6 text-xs text-purple-400 font-mono animate-pulse"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 연관 기억 시맨틱 검색 중...</div>';
+            resultsContainer.innerHTML = '<div class="text-center py-10 text-xs text-purple-400 font-mono animate-pulse"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 연관 기억 시맨틱 검색 중...</div>';
 
             let searchResults = [];
             try {{
@@ -1987,7 +2230,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
 
             if (searchResults.length === 0) {{
-                resultsContainer.innerHTML = `<div class="text-center py-6 text-xs text-slate-500 font-mono">❌ "${{query}}" 와 일치하거나 연관된 기억이 없습니다.</div>`;
+                resultsContainer.innerHTML = `<div class="text-center py-10 text-xs text-slate-500 font-mono">❌ "${{query}}" 와 일치하거나 연관된 기억이 없습니다.</div>`;
                 return;
             }}
 
@@ -1998,24 +2241,25 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const scorePct = r.score ? Math.round(r.score * 100) : 95;
                 const sid = r.session_id || 'sess_default';
                 const sidShort = sid.length > 10 ? sid.substring(0, 10) + '...' : sid;
+                const rid = r.id || `node_${{idx+1}}`;
 
                 cardsHtml += `
-                <div class="p-4 rounded-xl bg-slate-800/80 border border-purple-500/30 hover:border-purple-400/60 transition-all shadow-md">
-                    <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-700/60">
+                <div onclick="focusNodeInGraph('${{rid}}')" class="p-3.5 rounded-xl bg-slate-800/80 border border-purple-500/30 hover:border-purple-400 transition-all shadow-md cursor-pointer hover:bg-slate-800">
+                    <div class="flex items-center justify-between gap-2 mb-1.5 pb-1.5 border-b border-slate-700/60">
                         <div class="flex items-center gap-2">
-                            <span class="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded font-mono text-xs font-bold">🎯 연관도: ${{scorePct}}%</span>
+                            <span class="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded font-mono text-xs font-bold">🎯 ${{scorePct}}% 일치</span>
                             <span class="text-xs font-mono text-slate-400">세션: ${{sidShort}}</span>
                             ${{r.decision ? `<span class="px-2 py-0.5 bg-yellow-500/20 text-yellow-300 rounded text-[10px] font-bold border border-yellow-500/30">${{r.decision}}</span>` : ''}}
                         </div>
-                        <span class="text-[11px] text-slate-400 font-mono">${{r.created_at || '최근 적재'}}</span>
+                        <span class="text-[10px] text-purple-400 font-mono flex items-center gap-1"><i class="fa-solid fa-crosshairs"></i> 그래프 포커스</span>
                     </div>
-                    <div class="mb-2">
+                    <div class="mb-1.5">
                         <span class="text-xs font-bold text-purple-300">📌 문제/요구사항:</span>
-                        <div class="text-xs text-slate-200 mt-0.5 leading-relaxed">${{prob}}</div>
+                        <div class="text-xs text-slate-200 mt-0.5 leading-relaxed line-clamp-2">${{prob}}</div>
                     </div>
-                    <div class="mb-2">
+                    <div>
                         <span class="text-xs font-bold text-emerald-300">💡 적용 해결책:</span>
-                        <div class="text-xs text-slate-300 mt-0.5 font-mono bg-slate-900/60 p-2 rounded-lg border border-slate-700/40">${{sol}}</div>
+                        <div class="text-xs text-slate-300 mt-0.5 font-mono bg-slate-900/70 p-2 rounded-lg border border-slate-700/40 line-clamp-2">${{sol}}</div>
                     </div>
                 </div>
                 `;

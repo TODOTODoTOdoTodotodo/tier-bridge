@@ -570,3 +570,51 @@ class MemoryHandler:
             "max_edge_weight": max_edge_w,
             "structured_rate": 100.0
         }
+
+    @classmethod
+    def neuralize_memory(cls, node_id: str) -> Dict[str, Any]:
+        """
+        Neuralizer: 특정 기억 노드를 안전하게 삭제하고 연결된 엣지만 정밀 소각 (주변 기억 안전 보존)
+        """
+        if not node_id:
+            return {"status": "error", "message": "Invalid node_id"}
+
+        db_path = cls.get_db_path()
+        if not db_path:
+            return {"status": "error", "message": "Database not found", "node_id": node_id}
+
+        try:
+            conn = sqlite3.connect(db_path, timeout=2.0)
+            cursor = conn.cursor()
+
+            deleted_edges_count = 0
+            # 1. edges 테이블에서 연결선 카운트 및 삭제
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='edges';")
+            if cursor.fetchone():
+                cursor.execute("SELECT count(*) FROM edges WHERE source_id = ? OR target_id = ?;", (node_id, node_id))
+                deleted_edges_count = cursor.fetchone()[0]
+                cursor.execute("DELETE FROM edges WHERE source_id = ? OR target_id = ?;", (node_id, node_id))
+
+            # 2. nodes 테이블에서 노드 삭제
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='nodes';")
+            deleted_nodes_count = 0
+            if cursor.fetchone():
+                cursor.execute("DELETE FROM nodes WHERE id = ?;", (node_id,))
+                deleted_nodes_count = cursor.rowcount
+
+            # 3. memories 테이블에서도 id 또는 UUID 매칭되는 레코드 정리
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='memories';")
+            if cursor.fetchone():
+                cursor.execute("DELETE FROM memories WHERE id = ? OR tags LIKE ?;", (node_id, f"%{node_id}%"))
+
+            conn.commit()
+            conn.close()
+
+            return {
+                "status": "deleted" if (deleted_nodes_count > 0 or deleted_edges_count > 0) else "not_found",
+                "node_id": node_id,
+                "deleted_edges_count": deleted_edges_count
+            }
+        except Exception as e:
+            logger.debug(f"[MemoryHandler] neuralize_memory error: {e}")
+            return {"status": "error", "message": str(e), "node_id": node_id}
