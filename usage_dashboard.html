@@ -5,20 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TierBridge Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class'
+        }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #0b0f19; }
-        .glass-card { background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.5); }
+        body { font-family: 'Inter', sans-serif; transition: background-color 0.25s ease, color 0.25s ease; }
+        
+        /* Dark Theme Default */
+        html.dark body { background-color: #0b0f19; color: #f1f5f9; }
+        html.dark .glass-card { background: rgba(15, 23, 42, 0.78); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.5); }
+        
+        /* Light Theme Adaptation */
+        html.light body { background-color: #f8fafc; color: #0f172a; }
+        html.light .glass-card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(12px); border: 1px solid rgba(226, 232, 240, 0.95); box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05); }
+        html.light header { border-color: #e2e8f0 !important; }
+        html.light p.text-slate-400 { color: #64748b !important; }
+        html.light h1, html.light h2, html.light h3 { color: #0f172a !important; }
+        html.light table thead tr { background-color: #f1f5f9 !important; border-color: #e2e8f0 !important; }
+        html.light table th { color: #475569 !important; }
+        html.light table tbody tr { border-color: #f1f5f9 !important; }
+        html.light table tbody tr:hover { background-color: rgba(241, 245, 249, 0.9) !important; }
+        html.light table td { color: #1e293b !important; }
+        html.light input, html.light select { background-color: #ffffff !important; color: #0f172a !important; border-color: #cbd5e1 !important; }
+        html.light .bg-slate-900, html.light .bg-slate-950, html.light .bg-slate-800 { background-color: #ffffff !important; }
+        html.light .border-slate-800, html.light .border-slate-700 { border-color: #e2e8f0 !important; }
+        html.light .text-slate-100, html.light .text-slate-200 { color: #0f172a !important; }
+        html.light .text-slate-300 { color: #334155 !important; }
+        html.light .text-slate-400 { color: #64748b !important; }
+        
         #memoryGraphCanvas div.vis-network:focus { outline: none; }
     </style>
 </head>
 <body class="text-slate-100 min-h-screen p-6 md:p-10">
 
     <!-- Header -->
-    <header class="flex flex-col md:flex-row md:items-center md:justify-between mb-8 pb-6 border-b border-slate-800">
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between mb-8 pb-6 border-b border-slate-800 gap-4">
         <div>
             <div class="flex items-center gap-3 mb-1">
                 <span class="p-2.5 bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-xl">
@@ -33,8 +60,27 @@
             </p>
         </div>
         
-        <!-- Controls: Dynamic Month & Session Selectors, Model Version Selector, Live Indicator & Sample Test Button -->
-        <div class="mt-4 md:mt-0 flex flex-wrap items-center gap-3">
+        <!-- Controls: Dynamic Month, Session, Model Version, Theme Switcher & Live Indicator -->
+        <div class="flex flex-wrap items-center gap-2.5">
+            <!-- 🎨 3-Segment Theme Switcher (Dark / Light / System) -->
+            <div class="inline-flex p-1 bg-slate-900/90 border border-slate-700/60 rounded-xl shadow-lg gap-0.5">
+                <button id="themeBtnDark" onclick="setTheme('dark')" title="어두운 테마 (Dark)"
+                        class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-moon text-xs"></i>
+                    <span class="hidden sm:inline">어두운</span>
+                </button>
+                <button id="themeBtnLight" onclick="setTheme('light')" title="밝은 테마 (Light)"
+                        class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-sun text-xs text-amber-500"></i>
+                    <span class="hidden sm:inline">밝은</span>
+                </button>
+                <button id="themeBtnSystem" onclick="setTheme('system')" title="시스템 기본 (System OS)"
+                        class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-laptop text-xs text-sky-400"></i>
+                    <span class="hidden sm:inline">기본</span>
+                </button>
+            </div>
+
             <!-- Dynamic Month Dropdown Selector -->
             <div class="flex items-center gap-2 bg-slate-800/90 border border-indigo-500/40 px-3 py-1.5 rounded-xl shadow-lg">
                 <i class="fa-solid fa-calendar-check text-indigo-400 text-sm"></i>
@@ -50,29 +96,15 @@
                 <i class="fa-solid fa-network-wired text-purple-400 text-sm"></i>
                 <span class="text-xs font-semibold text-slate-300">세션:</span>
                 <select id="sessionSelect" onchange="onFilterChange()" 
-                        class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer max-w-[180px] truncate">
+                        class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer max-w-[170px] truncate">
                     <option value="ALL" selected>전체 세션 (All Sessions)</option><option value="019ff958-c0dd-77f1-a7e5-2db4b31e019d" >019ff958-c0dd-77f1-a7e5-2db4b31e019d (019ff958)</option><option value="sess_001bf85a" >sess_001bf85a (sess_001)</option><option value="sess_0661266e" >sess_0661266e (sess_066)</option><option value="sess_2f694fc3" >sess_2f694fc3 (sess_2f6)</option><option value="sess_372ad1da" >sess_372ad1da (sess_372)</option><option value="sess_49f221ee" >sess_49f221ee (sess_49f)</option><option value="sess_49f68a5c" >sess_49f68a5c (sess_49f)</option><option value="sess_4a74d7eb" >sess_4a74d7eb (sess_4a7)</option><option value="sess_6705f73d" >sess_6705f73d (sess_670)</option><option value="sess_7377f559" >sess_7377f559 (sess_737)</option><option value="sess_7a57b92e" >sess_7a57b92e (sess_7a5)</option><option value="sess_8edb0141" >sess_8edb0141 (sess_8ed)</option><option value="sess_a2831687" >sess_a2831687 (sess_a28)</option><option value="sess_a8d6451c" >sess_a8d6451c (sess_a8d)</option><option value="sess_b59d507f" >sess_b59d507f (sess_b59)</option><option value="sess_b5b5b688" >sess_b5b5b688 (sess_b5b)</option><option value="sess_b99bb115" >sess_b99bb115 (sess_b99)</option><option value="sess_cea4fdf2" >sess_cea4fdf2 (sess_cea)</option><option value="sess_da3ee067" >sess_da3ee067 (sess_da3)</option><option value="sess_fc7aaba7" >sess_fc7aaba7 (sess_fc7)</option><option value="sess_legacy" >sess_legacy (sess_leg)</option>
-                </select>
-            </div>
-
-            <!-- Dynamic Time Interval Selector (Visible when specific session is selected) -->
-            <div id="timeIntervalWrapper" class="hidden flex items-center gap-2 bg-slate-800/90 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg transition-all">
-                <i class="fa-solid fa-clock-rotate-left text-emerald-400 text-sm"></i>
-                <span class="text-xs font-semibold text-slate-300">시간 범위:</span>
-                <select id="timeIntervalSelect" onchange="onFilterChange()" 
-                        class="bg-slate-900 text-emerald-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-emerald-400 cursor-pointer">
-                    <option value="ALL_TURNS" selected>턴별 타임라인 (Turn-by-Turn)</option>
-                    <option value="1MIN">1분 단위 집계 (1-Min Window)</option>
-                    <option value="5MIN">5분 단위 집계 (5-Min Window)</option>
-                    <option value="10MIN">10분 단위 집계 (10-Min Window)</option>
-                    <option value="1HOUR">1시간 단위 집계 (Hourly Window)</option>
                 </select>
             </div>
 
             <!-- Model Version Selector -->
             <div class="flex items-center gap-2 bg-slate-800/90 border border-sky-500/40 px-3 py-1.5 rounded-xl shadow-lg">
                 <i class="fa-solid fa-code-branch text-sky-400 text-sm"></i>
-                <span class="text-xs font-semibold text-slate-300">모델 버전:</span>
+                <span class="text-xs font-semibold text-slate-300">버전:</span>
                 <select id="versionSelect" onchange="switchModelVersion(this.value)"
                         class="bg-slate-900 text-sky-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-sky-400 cursor-pointer">
                     <option value="v1.1.0-healing-hotpatch" selected>v1.1.0-healing-hotpatch - GPT-5.6 Lineup (Healing Hot-Patch Release v1.1.0) (Active)</option><option value="v1.0.0" >v1.0.0 - Standard Baseline v1.0.0 (GPT-5.6 Lineup)</option><option value="v0.9.0-test-legacy" >v0.9.0-test-legacy - Legacy Test Version v0.9.0 (GPT-5.4-mini / GPT-5.5)</option>
@@ -82,38 +114,44 @@
             <!-- 3s Live Sync Badge -->
             <div id="liveSyncBadge" class="flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg text-emerald-400 text-xs font-bold animate-pulse">
                 <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <span>3s Live Auto-Sync</span>
+                <span>3s Live</span>
             </div>
 
             <!-- Healing Factor Demo Sample Test Button -->
             <button onclick="openHealingModal()"
-                    class="px-3.5 py-1.5 bg-gradient-to-r from-purple-600/30 to-indigo-600/30 border border-purple-400/50 text-purple-200 text-xs font-bold rounded-xl shadow-lg hover:bg-purple-600/40 transition-all flex items-center gap-2">
+                    class="px-3 py-1.5 bg-gradient-to-r from-purple-600/30 to-indigo-600/30 border border-purple-400/50 text-purple-200 text-xs font-bold rounded-xl shadow-lg hover:bg-purple-600/40 transition-all flex items-center gap-1.5">
                 <i class="fa-solid fa-vial-circle-check text-purple-300"></i>
-                <span>🧪 힐링 핫패치 데모 샘플</span>
+                <span>🧪 힐링 데모</span>
             </button>
 
-            <!-- Healing Notice Button (Visible ONLY when REAL new model detected) -->
+            <!-- Healing Notice Button -->
             <button id="healingNoticeBtn" onclick="openHealingModal()"
-                    class="hidden px-3.5 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl shadow-lg hover:bg-emerald-500/30 transition-all flex items-center gap-2">
+                    class="hidden px-3 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl shadow-lg hover:bg-emerald-500/30 transition-all flex items-center gap-1.5">
                 <i class="fa-solid fa-kit-medical text-emerald-400"></i>
-                <span>💡 실제 신규 모델 감지됨!</span>
+                <span>💡 신규 모델!</span>
             </button>
         </div>
     </header>
 
-    <!-- Dashboard Tab Navigation -->
-    <div class="flex items-center gap-3 mb-6 border-b border-slate-800 pb-3">
-        <button id="tabBtnUsage" onclick="switchDashboardTab('usage')"
-                class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-indigo-500 text-indigo-300 bg-indigo-500/10 shadow-lg cursor-pointer">
-            <i class="fa-solid fa-chart-line"></i>
-            <span>📊 AI 사용량 & 크레딧 관제</span>
-        </button>
-        <button id="tabBtnMemory" onclick="switchDashboardTab('memory')"
-                class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer">
-            <i class="fa-solid fa-brain text-purple-400"></i>
-            <span>🧠 Giyeok 장기 기억저장소 & 연관 검색</span>
-            <span id="memTabCountBadge" class="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-mono font-bold">0건</span>
-        </button>
+    <!-- Modern Segmented Pill Tab Bar (Shadcn / Vercel Premium Style) -->
+    <div class="flex items-center justify-between mb-8 pb-2">
+        <div class="inline-flex p-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-inner backdrop-blur-md gap-1.5">
+            <button id="tabBtnUsage" onclick="switchDashboardTab('usage')"
+                    class="px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2.5 cursor-pointer bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25 border border-indigo-400/30">
+                <i class="fa-solid fa-chart-line text-sm"></i>
+                <span>📊 AI 사용량 & 크레딧 관제</span>
+            </button>
+            <button id="tabBtnMemory" onclick="switchDashboardTab('memory')"
+                    class="px-5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 flex items-center gap-2.5 cursor-pointer text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent">
+                <i class="fa-solid fa-brain text-sm text-purple-400"></i>
+                <span>🧠 Giyeok 장기 기억저장소 & 생각나무</span>
+                <span id="memTabCountBadge" class="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-mono font-bold border border-purple-500/30">0건</span>
+            </button>
+        </div>
+        <div class="hidden md:flex items-center gap-2 text-xs text-slate-400 font-mono">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Direct SQLite ✕ In-process Live Graph</span>
+        </div>
     </div>
 
     <!-- Tab 1: AI Usage & Credit Analytics View -->
@@ -721,7 +759,7 @@
 
     <!-- Footer -->
     <footer class="text-center text-xs text-slate-500 py-4 border-t border-slate-800/60">
-        TierBridge Analytics Core • Powered by LLM Routing Harness Proxy • Generated at 2026-08-24 14:41:23
+        TierBridge Analytics Core • Powered by LLM Routing Harness Proxy • Generated at 2026-08-24 14:48:42
     </footer>
 
     <!-- Client-side Interactive Scripts -->
@@ -1423,6 +1461,45 @@
         let memoryNetwork = null;
         let isPhysicsEnabled = true;
 
+        let currentTheme = localStorage.getItem('tb_theme') || 'dark';
+
+        function applyTheme(theme) {
+            currentTheme = theme;
+            localStorage.setItem('tb_theme', theme);
+            
+            const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            const htmlEl = document.documentElement;
+            
+            if (isDark) {
+                htmlEl.classList.add('dark');
+                htmlEl.classList.remove('light');
+            } else {
+                htmlEl.classList.add('light');
+                htmlEl.classList.remove('dark');
+            }
+
+            const btnDark = document.getElementById('themeBtnDark');
+            const btnLight = document.getElementById('themeBtnLight');
+            const btnSystem = document.getElementById('themeBtnSystem');
+
+            const activeBtnClass = 'px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer bg-indigo-600 text-white shadow-md border border-indigo-400/40';
+            const inactiveBtnClass = 'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200 border border-transparent';
+
+            if (btnDark) btnDark.className = (theme === 'dark') ? activeBtnClass : inactiveBtnClass;
+            if (btnLight) btnLight.className = (theme === 'light') ? activeBtnClass : inactiveBtnClass;
+            if (btnSystem) btnSystem.className = (theme === 'system') ? activeBtnClass : inactiveBtnClass;
+        }
+
+        function setTheme(theme) {
+            applyTheme(theme);
+        }
+
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            if (currentTheme === 'system') {
+                applyTheme('system');
+            }
+        });
+
         function switchDashboardTab(tab) {
             currentDashboardTab = tab;
             const btnUsage = document.getElementById('tabBtnUsage');
@@ -1433,13 +1510,13 @@
             if (tab === 'usage') {
                 if (viewUsage) viewUsage.classList.remove('hidden');
                 if (viewMemory) viewMemory.classList.add('hidden');
-                if (btnUsage) btnUsage.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-indigo-500 text-indigo-300 bg-indigo-500/10 shadow-lg cursor-pointer';
-                if (btnMemory) btnMemory.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer';
+                if (btnUsage) btnUsage.className = 'px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2.5 cursor-pointer bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25 border border-indigo-400/30';
+                if (btnMemory) btnMemory.className = 'px-5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 flex items-center gap-2.5 cursor-pointer text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent';
             } else {
                 if (viewUsage) viewUsage.classList.add('hidden');
                 if (viewMemory) viewMemory.classList.remove('hidden');
-                if (btnMemory) btnMemory.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-purple-500 text-purple-300 bg-purple-500/10 shadow-lg cursor-pointer';
-                if (btnUsage) btnUsage.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer';
+                if (btnMemory) btnMemory.className = 'px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2.5 cursor-pointer bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/25 border border-purple-400/30';
+                if (btnUsage) btnUsage.className = 'px-5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 flex items-center gap-2.5 cursor-pointer text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent';
                 renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
                 setTimeout(() => {
                     initMemoryGraph(currentGraphData);
@@ -1854,6 +1931,7 @@
         }
 
         window.onload = function() {
+            applyTheme(currentTheme);
             initVersionSelector();
             renderHealingHistory(healingHistoryData);
             renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
