@@ -52,10 +52,9 @@ class UsageTracker:
             loc_count += len(lines)
         return loc_count
 
-    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = "", auth_token: str = "", account_id: str = "", prompt_text: str = "", is_first_turn: Optional[bool] = None):
+    def track_request(self, model: str, decision: str, input_tokens: int, output_tokens: int, loc: int = 0, session_id: str = "", auth_token: str = "", account_id: str = "", is_first_turn: Optional[bool] = None, prompt_text: str = "", response_text: str = ""):
         """
-        토큰 소모량 및 코드 작성 줄 수(LOC)를 전달받아 예상 비용을 계산하고,
-        비동기 델타 크레딧 인터셉터 및 기억저장소(MemoryIngestionWorker)를 백그라운드로 실행합니다.
+        단일 LLM 호출 턴의 사용량을 기록하고, 실시간 델타 크레딧 인터셉터 및 기억 저장소 워커를 비동기 구동합니다.
         """
         # 모델명 소문자 매핑
         model_key = model.lower()
@@ -70,7 +69,7 @@ class UsageTracker:
         cost_in = (input_tokens * matched_catalog["input"]) / 1_000_000.0
         cost_out = (output_tokens * matched_catalog["output"]) / 1_000_000.0
         cost_total = cost_in + cost_out
-        
+
         now = datetime.now()
         timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
         iso_timestamp = now.isoformat()
@@ -142,7 +141,8 @@ class UsageTracker:
                 "decision": decision,
                 "loc": loc,
                 "cost": round(cost_total, 6),
-                "is_first_turn": is_first
+                "is_first_turn": is_first,
+                "solution": response_text
             }
             loop.create_task(MemoryIngestionWorker.process_log_event(event_data))
         except Exception:
@@ -217,6 +217,6 @@ class UsageTracker:
                 else:
                     output_tokens = 150
 
-            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id, auth_token=auth_token, account_id=account_id, prompt_text=prompt_text)
+            self.track_request(model, decision, input_tokens, output_tokens, loc, session_id=session_id, auth_token=auth_token, account_id=account_id, prompt_text=prompt_text, response_text=response_full_text)
         except Exception as e:
             print(f"[Warning] Failed to parse usage stats from buffer: {e}")

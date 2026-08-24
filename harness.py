@@ -275,12 +275,64 @@ async def get_dashboard_stats():
     except Exception:
         ent_balance = None
 
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        mem_stats = MemoryHandler.get_memory_stats()
+    except Exception:
+        mem_stats = {"total_memories": 0, "total_tags": 0, "code_modified_count": 0, "structured_rate": 100.0}
+
     return {
         "records": records,
         "healing_status": HealingEngine.get_healing_status(),
         "healing_history": list(reversed(healing_history)),
-        "enterprise_balance": ent_balance
+        "enterprise_balance": ent_balance,
+        "memory_stats": mem_stats
     }
+
+# ==========================================
+# GiyEOK (SUB-MEMORY) DASHBOARD APIS
+# ==========================================
+
+@app.get("/v1/dashboard/memories")
+async def get_dashboard_memories(limit: int = 50, session_id: Optional[str] = None):
+    """ 기억저장소(memory.db)에 적재된 최근 문제-해결 지식 에피소드 목록 조회 """
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        memories = MemoryHandler.get_recent_memories(limit=limit, session_id=session_id)
+        return {"status": "success", "total_count": len(memories), "memories": memories}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "memories": []}
+
+@app.get("/v1/dashboard/memories/search")
+async def search_dashboard_memories(q: str = "", limit: int = 10):
+    """ 질의어(키워드/시맨틱) 기반 연관 기억 및 유사도 검색 """
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        results = MemoryHandler.search_associated_memories(query=q, limit=limit)
+        return {"status": "success", "query": q, "results_count": len(results), "results": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "results": []}
+
+@app.get("/v1/dashboard/memories/stats")
+async def get_dashboard_memory_stats():
+    """ 기억저장소 통계 지표 조회 """
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        return MemoryHandler.get_memory_stats()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # ==========================================
 # 핵심 라우팅 하네스 엔드포인트
@@ -528,7 +580,16 @@ async def route_harness(request: Request):
                 if not in_tok and not out_tok:
                     in_tok = max(100, int(len(raw_prompt_text) * 0.35))
                     out_tok = 150
-                global_tracker.track_request(target_model, decision, in_tok, out_tok, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id(), prompt_text=raw_prompt_text)
+                
+                resp_text = ""
+                if isinstance(res_data, dict):
+                    if "choices" in res_data and res_data["choices"]:
+                        msg = res_data["choices"][0].get("message", {})
+                        resp_text = msg.get("content", "")
+                    elif "output_text" in res_data:
+                        resp_text = str(res_data["output_text"])
+
+                global_tracker.track_request(target_model, decision, in_tok, out_tok, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id(), prompt_text=raw_prompt_text, response_text=resp_text)
             return res
         except Exception as e:
             return PlainTextResponse(f"Proxy connection failed: {e}", status_code=500)
