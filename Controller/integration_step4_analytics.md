@@ -1,78 +1,83 @@
-# 📑 Step 4: 하네스 ✕ sub-memory 통합 크레딧 절감 대시보드 리포팅 (Dashboard Synergy Analytics)
+# 📑 Step 4: 하네스 ✕ Giyeok 통합 대시보드 시너지 분석 & 인터랙티브 노드 연결망 시각화
 
-이 문서는 TierBridge 하네스의 사용량 로그(`harness.log`)와 `sub-memory-bootstrap` (Giyeok)의 메트릭 로그(`.sub-memory/metrics.jsonl`)를 결합 분석하여, 장기 기억 회수 덕분에 절감된 실제 크레딧(Cr) 수치를 Kibana 대시보드에 시각화하는 **Step 4 구현 작업지시서**입니다.
+본 문서는 TierBridge 하네스의 사용량 로그(`harness.log`)와 SQLite `memory.db`의 `nodes`, `edges`, `memories` 데이터를 결합하여, 장기 기억 회수(Recall)로 인한 크레딧 절감(ROI) 지표와 기억 간 연상 구조("생각나무" 노드 연결망)를 인터랙티브하게 시각화하는 **Step 4 구현 작업지시서**입니다.
 
 ---
 
 ## 1. 작업 개요 및 목적 (Objectives)
 
-- **목적**: `sub-memory-bootstrap`과의 시너지 효과를 정량적으로 시각화하여 "장기 기억 회수를 통해 복잡한 질문이 저비용 `BRONZE` / `SILVER` 라우팅으로 다운스케일되어 실제 아낀 크레딧(Cr)" 수치를 실시간 리포팅.
-- **통합 분석 지표 (Synergy Metrics)**:
-  1. **Memory Recall Hits**: 세션별 연관 기억 회수 누적 횟수
-  2. **Memory-driven Cost Savings**: 기억 주입으로 난이도가 강하되어 아낀 크레딧 (Cr) 및 USD ($)
+1. **인터랙티브 기억 노드 연결망 시각화 (Interactive Association Graph Network)**:
+   - `vis-network` 물리 엔진을 탑재하여 `nodes`와 `edges` 간의 연상 연결망을 인터랙티브 캔버스로 렌더링.
+   - **노드 색상/그룹**: 티어 등급별 구분 (`CHALLENGER`/`PLATINUM`/`GOLD`/`SILVER`/`BRONZE`).
+   - **노드 크기/발광**: 가중치(`weight: 1.0x ~ 10.0x`) 및 코드 수정량(`LOC`) 비례.
+   - **엣지 굵기/선**: `edges.weight` (1.0x ➔ 1px, 10.0x ➔ 6px).
+   - **인터랙션**: 줌/팬/드래그, 노드 클릭 시 우측 상세 패널(`Problem & Solution Inspector`) 및 연관 하위 트리 하이라이팅.
+2. **통합 크레딧 절감(ROI) 및 시너지 KPI 리포팅 (Synergy Analytics)**:
+   - `harness.log`의 `[MEMORY:RECALLED]` 및 `[MEMORY:HINT]` 로그를 파싱하여 세션별 기억 회수 횟수(Recall Hits) 및 다운스케일 절감 크레딧(Saved Credits) 산출.
+   - **KPI 카드 4종**:
+     - `총 지식 에피소드` (Total Memories)
+     - `기억 회수 적중 횟수` (Recall Hits)
+     - `기억 주입 절감 크레딧` (Saved Credits, e.g. 14.8 Cr / $2.96)
+     - `최고 엣지 가중치` (Max Edge Weight, e.g. 8.6x)
+3. **🏆 고가치 지식 엣지 가중치 TOP 10 랭킹 위젯**:
+   - `edges` 테이블에서 가장 높은 가중치를 획득한 상위 10개 핵심 지식과 직전 연관 노드 연결 상태를 실시간 표출.
+4. **프롬프트 테이블 기억 배지 연동 (`🧠 Recalled` / `💡 Hint`)**:
+   - 메인 사용량 테이블의 각 턴마다 기억 회수 여부를 시각적 배지로 표시.
 
 ---
 
-## 2. 연동 아키텍처 및 데이터 결합
+## 2. 연동 아키텍처 및 데이터 흐름
 
 ```
-[harness.log]                    [.sub-memory/metrics.jsonl]
- ├─ timestamp, session_id         ├─ timestamp, session_id
- ├─ decision (BRONZE/GOLD/etc)    ├─ recall_size, memory_contribution
- └─ cost_usd                      └─ mcp_tool_name
-       │                                 │
-       └──────────────┬──────────────────┘
-                      ▼ [Join by session_id]
-        [analyze_usage.py Parsing]
-                      │
-                      ▼
-   [usage_dashboard.html - Synergy KPI Card]
+[harness.log] (실시간 로그 파싱)                [~/.tierbridge/memory.db] (Direct SQLite)
+  ├─ [USAGE: GOLD/SILVER]                         ├─ nodes (id, text, embedding, timestamp)
+  ├─ [MEMORY:RECALLED]                            ├─ edges (source_id, target_id, weight)
+  └─ [MEMORY:HINT]                                └─ memories (id, content, tags, created_at)
+        │                                                           │
+        └─────────────────────────────┬─────────────────────────────┘
+                                      ▼
+                        [MemoryHandler.get_graph_data()]
+                        [MemoryHandler.get_memory_stats()]
+                                      │
+              ┌───────────────────────┴───────────────────────┐
+              ▼                                               ▼
+   [GET /v1/dashboard/memories/graph]          [analyze_usage.py Dashboard Generator]
+   (FastAPI 실시간 비동기 API)                 (Kibana풍 usage_dashboard.html)
+                                                              │
+                                                              ▼
+                                               [🧠 인터랙티브 생각나무 시각화]
+                                               [🏆 가중치 랭킹 & 크레딧 절감 KPI]
 ```
 
 ---
 
 ## 3. 세부 구현 스펙 (Implementation Specs)
 
-### 3.1 `analyze_usage.py` 메트릭 파서 확장
+### 3.1 `MemoryHandler` 그래프 데이터 추출 메서드 추가 (`src/tierbridge/memory_handler.py`)
 ```python
-def parse_sub_memory_metrics(metrics_filepath=".sub-memory/metrics.jsonl"):
+@classmethod
+def get_graph_data(cls, limit_nodes: int = 50) -> Dict[str, Any]:
     """
-    sub-memory-bootstrap의 메트릭 로그 파싱
+    vis-network 렌더링용 nodes & edges 그래프 데이터셋 생성 (<5ms)
     """
-    session_recall_map = defaultdict(lambda: {"recall_count": 0, "contribution_score": 0.0})
-    if not os.path.exists(metrics_filepath):
-        return session_recall_map
-
-    with open(metrics_filepath, "r", encoding="utf-8") as f:
-        for line in f:
-            try:
-                data = json.loads(line.strip())
-                sid = data.get("session_id") or data.get("tags", [None])[0]
-                if sid:
-                    session_recall_map[sid]["recall_count"] += 1
-                    session_recall_map[sid]["contribution_score"] += data.get("memory_contribution", 1.0)
-            except Exception:
-                pass
-
-    return session_recall_map
 ```
+* 노드 그룹, 레이블, 툴팁(`title`), 크기(`value`), 엣지 굵기(`width`) 데이터 구조화.
 
-### 3.2 `usage_dashboard.html` KPI 카드 및 표 확장
-* KPI Metrics 영역에 **Memory Recall Savings Card** 신설:
-  - `Memory Recall Hits`: 총 기억 회수 횟수
-  - `Memory-assisted Savings`: 약 0.0 Cr (기억 보조를 통해 절감된 크레딧)
-* 프롬프트 테이블(`promptTable`)에 **Giyeok Memory Tag Badge (`🧠 Memory Recalled`)** 표시.
+### 3.2 `harness.py` 실시간 그래프 엔드포인트 추가
+* `GET /v1/dashboard/memories/graph` ➔ `MemoryHandler.get_graph_data()` 반환.
+
+### 3.3 `analyze_usage.py` 및 `usage_dashboard.html` 대시보드 고도화
+* `vis-network` CDN (`https://unpkg.com/vis-network/standalone/umd/vis-network.min.js`) 탑재.
+* 기억 탭 내 **"🧠 생각나무 연상 기억 노드 연결망 (Association Network Graph)"** 인터랙티브 캔버스 렌더링.
+* 노드 클릭 시 상세 모달/인스펙터 연동.
+* 메인 프롬프트 테이블에 `🧠 Recalled` 및 `💡 Hint` 태그 배지 렌더링.
 
 ---
 
 ## 4. 검증 및 테스트 절차 (Verification Steps)
 
-1. **로그 파싱 테스트**:
-   * `./analyze_usage.py --html --no-open` 실행 시 `.sub-memory/metrics.jsonl`이 없거나 존재하는 환경 모두 오류 없이 통과하는지 검증.
-2. **Kibana 대시보드 시각화 검증**:
-   * `usage_dashboard.html`에서 Memory Recall KPI 카드 및 🧠 Memory Recalled 배지가 깨끗하게 표출되는지 브라우저에서 확인.
-
----
-
-## 5. 차기 대화 세션 연계 안내
-새로운 대화 세션에서 **"integration_step4_analytics.md 문서를 바탕으로 Step 4 하네스 ✕ sub-memory 통합 크레딧 절감 대시보드 리포팅 구현을 시작해줘"**라고 요청하시면 본 지시서대로 즉시 작업을 진행할 수 있습니다.
+1. **그래프 데이터셋 추출 단위 테스트 (`test_memory_handler.py`)**:
+   * `get_graph_data()` 호출 시 노드/엣지 데이터 형식 및 가중치 반영 검증.
+2. **대시보드 생성 및 브라우저 검증**:
+   * `./analyze_usage.py --html --no-open` 실행 후 `usage_dashboard.html`에서 인터랙티브 그래프 캔버스, 노드 클릭 인스펙터, 엣지 굵기 시각화 확인.
+3. **전체 회귀 테스트 (24+ tests passing)**.

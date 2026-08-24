@@ -171,12 +171,18 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             from src.tierbridge.memory_handler import MemoryHandler
         initial_memories = MemoryHandler.get_recent_memories(limit=100)
         initial_mem_stats = MemoryHandler.get_memory_stats()
+        initial_graph_data = MemoryHandler.get_graph_data(limit_nodes=60)
+        initial_top_edges = MemoryHandler.get_top_weighted_edges(limit=10)
     except Exception:
         initial_memories = []
-        initial_mem_stats = {"total_memories": 0, "total_tags": 0, "code_modified_count": 0, "structured_rate": 100.0}
+        initial_mem_stats = {"total_memories": 0, "total_tags": 0, "code_modified_count": 0, "max_edge_weight": 1.0, "structured_rate": 100.0}
+        initial_graph_data = {"nodes": [], "edges": []}
+        initial_top_edges = []
 
     client_memories_json = json.dumps(initial_memories)
     client_mem_stats_json = json.dumps(initial_mem_stats)
+    client_graph_data_json = json.dumps(initial_graph_data)
+    client_top_edges_json = json.dumps(initial_top_edges)
     
     has_healing_banner = healing_status.get("has_new_healing", False)
     banner_hidden_class = "" if has_healing_banner else "hidden"
@@ -189,11 +195,13 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     <title>TierBridge Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body {{ font-family: 'Inter', sans-serif; background-color: #0b0f19; }}
         .glass-card {{ background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.5); }}
+        #memoryGraphCanvas div.vis-network:focus {{ outline: none; }}
     </style>
 </head>
 <body class="text-slate-100 min-h-screen p-6 md:p-10">
@@ -550,7 +558,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     <!-- Tab 2: Giyeok Long-term Memory Explorer View -->
     <div id="memoryView" class="hidden">
         <!-- Memory KPI Cards Row -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div class="glass-card p-6 rounded-2xl border border-purple-500/30">
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-xs font-semibold text-purple-300">누적 지식 에피소드</span>
@@ -562,20 +570,121 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
             <div class="glass-card p-6 rounded-2xl border border-emerald-500/30">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-semibold text-emerald-300">활성 도메인 태그</span>
-                    <i class="fa-solid fa-tags text-emerald-400"></i>
+                    <span class="text-xs font-semibold text-emerald-300">기억 회수 적중 (Recall Hits)</span>
+                    <i class="fa-solid fa-bolt text-emerald-400"></i>
                 </div>
-                <div class="text-2xl font-bold text-slate-100 font-mono" id="kpiMemTags">0 <span class="text-sm font-normal text-slate-400">Tags</span></div>
-                <p class="text-xs text-slate-400 mt-2">#GOLD, #code_modified, #Session_...</p>
+                <div class="text-2xl font-bold text-emerald-400 font-mono" id="kpiMemRecallHits">0 <span class="text-sm font-normal text-slate-400">Hits</span></div>
+                <p class="text-xs text-slate-400 mt-2">초고속 50ms 샌드박스 사전 회수</p>
             </div>
 
             <div class="glass-card p-6 rounded-2xl border border-sky-500/30">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-semibold text-sky-300">코드 생성/수정 지식</span>
-                    <i class="fa-solid fa-code text-sky-400"></i>
+                    <span class="text-xs font-semibold text-sky-300">기억 주입 절감 크레딧</span>
+                    <i class="fa-solid fa-piggy-bank text-sky-400"></i>
                 </div>
-                <div class="text-2xl font-bold text-slate-100 font-mono" id="kpiMemCodeMod">0 <span class="text-sm font-normal text-slate-400">Items</span></div>
-                <p class="text-xs text-slate-400 mt-2">LOC > 0 실전 코드 솔루션 축적</p>
+                <div class="text-2xl font-bold text-sky-300 font-mono" id="kpiMemSavedCredits">0.00 <span class="text-sm font-normal text-slate-400">Cr</span></div>
+                <p class="text-xs text-slate-400 mt-2">다운스케일 기억 보조 ROI 누적</p>
+            </div>
+
+            <div class="glass-card p-6 rounded-2xl border border-amber-500/30">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold text-amber-300">최고 엣지 강화 가중치</span>
+                    <i class="fa-solid fa-fire text-amber-400"></i>
+                </div>
+                <div class="text-2xl font-bold text-amber-300 font-mono" id="kpiMemMaxWeight">1.00 <span class="text-sm font-normal text-slate-400">x</span></div>
+                <p class="text-xs text-slate-400 mt-2">비용/난이도/LOC 승격 최대 배수</p>
+            </div>
+        </div>
+
+        <!-- Interactive Association Graph Network Canvas Section (생각나무) -->
+        <div class="glass-card p-6 rounded-2xl mb-8 border border-purple-500/40 bg-gradient-to-br from-slate-900 via-slate-950 to-purple-950/20">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-network-wired text-purple-400"></i>
+                        🧠 Giyeok 생각나무 연상 기억 노드 연결망 (Association Network Graph)
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">
+                        노드 크기/발광: 엣지 가중치 비례 • 선 굵기: 연결 강도 • 노드를 클릭하면 상세 문제-해결 내용과 연관 트리가 즉시 표시됩니다.
+                    </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="fitMemoryGraph()" 
+                            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1 cursor-pointer">
+                        <i class="fa-solid fa-arrows-to-eye"></i> 전체 보기
+                    </button>
+                    <button id="togglePhysicsBtn" onclick="toggleGraphPhysics()" 
+                            class="px-3 py-1.5 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1 cursor-pointer">
+                        <i class="fa-solid fa-atom"></i> 물리엔진 끄기
+                    </button>
+                    <select id="graphTierFilter" onchange="filterMemoryGraph()" 
+                            class="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-purple-400">
+                        <option value="ALL">전체 등급 (All Tiers)</option>
+                        <option value="GOLD">GOLD 노드만</option>
+                        <option value="PLATINUM">PLATINUM 노드만</option>
+                        <option value="SILVER">SILVER 노드만</option>
+                        <option value="BRONZE">BRONZE 노드만</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Network Canvas -->
+            <div id="memoryGraphCanvas" class="w-full h-[500px] rounded-2xl bg-slate-950/90 border border-slate-800 relative flex items-center justify-center">
+                <div class="text-slate-500 text-xs font-mono animate-pulse">
+                    <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> 생각나무 그래프 캔버스 렌더링 중...
+                </div>
+            </div>
+
+            <!-- Graph Legend -->
+            <div class="flex flex-wrap items-center justify-between gap-4 mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400">
+                <div class="flex items-center gap-3">
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> GOLD</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cyan-500"></span> PLATINUM</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> SILVER</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-800"></span> BRONZE</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> CHALLENGER</span>
+                </div>
+                <div class="font-mono text-purple-300">
+                    💡 휠 스크롤: 줌 인/아웃 | 드래그: 이동 및 노드 물리 상호작용
+                </div>
+            </div>
+        </div>
+
+        <!-- Top-Ranked Knowledge Graph Table Section (TOP 10 엣지 가중치) -->
+        <div class="glass-card p-6 rounded-2xl mb-8 border border-slate-800">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-800">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-trophy text-yellow-400"></i>
+                        🏆 확정된 고가치 지식 엣지 가중치 TOP 10 랭킹 (Top-Ranked Knowledge)
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">
+                        비용($), 의사결정 등급 및 코드 수정량(LOC)에 의해 SQLite edges 테이블에 가중치(1.0x ~ 10.0x)가 승격된 고가치 지식입니다.
+                    </p>
+                </div>
+                <span class="text-xs px-3 py-1.5 bg-yellow-500/20 text-yellow-300 font-mono font-bold rounded-xl border border-yellow-500/30">
+                    Step 3 Reinforcer Active
+                </span>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="topEdgesTable">
+                    <thead>
+                        <tr class="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
+                            <th class="px-4 py-3 rounded-tl-xl font-mono">Rank</th>
+                            <th class="px-4 py-3">Source Node ID</th>
+                            <th class="px-4 py-3 text-center">등급</th>
+                            <th class="px-4 py-3 text-right">LOC</th>
+                            <th class="px-4 py-3 text-right">비용 ($)</th>
+                            <th class="px-4 py-3 text-right font-bold text-amber-300">승격 가중치</th>
+                            <th class="px-4 py-3">Target Node</th>
+                            <th class="px-4 py-3 rounded-tr-xl">문제 및 요구사항 요약</th>
+                        </tr>
+                    </thead>
+                    <tbody id="topEdgesTableBody" class="divide-y divide-slate-800 text-xs">
+                        <!-- Populated dynamically via JS -->
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -588,11 +697,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         연관 기억 실시간 시맨틱 검색기 (Recall Explorer)
                     </h2>
                     <p class="text-xs text-slate-400 mt-1">
-                        개발 중인 에러 문구나 키워드를 검색하면, Step 1에 저장된 문제-해결 에피소드를 유사도 랭킹순으로 즉시 회수합니다.
+                        개발 중인 에러 문구나 키워드를 검색하면, Step 1~3에 저장된 문제-해결 에피소드를 유사도 랭킹순으로 즉시 회수합니다.
                     </p>
                 </div>
                 <div class="flex items-center gap-2">
-                    <input type="text" id="memSearchInput" placeholder="질의어/에러문구/도메인 검색 (예: Lombok, jCustNo, DTO)..." 
+                    <input type="text" id="memSearchInput" placeholder="질의어/에러문구/도메인 검색 (예: Lombok, jCustNo, 쿠폰, DTO)..." 
                            onkeyup="onMemorySearchInput(event)"
                            class="bg-slate-900/90 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2.5 focus:outline-none focus:border-purple-400 w-72 md:w-96">
                     <button onclick="performMemorySearch()"
@@ -648,6 +757,42 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
         </div>
     </div><!-- end #memoryView -->
+
+    <!-- Graph Node Inspector Modal -->
+    <div id="graphNodeModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-card max-w-2xl w-full p-6 rounded-3xl border border-purple-500/40 shadow-2xl relative bg-slate-900/95 max-h-[85vh] overflow-y-auto">
+            <button onclick="closeGraphNodeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-4">
+                <span id="modalNodeBadge" class="px-3 py-1 bg-purple-500/20 text-purple-300 font-bold rounded-xl text-xs border border-purple-500/30">
+                    GOLD
+                </span>
+                <div>
+                    <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                        🧠 지식 노드 상세 정보
+                        <span id="modalNodeId" class="text-xs font-mono text-purple-300">#id</span>
+                    </h2>
+                    <p id="modalNodeMeta" class="text-xs text-slate-400 mt-0.5 font-mono">가중치: 1.0x | LOC: 0줄 | $0.0000</p>
+                </div>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div class="p-4 bg-slate-950/80 rounded-2xl border border-slate-800">
+                    <span class="text-xs font-bold text-sky-300">📌 문제 및 요구사항:</span>
+                    <div id="modalNodeProblem" class="text-xs text-slate-200 mt-1 leading-relaxed whitespace-pre-wrap"></div>
+                </div>
+                <div class="p-4 bg-slate-950/80 rounded-2xl border border-slate-800">
+                    <span class="text-xs font-bold text-emerald-300">💡 적용 해결책 및 LLM 응답:</span>
+                    <div id="modalNodeSolution" class="text-xs text-slate-300 mt-1 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto"></div>
+                </div>
+            </div>
+            <div class="mt-5 pt-3 border-t border-slate-800 flex justify-end">
+                <button onclick="closeGraphNodeModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl">
+                    닫기
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Healing Factor Comparison Modal -->
     <div id="healingModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -1459,7 +1604,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         let currentMemories = {client_memories_json};
         let currentMemStats = {client_mem_stats_json};
+        let currentGraphData = {client_graph_data_json};
+        let currentTopEdges = {client_top_edges_json};
         let currentDashboardTab = 'usage';
+        let memoryNetwork = null;
+        let isPhysicsEnabled = true;
 
         function switchDashboardTab(tab) {{
             currentDashboardTab = tab;
@@ -1478,23 +1627,194 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 if (viewMemory) viewMemory.classList.remove('hidden');
                 if (btnMemory) btnMemory.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-purple-500 text-purple-300 bg-purple-500/10 shadow-lg cursor-pointer';
                 if (btnUsage) btnUsage.className = 'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer';
-                renderMemoryView(currentMemories, currentMemStats);
+                renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
+                setTimeout(() => {{
+                    initMemoryGraph(currentGraphData);
+                }}, 50);
             }}
         }}
 
-        function renderMemoryView(memoriesList, memStats) {{
+        function initMemoryGraph(graphData) {{
+            const container = document.getElementById('memoryGraphCanvas');
+            if (!container || !window.vis) return;
+
+            const nodes = graphData.nodes || [];
+            const edges = graphData.edges || [];
+
+            if (nodes.length === 0) {{
+                container.innerHTML = '<div class="text-slate-500 text-xs font-mono">기억 저장소에 연결된 노드가 아직 없습니다.</div>';
+                return;
+            }}
+
+            const visNodes = new vis.DataSet(nodes);
+            const visEdges = new vis.DataSet(edges);
+
+            const data = {{ nodes: visNodes, edges: visEdges }};
+            const options = {{
+                nodes: {{
+                    shape: 'dot',
+                    scaling: {{ min: 16, max: 38, label: {{ min: 10, max: 13 }} }},
+                    font: {{ color: '#ffffff', face: 'Pretendard, -apple-system, sans-serif' }},
+                    borderWidth: 2,
+                    shadow: {{ enabled: true, color: 'rgba(0,0,0,0.6)', size: 8, x: 2, y: 2 }}
+                }},
+                edges: {{
+                    arrows: {{ to: {{ enabled: true, scaleFactor: 0.6 }} }},
+                    color: {{ color: 'rgba(168, 85, 247, 0.4)', highlight: '#ec4899', hover: '#a855f7' }},
+                    smooth: {{ type: 'continuous' }}
+                }},
+                physics: {{
+                    enabled: isPhysicsEnabled,
+                    stabilization: {{ iterations: 120 }},
+                    barnesHut: {{ gravitationalConstant: -3000, springConstant: 0.04, springLength: 130 }}
+                }},
+                interaction: {{ hover: true, tooltipDelay: 80, zoomView: true, dragView: true }}
+            }};
+
+            if (memoryNetwork) {{
+                memoryNetwork.destroy();
+            }}
+
+            memoryNetwork = new vis.Network(container, data, options);
+
+            memoryNetwork.on('click', function(params) {{
+                if (params.nodes.length > 0) {{
+                    const nodeId = params.nodes[0];
+                    const selectedNode = nodes.find(n => n.id === nodeId);
+                    if (selectedNode) {{
+                        openGraphNodeModal(selectedNode);
+                    }}
+                }}
+            }});
+        }}
+
+        function toggleGraphPhysics() {{
+            isPhysicsEnabled = !isPhysicsEnabled;
+            const btn = document.getElementById('togglePhysicsBtn');
+            if (memoryNetwork) {{
+                memoryNetwork.setOptions({{ physics: {{ enabled: isPhysicsEnabled }} }});
+            }}
+            if (btn) {{
+                btn.innerHTML = isPhysicsEnabled 
+                    ? '<i class="fa-solid fa-atom"></i> 물리엔진 끄기'
+                    : '<i class="fa-solid fa-play text-emerald-400"></i> 물리엔진 켜기';
+            }}
+        }}
+
+        function fitMemoryGraph() {{
+            if (memoryNetwork) {{
+                memoryNetwork.fit({{ animation: {{ duration: 600, easingFunction: 'easeInOutQuad' }} }});
+            }}
+        }}
+
+        function filterMemoryGraph() {{
+            const filterVal = document.getElementById('graphTierFilter').value;
+            if (!currentGraphData || !currentGraphData.nodes) return;
+
+            let filteredNodes = currentGraphData.nodes;
+            if (filterVal !== 'ALL') {{
+                filteredNodes = currentGraphData.nodes.filter(n => (n.decision || '').toUpperCase() === filterVal);
+            }}
+            const filteredIds = new Set(filteredNodes.map(n => n.id));
+            const filteredEdges = (currentGraphData.edges || []).filter(e => filteredIds.has(e.from) && filteredIds.has(e.to));
+
+            initMemoryGraph({{ nodes: filteredNodes, edges: filteredEdges }});
+        }}
+
+        function openGraphNodeModal(node) {{
+            const modal = document.getElementById('graphNodeModal');
+            if (!modal) return;
+
+            const badge = document.getElementById('modalNodeBadge');
+            const idEl = document.getElementById('modalNodeId');
+            const metaEl = document.getElementById('modalNodeMeta');
+            const probEl = document.getElementById('modalNodeProblem');
+            const solEl = document.getElementById('modalNodeSolution');
+
+            const dec = (node.decision || 'BRONZE').toUpperCase();
+            if (badge) {{
+                badge.innerText = dec;
+                let bClass = 'px-3 py-1 font-bold rounded-xl text-xs border ';
+                if (dec.includes('GOLD')) bClass += 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
+                else if (dec.includes('PLATINUM')) bClass += 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
+                else if (dec.includes('SILVER')) bClass += 'bg-slate-700/40 text-slate-200 border-slate-400/40';
+                else bClass += 'bg-amber-900/30 text-amber-300 border-amber-600/40';
+                badge.className = bClass;
+            }}
+
+            if (idEl) idEl.innerText = `#${{node.id}}`;
+            if (metaEl) metaEl.innerText = `승격 가중치: ${{node.weight ? node.weight.toFixed(2) : '1.00'}}x | 코드 LOC: ${{node.loc || 0}}줄 | 발생 비용: $${{(node.cost || 0.0).toFixed(4)}} | 시각: ${{node.timestamp || 'N/A'}}`;
+            if (probEl) probEl.innerText = node.problem || '(문제 요구사항 없음)';
+            if (solEl) solEl.innerText = node.solution || '(해결책 없음)';
+
+            modal.classList.remove('hidden');
+        }}
+
+        function closeGraphNodeModal() {{
+            const modal = document.getElementById('graphNodeModal');
+            if (modal) modal.classList.add('hidden');
+        }}
+
+        function renderTopEdges(edgesList) {{
+            const tbody = document.getElementById('topEdgesTableBody');
+            if (!tbody) return;
+
+            const list = edgesList || currentTopEdges || [];
+            if (list.length === 0) {{
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-slate-500 font-mono">가중치 승격 엣지 레코드가 아직 없습니다. (고난도 작업 후 자동 갱신됩니다)</td></tr>';
+                return;
+            }}
+
+            let html = '';
+            list.forEach((e, idx) => {{
+                const sId = (e.source_id || '').substring(0, 10) + '...';
+                const tId = (e.target_id || '').substring(0, 10) + '...';
+                const dec = e.decision || 'BRONZE';
+                const loc = e.loc || 0;
+                const cost = e.cost || 0.0;
+                const weight = e.weight || 1.0;
+                const prob = (e.problem || '').substring(0, 45) + '...';
+
+                let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
+                if (dec.includes('GOLD')) badgeClass = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
+                else if (dec.includes('PLATINUM')) badgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
+                else if (dec.includes('SILVER')) badgeClass = 'bg-slate-700/40 text-slate-200 border-slate-400/40';
+
+                html += `
+                <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
+                    <td class="px-4 py-3 font-mono text-yellow-300 font-bold">#${{idx+1}}</td>
+                    <td class="px-4 py-3 font-mono text-purple-300 text-xs" title="${{e.source_id}}">${{sId}}</td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full border ${{badgeClass}}">${{dec}}</span>
+                    </td>
+                    <td class="px-4 py-3 text-right font-mono text-emerald-400">${{loc}}줄</td>
+                    <td class="px-4 py-3 text-right font-mono text-slate-300">$${{cost.toFixed(4)}}</td>
+                    <td class="px-4 py-3 text-right font-mono font-extrabold text-amber-300">${{weight.toFixed(2)}}x</td>
+                    <td class="px-4 py-3 font-mono text-slate-400 text-xs" title="${{e.target_id}}">${{tId}}</td>
+                    <td class="px-4 py-3 text-slate-200 text-xs truncate max-w-xs" title="${{e.problem}}">${{prob}}</td>
+                </tr>
+                `;
+            }});
+            tbody.innerHTML = html;
+        }}
+
+        function renderMemoryView(memoriesList, memStats, graphData, topEdges) {{
             const list = memoriesList || currentMemories || [];
             const stats = memStats || currentMemStats || {{}};
 
             const totalEl = document.getElementById('kpiMemTotal');
-            const tagsEl = document.getElementById('kpiMemTags');
-            const codeModEl = document.getElementById('kpiMemCodeMod');
+            const recallEl = document.getElementById('kpiMemRecallHits');
+            const savedEl = document.getElementById('kpiMemSavedCredits');
+            const weightEl = document.getElementById('kpiMemMaxWeight');
             const badgeEl = document.getElementById('memTabCountBadge');
 
             if (totalEl) totalEl.innerHTML = `${{stats.total_memories || list.length}} <span class="text-sm font-normal text-slate-400">Episodes</span>`;
-            if (tagsEl) tagsEl.innerHTML = `${{stats.total_tags || 0}} <span class="text-sm font-normal text-slate-400">Tags</span>`;
-            if (codeModEl) codeModEl.innerHTML = `${{stats.code_modified_count || 0}} <span class="text-sm font-normal text-slate-400">Items</span>`;
+            if (recallEl) recallEl.innerHTML = `${{stats.recall_hits || 0}} <span class="text-sm font-normal text-slate-400">Hits</span>`;
+            if (savedEl) savedEl.innerHTML = `${{(stats.saved_credits || 0.0).toFixed(2)}} <span class="text-sm font-normal text-slate-400">Cr</span>`;
+            if (weightEl) weightEl.innerHTML = `${{(stats.max_edge_weight || 1.0).toFixed(2)}} <span class="text-sm font-normal text-slate-400">x</span>`;
             if (badgeEl) badgeEl.innerText = `${{stats.total_memories || list.length}}건`;
+
+            renderTopEdges(topEdges || currentTopEdges);
 
             const sessionSelect = document.getElementById('sessionSelect');
             const targetSession = sessionSelect ? sessionSelect.value : 'ALL';
@@ -1692,10 +2012,24 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         const memData = await memRes.json();
                         if (memData.memories) {{
                             currentMemories = memData.memories;
-                            if (currentDashboardTab === 'memory') {{
-                                renderMemoryView(currentMemories, currentMemStats);
-                            }}
                         }}
+                    }}
+                    let graphRes = await fetch('http://127.0.0.1:18080/v1/dashboard/memories/graph');
+                    if (graphRes.ok) {{
+                        const gData = await graphRes.json();
+                        if (gData.nodes) {{
+                            currentGraphData = gData;
+                        }}
+                    }}
+                    let edgeRes = await fetch('http://127.0.0.1:18080/v1/dashboard/memories/top-edges');
+                    if (edgeRes.ok) {{
+                        const eData = await edgeRes.json();
+                        if (eData.edges) {{
+                            currentTopEdges = eData.edges;
+                        }}
+                    }}
+                    if (currentDashboardTab === 'memory') {{
+                        renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
                     }}
                 }} catch(me) {{ }}
             }} else {{
@@ -1709,7 +2043,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         window.onload = function() {{
             initVersionSelector();
             renderHealingHistory(healingHistoryData);
-            renderMemoryView(currentMemories, currentMemStats);
+            renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
             const initialMonth = document.getElementById('monthSelect').value;
             const initialSession = document.getElementById('sessionSelect').value;
             renderDashboard(initialMonth, initialSession);

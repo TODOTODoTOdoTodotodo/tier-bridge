@@ -365,6 +365,156 @@ class MemoryHandler:
             return []
 
     @classmethod
+    def get_graph_data(cls, limit_nodes: int = 60) -> Dict[str, Any]:
+        """
+        vis-network 렌더링용 nodes & edges 인터랙티브 그래프 데이터셋 생성 (<5ms)
+        """
+        db_path = cls.get_db_path()
+        if not db_path:
+            return {"nodes": [], "edges": []}
+
+        try:
+            conn = sqlite3.connect(db_path, timeout=2.0)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            # 1. edges 가중치 맵 조회
+            edge_weights = {}
+            raw_edges = []
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='edges';")
+            if cursor.fetchone():
+                cursor.execute("SELECT source_id, target_id, weight FROM edges ORDER BY weight DESC LIMIT 300;")
+                for row in cursor.fetchall():
+                    s_id, t_id, w = row["source_id"], row["target_id"], float(row["weight"] or 1.0)
+                    raw_edges.append((s_id, t_id, w))
+                    edge_weights[s_id] = max(edge_weights.get(s_id, 1.0), w)
+                    edge_weights[t_id] = max(edge_weights.get(t_id, 1.0), w)
+
+            # 2. nodes 조회
+            cursor.execute("SELECT id, text, timestamp FROM nodes ORDER BY timestamp DESC LIMIT ?;", (limit_nodes,))
+            nodes_data = []
+            node_ids = set()
+            for row in cursor.fetchall():
+                nid = row["id"]
+                node_ids.add(nid)
+                parsed = cls.parse_memory_content(row["text"] or "")
+                dec = parsed.get("decision", "BRONZE").upper()
+                prob = parsed.get("problem", "")
+                sol = parsed.get("solution", "")
+                loc = parsed.get("loc", 0)
+                cost = parsed.get("cost", 0.0)
+                weight = edge_weights.get(nid, 1.0)
+
+                label = prob.replace("\n", " ")[:16] + ("..." if len(prob) > 16 else "")
+                title = f"<b>[{dec}] #{nid[:8]}</b> (가중치: {weight:.2f}x)<br><br><b>📌 문제:</b> {prob[:100]}...<br><br><b>💡 해결:</b> {sol[:100]}...<br>💻 LOC: {loc}줄 | 💰 Cost: ${cost:.4f}"
+
+                # 노드 색상 매핑
+                color_map = {
+                    "CHALLENGER": {"background": "#ef4444", "border": "#b91c1c", "highlight": {"background": "#f87171", "border": "#dc2626"}},
+                    "PLATINUM": {"background": "#06b6d4", "border": "#0891b2", "highlight": {"background": "#22d3ee", "border": "#0e7490"}},
+                    "GOLD": {"background": "#f59e0b", "border": "#d97706", "highlight": {"background": "#fbbf24", "border": "#b45309"}},
+                    "SILVER": {"background": "#94a3b8", "border": "#64748b", "highlight": {"background": "#cbd5e1", "border": "#475569"}},
+                    "BRONZE": {"background": "#b45309", "border": "#78350f", "highlight": {"background": "#d97706", "border": "#92400e"}},
+                }
+                node_color = color_map.get(dec, color_map["BRONZE"])
+
+                nodes_data.append({
+                    "id": nid,
+                    "label": label,
+                    "title": title,
+                    "group": dec,
+                    "value": round(weight, 1),
+                    "size": min(38, max(16, int(16 + weight * 2.2))),
+                    "color": node_color,
+                    "font": {"color": "#ffffff", "size": 11, "face": "Pretendard, -apple-system, sans-serif"},
+                    "decision": dec,
+                    "loc": loc,
+                    "cost": cost,
+                    "weight": weight,
+                    "problem": prob,
+                    "solution": sol,
+                    "timestamp": row["timestamp"] or "N/A"
+                })
+
+            # 3. 유효한 엣지만 필터링 및 굵기 설정
+            edges_data = []
+            seen_edges = set()
+            for s_id, t_id, w in raw_edges:
+                if s_id in node_ids and t_id in node_ids:
+                    pair_key = tuple(sorted([s_id, t_id]))
+                    if pair_key in seen_edges:
+                        continue
+                    seen_edges.add(pair_key)
+                    edges_data.append({
+                        "from": s_id,
+                        "to": t_id,
+                        "value": w,
+                        "width": min(6.0, max(1.0, w * 0.8)),
+                        "title": f"연결 강도: {w:.2f}x",
+                        "color": {
+                            "color": "rgba(168, 85, 247, 0.45)" if w < 3.0 else "rgba(236, 72, 153, 0.85)",
+                            "highlight": "#ec4899"
+                        },
+                        "smooth": {"type": "continuous"}
+                    })
+
+            conn.close()
+            return {"nodes": nodes_data, "edges": edges_data}
+        except Exception as e:
+            logger.debug(f"[MemoryHandler] get_graph_data error: {e}")
+            return {"nodes": [], "edges": []}
+
+    @classmethod
+    def get_top_weighted_edges(cls, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        가장 높은 가중치를 가진 상위 엣지 및 노드 정보 목록 조회
+        """
+        db_path = cls.get_db_path()
+        if not db_path:
+            return []
+
+        try:
+            conn = sqlite3.connect(db_path, timeout=2.0)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='edges';")
+            if not cursor.fetchone():
+                conn.close()
+                return []
+
+            cursor.execute(
+                """
+                SELECT e.source_id, e.target_id, e.weight, n.text, n.timestamp
+                FROM edges e
+                LEFT JOIN nodes n ON e.source_id = n.id
+                ORDER BY e.weight DESC
+                LIMIT ?;
+                """,
+                (limit,)
+            )
+            rows = cursor.fetchall()
+            results = []
+            for r in rows:
+                parsed = cls.parse_memory_content(r["text"] or "")
+                results.append({
+                    "source_id": r["source_id"],
+                    "target_id": r["target_id"],
+                    "weight": round(float(r["weight"] or 1.0), 2),
+                    "problem": parsed.get("problem", ""),
+                    "solution": parsed.get("solution", ""),
+                    "decision": parsed.get("decision", "BRONZE"),
+                    "loc": parsed.get("loc", 0),
+                    "cost": parsed.get("cost", 0.0),
+                    "timestamp": r["timestamp"] or "N/A"
+                })
+            conn.close()
+            return results
+        except Exception as e:
+            logger.debug(f"[MemoryHandler] get_top_weighted_edges error: {e}")
+            return []
+
+    @classmethod
     def get_memory_stats(cls) -> Dict[str, Any]:
         """
         기억저장소 통계 산출
@@ -376,11 +526,13 @@ class MemoryHandler:
                 "total_memories": 0,
                 "total_tags": 0,
                 "code_modified_count": 0,
+                "max_edge_weight": 1.0,
                 "structured_rate": 100.0
             }
 
         total_count = 0
         code_mod_count = 0
+        max_edge_w = 1.0
         try:
             conn = sqlite3.connect(db_path, timeout=2.0)
             cursor = conn.cursor()
@@ -399,6 +551,13 @@ class MemoryHandler:
                 cursor.execute("SELECT count(*) FROM memories WHERE tags LIKE '%code_modified%' OR (content LIKE '%[LOC:%' AND NOT content LIKE '%[LOC: 0]%');")
                 code_mod_count += cursor.fetchone()[0]
 
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='edges';")
+            if cursor.fetchone():
+                cursor.execute("SELECT MAX(weight) FROM edges;")
+                res = cursor.fetchone()
+                if res and res[0] is not None:
+                    max_edge_w = round(float(res[0]), 2)
+
             conn.close()
         except Exception:
             pass
@@ -408,5 +567,6 @@ class MemoryHandler:
             "total_memories": total_count,
             "total_tags": max(1, total_count * 2),
             "code_modified_count": code_mod_count,
+            "max_edge_weight": max_edge_w,
             "structured_rate": 100.0
         }

@@ -101,6 +101,52 @@ class TestMemoryHandler(unittest.TestCase):
             if os.path.exists(db_path):
                 os.remove(db_path)
 
+    def test_get_graph_data_and_top_edges(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tf:
+            db_path = tf.name
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE nodes (
+                    id TEXT PRIMARY KEY,
+                    text TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    timestamp TEXT NOT NULL
+                );
+            """)
+            cursor.execute("""
+                CREATE TABLE edges (
+                    source_id TEXT,
+                    target_id TEXT,
+                    weight REAL DEFAULT 1.0,
+                    PRIMARY KEY (source_id, target_id)
+                );
+            """)
+            cursor.execute("INSERT INTO nodes VALUES ('node_a', 'User: Q1\nAssistant: A1', X'00', '2026-08-24T10:00:00');")
+            cursor.execute("INSERT INTO nodes VALUES ('node_b', 'User: Q2\nAssistant: A2', X'00', '2026-08-24T10:05:00');")
+            cursor.execute("INSERT INTO edges VALUES ('node_b', 'node_a', 5.5);")
+            conn.commit()
+            conn.close()
+
+            with patch.object(MemoryHandler, "get_db_path", return_value=db_path):
+                graph = MemoryHandler.get_graph_data(limit_nodes=10)
+                self.assertEqual(len(graph["nodes"]), 2)
+                self.assertEqual(len(graph["edges"]), 1)
+                self.assertEqual(graph["edges"][0]["from"], "node_b")
+                self.assertEqual(graph["edges"][0]["to"], "node_a")
+                self.assertEqual(graph["edges"][0]["value"], 5.5)
+
+                top_edges = MemoryHandler.get_top_weighted_edges(limit=5)
+                self.assertEqual(len(top_edges), 1)
+                self.assertEqual(top_edges[0]["source_id"], "node_b")
+                self.assertEqual(top_edges[0]["weight"], 5.5)
+
+        finally:
+            if os.path.exists(db_path):
+                os.remove(db_path)
+
     def test_fallback_when_db_missing(self):
         with patch.object(MemoryHandler, "get_db_path", return_value=None):
             mems = MemoryHandler.get_recent_memories()

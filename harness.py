@@ -338,6 +338,32 @@ async def get_dashboard_memory_stats():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+@app.get("/v1/dashboard/memories/graph")
+async def get_dashboard_memory_graph(limit_nodes: int = 60):
+    """ vis-network 렌더링용 nodes & edges 그래프 데이터셋 조회 """
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        data = MemoryHandler.get_graph_data(limit_nodes=limit_nodes)
+        return {"status": "success", **data}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "nodes": [], "edges": []}
+
+@app.get("/v1/dashboard/memories/top-edges")
+async def get_dashboard_top_edges(limit: int = 10):
+    """ 가장 높은 가중치를 가진 상위 엣지 및 노드 정보 목록 조회 """
+    try:
+        try:
+            from tierbridge.memory_handler import MemoryHandler
+        except ImportError:
+            from src.tierbridge.memory_handler import MemoryHandler
+        edges = MemoryHandler.get_top_weighted_edges(limit=limit)
+        return {"status": "success", "total_count": len(edges), "edges": edges}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "edges": []}
+
 # ==========================================
 # 핵심 라우팅 하네스 엔드포인트
 # ==========================================
