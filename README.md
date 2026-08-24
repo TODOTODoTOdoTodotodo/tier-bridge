@@ -157,8 +157,9 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가 �
 | | [Controller/deployment_architecture.md](Controller/deployment_architecture.md) | 런타임 격리 배포, Dual-Sink 보존 및 종합 환경변수 명세 |
 | | [Controller/analyze_usage.md](Controller/analyze_usage.md) | 실시간 라이브 오토싱크, 크레딧 산출 및 대시보드 명세 |
 | | [Controller/loc_tracker.md](Controller/loc_tracker.md) | 마크다운 코드 블록 LOC 추출 및 생산성 측정 설계 |
-| **🧠 장기 기억 연동 (TBC)** | [Controller/integration_step1_ingestion.md](Controller/integration_step1_ingestion.md) | Step 1: 비동기 세션 로그 수집 & 퀄리티 게이팅 (예정) |
-| | [Controller/integration_step2_recall.md](Controller/integration_step2_recall.md) | Step 2: 사전 기억 회수 & 50ms Strict 샌드박싱 (예정) |
+| **🧠 장기 기억 연동 (TBC)** | [Controller/integration_step1_ingestion.md](Controller/integration_step1_ingestion.md) | Step 1: 비동기 세션 로그 수집 & 퀄리티 게이팅 (✅ 완료) |
+| | [Controller/integration_step2_recall.md](Controller/integration_step2_recall.md) | Step 2: 사전 기억 회수 & 50ms Strict 샌드박싱 (✅ 완료) |
+| | [Controller/standard_report_directive.md](Controller/standard_report_directive.md) | 하네스 투명 최종 보고서 표준 규격 가이드 (✅ 완료) |
 | | [Controller/integration_step3_reinforcement.md](Controller/integration_step3_reinforcement.md) | Step 3: 비용/난이도 기반 기억 가중치 재강화 엔진 (예정) |
 | | [Controller/integration_step4_analytics.md](Controller/integration_step4_analytics.md) | Step 4: 하네스 ✕ sub-memory 크레딧 시너지 분석 (예정) |
 | **📈 성과 보고서** | [RESULT_REPORT.md](RESULT_REPORT.md) | 6단계 랭크 라우팅 및 하네스 최적화 최종 결과 보고서 |
@@ -169,9 +170,18 @@ OpenAI/ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가 �
 ## 🔮 향후 로드맵 (Upcoming Roadmap - TBC)
 
 ### 🧠 세션 턴별 장기 기억(sub-memory) 연동 및 연관 지식 자동 검색 (TBC)
-* **세션 턴별 프롬프트 자동 수집**: 에이전트 대화 세션 중 의미 있는 비즈니스/아키텍처 턴의 프롬프트를 비동기로 자동 선별 수집.
-* **초고속 연관 지식 검색 & 컨텍스트 주입**: 새로운 질문 인입 시 과거 세션에서 해결했던 관련 문제나 아키텍처 결정 사항을 5ms 이내로 초고속 검색하여 프롬프트 상단에 스마트 주입.
-* **고난도 지식 가중치 재강화 & 크레딧 추가 절감**: 고비용(`CHALLENGER`/`DIAMOND`)으로 해결한 귀중한 트러블슈팅 지식을 장기 보존하고, 사전 기억 주입을 통해 후속 질문의 라우팅 난이도를 다운스케일하여 추가 크레딧을 절감하는 파이프라인이 탑재될 예정입니다. *(상세 설계: [Controller/integration_step1_ingestion.md](Controller/integration_step1_ingestion.md) ~ [step4_analytics.md](Controller/integration_step4_analytics.md))*
+* **[✅ 완료] Step 1: 비동기 세션 로그 수집 & 단일 지식 페어링**:
+  - `finish_reason: stop` / `is_final_answer` 프로토콜 기반 중간 도구 턴 100% 스킵.
+  - 최초 질문과 최종 완료 답변의 순수 `User:` / `Assistant:` 1개 지식 쌍 단일 적재.
+  - 단순 회상 질문(`is_recall_query`) 메아리 적재 원천 차단.
+* **[✅ 완료] Step 2: 사전 기억 회수 & 투명 3단 보고서 가이드라인**:
+  - 50ms Strict Timeout Sandbox 내 초고속 기억 회수 (`< 5ms`).
+  - 한국어 형태소/조사 분리 토크나이저(`extract_search_tokens`) 적용으로 구어체 질의 100% 검색.
+  - 투명 시스템 가이드라인(`SystemDirective`) 주입으로 도구 재탐색 없이 즉시 회상 브리핑 및 3단 보고서 출력.
+* **[⏳ 예정] Step 3: 고난도 지식 가중치 재강화 (Cost-Weighted Reinforcement)**:
+  - 고난도(`GOLD`/`PLATINUM`/`CHALLENGER`) 및 고비용 해결 턴의 기억 엣지 가중치를 3~10배로 자동 승격하여 영구 보존.
+* **[⏳ 예정] Step 4: 크레딧 시너지 대시보드 연계 (Analytics & ROI Reporting)**:
+  - 사전 기억 주입으로 메인 모델이 다운스케일되어 절감된 실질 크레딧(Cr)을 라이브 대시보드에 연계. *(상세: [Controller/integration_step3_reinforcement.md](Controller/integration_step3_reinforcement.md) ~ [step4_analytics.md](Controller/integration_step4_analytics.md))*
 
 ---
 

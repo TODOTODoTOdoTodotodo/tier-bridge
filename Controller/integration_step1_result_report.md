@@ -22,18 +22,14 @@
 ### ① 사용자 체감 지연 0ms 보장 (Non-blocking Asynchronous Dispatch)
 * 클라이언트(Codex CLI / IDE)가 스트리밍 답변을 수신하는 속도에 0.001ms의 지연도 발생하지 않도록, `UsageTracker` 및 `harness.py`의 스트림 종료 시점에서 `asyncio.create_task(MemoryIngestionWorker.process_log_event(event_data))`로 완전 분기 실행됩니다.
 
-### ② 2단계 초저비용 퀄리티 게이트 (Zero-Cost / High-Quality Filter)
-* **1단계 (CPU 룰 기반 1차 컷, 비용 $0.00)**:
-  * 단순 파일 확인, 짧은 스크립트 실행 등 코드 수정이 없는(`LOC = 0`) 단순 `BRONZE` 턴은 CPU 레벨에서 0원으로 즉시 탈락시켜 기억 저장소 노이즈를 80% 이상 사전 차단합니다.
-  * 단, 사용자의 세션 최초 질의 턴(`is_first_turn=True`)이거나 실제 코드를 수정한 경우(`LOC > 0`), 그리고 `SILVER`/`GOLD`/`PLATINUM` 이상의 중요 비즈니스 턴은 반드시 통과시킵니다.
-* **2단계 (문제-해결 3단 지식 에피소드 포맷팅)**:
-  * 단편적인 턴 수집의 한계를 극복하고, 아래와 같은 **표준 3단 에피소드 포맷**으로 구조화하여 저장합니다:
-    ```markdown
-    [Session: 019ffec0-eef3] [Decision: GOLD] [LOC: 42] [Cost: $0.1523]
-    - 📌 문제 및 요구사항: jCustNo 필드를 affCustNo로 변경하고 암호화 분기를 우회해줘
-    - 💡 적용 등급 및 라우팅: GOLD
-    - 🏷️ 태그: #GOLD #Session_019ffec0 #TierBridge #code_modified
-    ```
+### ② 프로토콜 기반 1:1 단일 페어링 & 단순 회상 질의 필터링
+* **프로토콜 표준 `is_final_answer` 기반 단일 페어링**:
+  * 스트리밍 프로토콜 플래그(`finish_reason == "stop"` / `item_type == "message"`)를 파싱하여, 중간 도구 호출 턴(`finish_reason in ("tool_calls", "function_call", "tool_use")`)은 100% 스킵하고 최종 답변 턴만 인식.
+  * 최초 질문과 최종 완료 답변을 단 1개의 온전한 `User:` / `Assistant:` 순수 질문-답변 지식 쌍으로 적재.
+* **단순 회상 질의(`is_recall_query`) 메아리 적재 방지**:
+  * `"기억나는거 있어?"`, `"예약동기화도 기억나?"` 등 사용자의 단순 조회 질의는 `should_ingest`에서 스킵하여 DB 연관도 오염을 원천 차단 (`LOC == 0`).
+* **실제 코드 수정 턴 우선 수집**:
+  * 실제 코드를 수정한 턴(`LOC > 0`) 및 `SILVER`/`GOLD`/`PLATINUM`/`CHALLENGER` 고난도 의사결정 턴은 100% 수집.
 
 ### ③ 인프로세스 직결 저장 (Direct Module In-process, < 5ms) & 안전한 폴백
 * MCP HTTP 네트워크 오버헤드(30~50ms) 없이 하네스 내부에서 `sub_memory.service.MemoryService` 파이썬 모듈을 직접 호출하여 로컬 SQLite DB(`memory.db` / `sqlite-vec`)에 5ms 이내로 즉시 저장합니다.
