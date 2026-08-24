@@ -880,6 +880,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         <option value="SILVER">SILVER 노드만</option>
                         <option value="BRONZE">BRONZE 노드만</option>
                     </select>
+                    <button onclick="zoomInNetwork()" title="확대 (Zoom In)"
+                            class="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center cursor-pointer">
+                        <i class="fa-solid fa-magnifying-glass-plus"></i>
+                    </button>
+                    <button onclick="zoomOutNetwork()" title="축소 (Zoom Out)"
+                            class="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center cursor-pointer">
+                        <i class="fa-solid fa-magnifying-glass-minus"></i>
+                    </button>
                     <button onclick="fitExpandedMemoryGraph()" 
                             class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
                         <i class="fa-solid fa-arrows-to-eye"></i> 중앙 맞춤
@@ -892,6 +900,18 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
                 <!-- Markmap specific controls (Hidden by default) -->
                 <div id="modalMarkmapControls" class="hidden flex items-center gap-2">
+                    <button onclick="zoomInMarkmap()" title="마인드맵 확대 (Zoom In)"
+                            class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-magnifying-glass-plus"></i> 확대
+                    </button>
+                    <button onclick="zoomOutMarkmap()" title="마인드맵 축소 (Zoom Out)"
+                            class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-magnifying-glass-minus"></i> 축소
+                    </button>
+                    <button onclick="fitMarkmapTree()" 
+                            class="px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-expand"></i> 뷰 맞춤
+                    </button>
                     <button onclick="expandAllMarkmap()" 
                             class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
                         <i class="fa-solid fa-folder-open"></i> 모두 펼치기
@@ -899,10 +919,6 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     <button onclick="collapseAllMarkmap()" 
                             class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
                         <i class="fa-solid fa-folder"></i> 모두 접기
-                    </button>
-                    <button onclick="fitMarkmapTree()" 
-                            class="px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1.5 cursor-pointer">
-                        <i class="fa-solid fa-expand"></i> 뷰 맞춤
                     </button>
                 </div>
 
@@ -934,10 +950,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-800"></span> BRONZE</span>
             </div>
             <div id="modalMarkmapLegend" class="hidden font-mono text-emerald-400 text-xs">
-                🌿 Markmap: 원형 노드 클릭 시 하위 가지 접기/펼치기 • 마우스 드래그: 이동 • 휠: 줌
+                🌿 Markmap: 맥북 트랙패드 두 손가락 스크롤 줌 • 상단 [🔍 확대/축소/맞춤] • 원형 노드 클릭 접기/펼치기
             </div>
             <div class="font-mono text-purple-300 text-xs">
-                💡 휠 스크롤: 줌 인/아웃 | 캔버스 드래그: 패닝 | 듀얼 모드 전환 지원
+                💡 맥북 트랙패드 두 손가락 스크롤 / 핀치 줌 / 툴바 🔍 버튼 완벽 지원
             </div>
         </div>
     </div>
@@ -2109,6 +2125,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         function initMarkmapTree() {{
             const svg = document.getElementById('markmapSvg');
+            const container = document.getElementById('expandedMarkmapContainer');
             if (!svg || !window.markmap) return;
 
             if (!markmapTransformer) {{
@@ -2130,6 +2147,54 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     paddingX: 12,
                     autoFit: true
                 }}, root);
+            }}
+
+            // 🍎 맥북 트랙패드 두 손가락 스크롤 / 핀치 줌 정밀 바인딩
+            if (container && !container._trackpadZoomAttached) {{
+                container._trackpadZoomAttached = true;
+                container.addEventListener('wheel', function(e) {{
+                    e.preventDefault();
+                    if (!markmapInstance) return;
+                    // deltaY < 0 (위로 스크롤/핀치 아웃: 확대), deltaY > 0 (아래로 스크롤/핀치 인: 축소)
+                    const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+                    try {{
+                        markmapInstance.rescale(zoomFactor);
+                    }} catch(err) {{}}
+                }}, {{ passive: false }});
+            }}
+        }}
+
+        function zoomInMarkmap() {{
+            if (markmapInstance) {{
+                try {{
+                    markmapInstance.rescale(1.25);
+                }} catch(e) {{}}
+            }}
+        }}
+
+        function zoomOutMarkmap() {{
+            if (markmapInstance) {{
+                try {{
+                    markmapInstance.rescale(0.8);
+                }} catch(e) {{}}
+            }}
+        }}
+
+        function zoomInNetwork() {{
+            if (memoryExpandedNetwork) {{
+                try {{
+                    const curScale = memoryExpandedNetwork.getScale();
+                    memoryExpandedNetwork.moveTo({{ scale: curScale * 1.25, animation: {{ duration: 250, easingFunction: 'easeInOutQuad' }} }});
+                }} catch(e) {{}}
+            }}
+        }}
+
+        function zoomOutNetwork() {{
+            if (memoryExpandedNetwork) {{
+                try {{
+                    const curScale = memoryExpandedNetwork.getScale();
+                    memoryExpandedNetwork.moveTo({{ scale: curScale * 0.8, animation: {{ duration: 250, easingFunction: 'easeInOutQuad' }} }});
+                }} catch(e) {{}}
             }}
         }}
 

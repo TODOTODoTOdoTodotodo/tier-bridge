@@ -55,6 +55,10 @@ Codex 및 고급 개발자 사용자는 복잡한 지식 네트워크를 다각�
 2. **반응형 테마 및 클릭 액션**:
    - 다크 모드 / 라이트 모드에 맞춰 SVG 텍스트 및 링크 뱃지(`.tb-node-link`) 색상이 자동으로 전환됩니다.
    - 링크 클릭 시 `openNodeDetail(nodeId)`가 호출되어 해당 에피소드의 전체 문제/해결책 전문, 파일 경로, 세션 메타 및 **⚡ Neuralizer 소각 버튼**이 포함된 상세 모달이 즉시 열립니다.
-3. **노드 인터랙션**:
-   - 각 브랜치의 원형 버튼 클릭 시 하위 가지 접기/펼치기.
-   - 마우스 휠 줌 및 드래그 팬(Pan) 완벽 지원.
+3. **MacBook 트랙패드 및 줌 인터랙션 (Trackpad Gesture & Toolbar Zoom)**:
+   - **트랙패드 두 손가락 스크롤 / 핀치 줌**: 마우스 휠이 없는 MacBook 트랙패드 환경을 위해 두 손가락 스크롤(`wheel` 이벤트 `deltaY`)과 핀치 제스처(`ctrlKey`)를 즉각적인 부드러운 스케일 변환(`markmapInstance.rescale()`)으로 매핑.
+   - **전용 줌 툴바 컨트롤**:
+     - `[🔍+ 확대]` (`zoomInMarkmap()` / `zoomInNetwork()`): 1.25x 단계별 확대
+     - `[🔍- 축소]` (`zoomOutMarkmap()` / `zoomOutNetwork()`): 0.8x 단계별 축소
+     - `[🔄 중앙 맞춤 / 초기화]` (`fitMarkmapTree()` / `fitExpandedMemoryGraph()`): 화면 중앙 최적 배율 맞춤
+   - **가지 인터랙션**: 각 브랜치의 원형 버튼 클릭 시 하위 가지 접기/펼치기. 마우스 드래그를 통한 자유로운 캔버스 이동(Pan).
