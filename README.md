@@ -46,6 +46,10 @@ codex --oss --local-provider=ollama
 codex --oss --local-provider=ollama --model super
 ```
 
+> [!TIP]
+> **🔑 로그인 인증은 기존 Codex 계정과 100% 동일하게 자동 연동됩니다**  
+> 별도의 신규 회원가입이나 복잡한 API Key 발급/환경설정 과정이 전혀 필요 없습니다. 평소 사용하시던 Codex CLI에 이미 한 번이라도 로그인되어 있다면(`~/.codex/auth.json`), TierBridge 프록시가 기존 ChatGPT Enterprise 인증 세션을 자동으로 승계하여 안전하고 투명하게 통신합니다.
+
 > [!NOTE]
 > **💡 왜 공급자를 `ollama`로 지정해야 하나요?**  
 > Codex CLI 바이너리가 지원하는 로컬 오픈소스 공급자 옵션은 `ollama`로 고정되어 있습니다. TierBridge는 에이전트 코드 수정 없이 `OLLAMA_HOST` 환경변수로 요청을 가로채어 작동하므로, `--local-provider=ollama`를 사용해야만 하네스 프록시의 스마트 라우팅 및 크레딧 절감 기능을 정상적으로 연결받을 수 있습니다.
