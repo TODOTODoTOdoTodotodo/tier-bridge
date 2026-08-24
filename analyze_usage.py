@@ -201,6 +201,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.15.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.15.4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -229,6 +232,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         html.light .text-slate-400 {{ color: #64748b !important; }}
         
         #memoryGraphCanvas div.vis-network:focus {{ outline: none; }}
+        #markmapSvg text {{ font-family: 'Inter', Pretendard, -apple-system, sans-serif !important; font-weight: 500; font-size: 12px; }}
+        html.dark #markmapSvg text {{ fill: #f1f5f9 !important; }}
+        html.light #markmapSvg text {{ fill: #0f172a !important; }}
+        #markmapSvg circle {{ cursor: pointer; stroke-width: 2px; }}
+        #markmapSvg line, #markmapSvg path {{ stroke-linecap: round; }}
     </style>
 </head>
 <body class="text-slate-100 min-h-screen p-6 md:p-10">
@@ -797,41 +805,74 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
     </div><!-- end #memoryView -->
 
-    <!-- Fullscreen Expanded Graph Modal -->
-    <div id="expandedGraphModal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex flex-col p-4 md:p-6">
-        <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+    <!-- Fullscreen Expanded Dual Viewport Modal -->
+    <div id="expandedGraphModal" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col p-4 md:p-6">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between pb-4 mb-4 border-b border-slate-800 gap-4">
             <div class="flex items-center gap-3">
                 <span class="p-2 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-xl">
                     <i class="fa-solid fa-network-wired text-lg"></i>
                 </span>
                 <div>
-                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-                        🧠 Giyeok 생각나무 연상 기억 노드망 (전체 화면 탐색기)
-                    </h2>
-                    <p class="text-xs text-slate-400 mt-0.5">
-                        노드 크기: 엣지 가중치 • 선 굵기: 연결 강도 • 노드를 클릭하면 1-hop 연관 노드가 하이라이트되며 상세 정보가 열립니다.
+                    <div class="flex flex-wrap items-center gap-3">
+                        <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                            🧠 Giyeok 생각나무 연상 기억 탐색기
+                        </h2>
+                        <!-- 🌌🌿 Dual View Mode Segmented Tab Switcher -->
+                        <div class="inline-flex p-1 bg-slate-900 border border-slate-700/80 rounded-xl gap-1 shadow-inner">
+                            <button id="modalViewBtnNetwork" onclick="switchModalViewMode('network')"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer bg-purple-600/30 text-purple-300 border border-purple-500/40">
+                                <i class="fa-solid fa-circle-nodes"></i> 🌌 성단 네트워크 (vis)
+                            </button>
+                            <button id="modalViewBtnMarkmap" onclick="switchModalViewMode('markmap')"
+                                    class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200 border border-transparent">
+                                <i class="fa-solid fa-sitemap"></i> 🌿 생각나무 마인드맵 (Markmap)
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1" id="modalViewDescription">
+                        성단 뷰: 노드 크기(엣지 가중치), 연결 강도, 1-hop 하이라이트 • 마인드맵 뷰: 도메인별 문제 ➔ 해결책 접이식 브레인스토밍 트리
                     </p>
                 </div>
             </div>
             
             <!-- Controls in Expanded Modal -->
-            <div class="flex items-center gap-2">
-                <select id="modalGraphTierFilter" onchange="filterExpandedMemoryGraph()" 
-                        class="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-purple-400">
-                    <option value="ALL">전체 등급 (All Tiers)</option>
-                    <option value="GOLD">GOLD 노드만</option>
-                    <option value="PLATINUM">PLATINUM 노드만</option>
-                    <option value="SILVER">SILVER 노드만</option>
-                    <option value="BRONZE">BRONZE 노드만</option>
-                </select>
-                <button onclick="fitExpandedMemoryGraph()" 
-                        class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-arrows-to-eye"></i> 중앙 맞춤
-                </button>
-                <button id="toggleModalPhysicsBtn" onclick="toggleModalGraphPhysics()" 
-                        class="px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-atom"></i> 물리엔진 끄기
-                </button>
+            <div class="flex items-center gap-2 flex-wrap">
+                <!-- Network specific controls -->
+                <div id="modalNetworkControls" class="flex items-center gap-2">
+                    <select id="modalGraphTierFilter" onchange="filterExpandedMemoryGraph()" 
+                            class="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-purple-400">
+                        <option value="ALL">전체 등급 (All Tiers)</option>
+                        <option value="GOLD">GOLD 노드만</option>
+                        <option value="PLATINUM">PLATINUM 노드만</option>
+                        <option value="SILVER">SILVER 노드만</option>
+                        <option value="BRONZE">BRONZE 노드만</option>
+                    </select>
+                    <button onclick="fitExpandedMemoryGraph()" 
+                            class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-arrows-to-eye"></i> 중앙 맞춤
+                    </button>
+                    <button id="toggleModalPhysicsBtn" onclick="toggleModalGraphPhysics()" 
+                            class="px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-atom"></i> 물리엔진 끄기
+                    </button>
+                </div>
+
+                <!-- Markmap specific controls (Hidden by default) -->
+                <div id="modalMarkmapControls" class="hidden flex items-center gap-2">
+                    <button onclick="expandAllMarkmap()" 
+                            class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-folder-open"></i> 모두 펼치기
+                    </button>
+                    <button onclick="collapseAllMarkmap()" 
+                            class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-folder"></i> 모두 접기
+                    </button>
+                    <button onclick="fitMarkmapTree()" 
+                            class="px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs font-bold rounded-xl border border-purple-500/40 transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-expand"></i> 뷰 맞춤
+                    </button>
+                </div>
+
                 <button onclick="closeExpandedGraphModal()" 
                         class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-600 transition-all flex items-center gap-1.5 cursor-pointer ml-2">
                     <i class="fa-solid fa-xmark text-sm"></i> 닫기 (ESC)
@@ -839,23 +880,31 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
         </div>
 
-        <!-- Fullscreen Canvas -->
+        <!-- Viewport 1: Fullscreen Network Canvas -->
         <div id="expandedMemoryGraphCanvas" class="w-full flex-1 rounded-2xl bg-slate-950/95 border border-slate-800 relative flex items-center justify-center overflow-hidden">
             <div class="text-slate-500 text-xs font-mono animate-pulse">
-                <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> 생각나무 고해상도 캔버스 초기화 중...
+                <i class="fa-solid fa-circle-notch fa-spin mr-2"></i> 생각나무 고해상도 성단 캔버스 초기화 중...
             </div>
+        </div>
+
+        <!-- Viewport 2: Fullscreen Markmap Mindmap SVG Container -->
+        <div id="expandedMarkmapContainer" class="hidden w-full flex-1 rounded-2xl bg-slate-950/95 border border-slate-800 relative overflow-hidden flex flex-col p-4">
+            <svg id="markmapSvg" class="w-full h-full"></svg>
         </div>
 
         <!-- Expanded Footer Legend -->
         <div class="flex items-center justify-between pt-3 mt-3 border-t border-slate-800 text-xs text-slate-400">
-            <div class="flex items-center gap-4">
+            <div id="modalNetworkLegend" class="flex items-center gap-4">
                 <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500"></span> GOLD</span>
                 <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-cyan-500"></span> PLATINUM</span>
                 <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-400"></span> SILVER</span>
                 <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-800"></span> BRONZE</span>
             </div>
+            <div id="modalMarkmapLegend" class="hidden font-mono text-emerald-400 text-xs">
+                🌿 Markmap: 원형 노드 클릭 시 하위 가지 접기/펼치기 • 마우스 드래그: 이동 • 휠: 줌
+            </div>
             <div class="font-mono text-purple-300 text-xs">
-                💡 휠 스크롤: 줌 인/아웃 | 캔버스 드래그: 패닝 | 노드 클릭: 상세 모달 & 1-hop 하이라이트
+                💡 휠 스크롤: 줌 인/아웃 | 캔버스 드래그: 패닝 | 듀얼 모드 전환 지원
             </div>
         </div>
     </div>
@@ -1719,6 +1768,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         let currentGraphData = {client_graph_data_json};
         let currentTopEdges = {client_top_edges_json};
         let currentDashboardTab = 'usage';
+        let currentModalViewMode = 'network';
+        let markmapInstance = null;
+        let markmapTransformer = null;
         let memoryNetwork = null;
         let isPhysicsEnabled = true;
 
@@ -1923,12 +1975,176 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
         }}
 
+        function switchModalViewMode(mode) {{
+            currentModalViewMode = mode;
+            const btnNet = document.getElementById('modalViewBtnNetwork');
+            const btnTree = document.getElementById('modalViewBtnMarkmap');
+            const netControls = document.getElementById('modalNetworkControls');
+            const treeControls = document.getElementById('modalMarkmapControls');
+            const netCanvas = document.getElementById('expandedMemoryGraphCanvas');
+            const treeContainer = document.getElementById('expandedMarkmapContainer');
+            const netLegend = document.getElementById('modalNetworkLegend');
+            const treeLegend = document.getElementById('modalMarkmapLegend');
+            const desc = document.getElementById('modalViewDescription');
+
+            const activeBtnClass = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer bg-purple-600/30 text-purple-300 border border-purple-500/40';
+            const inactiveBtnClass = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200 border border-transparent';
+
+            if (mode === 'network') {{
+                if (btnNet) btnNet.className = activeBtnClass;
+                if (btnTree) btnTree.className = inactiveBtnClass;
+                if (netControls) netControls.classList.remove('hidden');
+                if (treeControls) treeControls.classList.add('hidden');
+                if (netCanvas) netCanvas.classList.remove('hidden');
+                if (treeContainer) treeContainer.classList.add('hidden');
+                if (netLegend) netLegend.classList.remove('hidden');
+                if (treeLegend) treeLegend.classList.add('hidden');
+                if (desc) desc.innerText = '성단 뷰: 노드 크기(엣지 가중치), 연결 강도, 1-hop 하이라이트 • 물리엔진 기반 유기적 성단 네트워크';
+                setTimeout(() => {{
+                    if (memoryExpandedNetwork) memoryExpandedNetwork.fit();
+                }}, 60);
+            }} else {{
+                if (btnNet) btnNet.className = inactiveBtnClass;
+                if (btnTree) btnTree.className = activeBtnClass;
+                if (netControls) netControls.classList.add('hidden');
+                if (treeControls) treeControls.classList.remove('hidden');
+                if (netCanvas) netCanvas.classList.add('hidden');
+                if (treeContainer) treeContainer.classList.remove('hidden');
+                if (netLegend) netLegend.classList.add('hidden');
+                if (treeLegend) treeLegend.classList.remove('hidden');
+                if (desc) desc.innerText = '마인드맵 뷰: 도메인별 문제 ➔ 해결책 접이식 브레인스토밍 생각나무 트리 (원형 노드 클릭 시 가지 접기/펼치기)';
+                setTimeout(() => {{
+                    initMarkmapTree();
+                }}, 60);
+            }}
+        }}
+
+        function buildMarkmapMarkdown() {{
+            const nodes = (currentGraphData && currentGraphData.nodes && currentGraphData.nodes.length > 0)
+                ? currentGraphData.nodes
+                : (currentMemories || []);
+
+            const categories = {{
+                coupon: {{ title: "🎫 쿠폰 및 결제 XML 동기화 (MGTT-25938)", items: [] }},
+                gnb: {{ title: "🧭 GNB 가이드 툴팁 & 캐시 전략 (MGTT-25184)", items: [] }},
+                image: {{ title: "📸 여행네컷 & 나노바나나2 서비스 (MGTT-25076)", items: [] }},
+                level: {{ title: "🏆 여행만렙 레벨 개편 & 챌린지 피드 (MGTT-25353)", items: [] }},
+                etc: {{ title: "🛠️ 시스템 인프라 & 공통 지식 (Core)", items: [] }}
+            }};
+
+            nodes.forEach(n => {{
+                const prob = String(n.problem || n.raw_content || '').trim();
+                const sol = String(n.solution || n.decision || '').trim();
+                const dec = n.decision || 'BRONZE';
+                const mid = String(n.id || '').replace(/^#/, '').substring(0, 8);
+                const loc = n.loc || 0;
+                const cost = n.cost || 0.0;
+                const weight = n.weight || 1.0;
+
+                const combined = (prob + " " + sol).toLowerCase();
+
+                let catKey = 'etc';
+                if (combined.includes('쿠폰') || combined.includes('coupon') || combined.includes('gmarket') || combined.includes('aplamt') || combined.includes('결제')) {{
+                    catKey = 'coupon';
+                }} else if (combined.includes('gnb') || combined.includes('툴팁') || combined.includes('guide-status') || combined.includes('guidestatus') || combined.includes('cache')) {{
+                    catKey = 'gnb';
+                }} else if (combined.includes('여행네컷') || combined.includes('fourcut') || combined.includes('aspectratio') || combined.includes('imagecreation') || combined.includes('prompt')) {{
+                    catKey = 'image';
+                }} else if (combined.includes('여행만렙') || combined.includes('챌린지') || combined.includes('challenge') || combined.includes('feed') || combined.includes('레벨')) {{
+                    catKey = 'level';
+                }}
+
+                categories[catKey].items.push({{ id: n.id, mid, prob, sol, dec, loc, cost, weight }});
+            }});
+
+            let md = `# 🌿 TierBridge Thought-Tree (${{nodes.length}} Pure Fruits)\\n`;
+            Object.values(categories).forEach(cat => {{
+                if (cat.items.length === 0) return;
+                md += `## ${{cat.title}}\\n`;
+                cat.items.forEach(item => {{
+                    const pShort = item.prob.length > 60 ? item.prob.substring(0, 60).replace(/[\\n\\r]+/g, ' ') + '...' : item.prob.replace(/[\\n\\r]+/g, ' ');
+                    const sShort = item.sol.length > 85 ? item.sol.substring(0, 85).replace(/[\\n\\r]+/g, ' ') + '...' : item.sol.replace(/[\\n\\r]+/g, ' ');
+                    md += `### 📌 #${{item.mid}} ${{pShort || '(문제 요약)'}}\\n`;
+                    md += `- 💡 **해결책**: ${{sShort || '(해결책)'}}\\n`;
+                    md += `- 🏷️ **메타**: 등급 [${{item.dec}}] | LOC: ${{item.loc}}줄 | 비용: $${{Number(item.cost).toFixed(4)}} | 가중치: ${{Number(item.weight).toFixed(2)}}x\\n`;
+                }});
+            }});
+
+            return md;
+        }}
+
+        function initMarkmapTree() {{
+            const svg = document.getElementById('markmapSvg');
+            if (!svg || !window.markmap) return;
+
+            if (!markmapTransformer) {{
+                markmapTransformer = new markmap.Transformer();
+            }}
+
+            const md = buildMarkmapMarkdown();
+            const {{ root }} = markmapTransformer.transform(md);
+
+            if (markmapInstance) {{
+                markmapInstance.setData(root);
+                markmapInstance.fit();
+            }} else {{
+                markmapInstance = markmap.Markmap.create(svg, {{
+                    duration: 350,
+                    nodeMinHeight: 20,
+                    spacingHorizontal: 80,
+                    spacingVertical: 10,
+                    paddingX: 12,
+                    autoFit: true
+                }}, root);
+            }}
+        }}
+
+        function fitMarkmapTree() {{
+            if (markmapInstance) {{
+                markmapInstance.fit();
+            }}
+        }}
+
+        function expandAllMarkmap() {{
+            if (markmapInstance && markmapInstance.state && markmapInstance.state.data) {{
+                function setFold(node, fold) {{
+                    if (node.children) {{
+                        node.children.forEach(c => setFold(c, fold));
+                    }}
+                    node.payload = {{ ...(node.payload || {{}}), fold }};
+                }}
+                setFold(markmapInstance.state.data, 0);
+                markmapInstance.renderData();
+                markmapInstance.fit();
+            }}
+        }}
+
+        function collapseAllMarkmap() {{
+            if (markmapInstance && markmapInstance.state && markmapInstance.state.data) {{
+                function setFold(node) {{
+                    if (node.children) {{
+                        node.children.forEach(c => {{
+                            c.payload = {{ ...(c.payload || {{}}), fold: 1 }};
+                            setFold(c);
+                        }});
+                    }}
+                }}
+                setFold(markmapInstance.state.data);
+                markmapInstance.renderData();
+                markmapInstance.fit();
+            }}
+        }}
+
         function openExpandedGraphModal() {{
             const modal = document.getElementById('expandedGraphModal');
             if (modal) {{
                 modal.classList.remove('hidden');
                 setTimeout(() => {{
-                    initExpandedMemoryGraph(currentGraphData);
+                    if (currentModalViewMode === 'network') {{
+                        initExpandedMemoryGraph(currentGraphData);
+                    }} else {{
+                        initMarkmapTree();
+                    }}
                 }}, 60);
             }}
         }}
