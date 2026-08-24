@@ -2,6 +2,10 @@
 
 > **Codex & ChatGPT Enterprise 크레딧을 최대 70%까지 자동 절감하고, 개발 맥락을 스스로 학습하는 자가진화형 LLM 라우팅 하네스 프록시**
 
+<p align="center">
+  <img src="docs/assets/tierbridge_architecture.png" alt="TierBridge Architecture Overview" width="100%" />
+</p>
+
 TierBridge는 에이전트 CLI(Codex 등)와 OpenAI 백엔드 사이에서 동작하는 지능형 로컬 프록시입니다. 에이전트 코드 수정 없이 투명하게 동작하며, 질문의 복잡도를 실시간으로 평가하여 **최적의 모델과 추론 레벨(Reasoning Effort)을 6단계 게이밍 랭크 티어로 자동 스왑**해 크레딧을 대폭 절약하고, 이전 문제 해결 지식을 **생각나무(Thought-Tree) 장기 기억망**으로 보존합니다.
 
 ---
