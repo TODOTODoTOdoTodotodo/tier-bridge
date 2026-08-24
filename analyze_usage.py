@@ -2362,6 +2362,13 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     // 3. 테이블 및 KPI 뷰 즉시 재렌더링
                     renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
                     
+                    // 3-1. 생각나무 마인드맵(Markmap) 즉시 0ms 재렌더링
+                    try {{
+                        initMarkmapTree();
+                    }} catch(errMarkmap) {{
+                        console.warn('Markmap refresh warning:', errMarkmap);
+                    }}
+
                     // 4. 백그라운드 동기화
                     setTimeout(fetchLiveDashboardStats, 300);
                 }} else {{
@@ -2684,7 +2691,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             initMemoryGraph(currentGraphData);
                             const expModal = document.getElementById('expandedGraphModal');
                             if (expModal && !expModal.classList.contains('hidden')) {{
-                                initExpandedMemoryGraph(currentGraphData);
+                                if (currentModalViewMode === 'network') {{
+                                    initExpandedMemoryGraph(currentGraphData);
+                                }} else {{
+                                    initMarkmapTree();
+                                }}
                             }}
                         }}
                     }}
