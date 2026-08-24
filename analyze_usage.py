@@ -2052,8 +2052,32 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     alert(`⚡ Neuralizer 소각 완료!\n- 노드 ID: ${{nodeId.substring(0,8)}}...\n- 제거된 연관 엣지 수: ${{data.deleted_edges_count || 0}}개`);
                     closeGraphNodeModal();
                     
-                    // 즉시 라이브 데이터 재조회 및 렌더링
-                    fetchLiveDashboardStats();
+                    // 1. 인메모리 데이터셋에서 즉시 필터링
+                    if (currentGraphData && currentGraphData.nodes) {{
+                        currentGraphData.nodes = currentGraphData.nodes.filter(n => n.id !== nodeId);
+                    }}
+                    if (currentGraphData && currentGraphData.edges) {{
+                        currentGraphData.edges = currentGraphData.edges.filter(e => e.from !== nodeId && e.to !== nodeId);
+                    }}
+                    if (currentMemories) {{
+                        currentMemories = currentMemories.filter(m => m.id !== nodeId);
+                    }}
+                    if (currentTopEdges) {{
+                        currentTopEdges = currentTopEdges.filter(e => e.source_id !== nodeId && e.target_id !== nodeId);
+                    }}
+
+                    // 2. 미니 그래프 및 풀스크린 캔버스 즉시 재렌더링
+                    initMemoryGraph(currentGraphData);
+                    const expModal = document.getElementById('expandedGraphModal');
+                    if (expModal && !expModal.classList.contains('hidden')) {{
+                        initExpandedMemoryGraph(currentGraphData);
+                    }}
+
+                    // 3. 테이블 및 KPI 뷰 즉시 재렌더링
+                    renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
+                    
+                    // 4. 백그라운드 실시간 동기화
+                    setTimeout(fetchLiveDashboardStats, 300);
                 }} else {{
                     alert('Neuralizer 소각 실패: 서버 오류');
                 }}
@@ -2335,10 +2359,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             currentMemories = memData.memories;
                         }}
                     }}
+                    let nodeSetChanged = false;
                     let graphRes = await fetch('http://127.0.0.1:18080/v1/dashboard/memories/graph');
                     if (graphRes.ok) {{
                         const gData = await graphRes.json();
                         if (gData.nodes) {{
+                            const oldIds = (currentGraphData.nodes || []).map(n => n.id).sort().join(',');
+                            const newIds = gData.nodes.map(n => n.id).sort().join(',');
+                            if (oldIds !== newIds) {{
+                                nodeSetChanged = true;
+                            }}
                             currentGraphData = gData;
                         }}
                     }}
@@ -2351,6 +2381,13 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     }}
                     if (currentDashboardTab === 'memory') {{
                         renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
+                        if (nodeSetChanged) {{
+                            initMemoryGraph(currentGraphData);
+                            const expModal = document.getElementById('expandedGraphModal');
+                            if (expModal && !expModal.classList.contains('hidden')) {{
+                                initExpandedMemoryGraph(currentGraphData);
+                            }}
+                        }}
                     }}
                 }} catch(me) {{ }}
             }} else {{
