@@ -535,7 +535,8 @@ async def route_harness(request: Request):
         upstream_url = f"{base_domain}/backend-api/codex/responses"
 
     # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
-    raw_prompt_text = user_prompt if is_new_user_turn else (substep_prompt or user_prompt)
+    # 지식 저장소의 문제(Problem)는 항상 사용자의 실제 원본 질문(user_prompt)을 보존
+    stored_prompt_text = user_prompt if user_prompt else (substep_prompt or raw_prompt_text)
     if unified_req.stream:
         async def stream_generator():
             accumulated_buffer = b""
@@ -567,12 +568,12 @@ async def route_harness(request: Request):
                             async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
                                 yield transpiled_chunk
                             
-                    # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적 (Zero-Drop guarantee)
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
+                    # 스트림이 모두 종료된 후 백그라운드 사용량 파싱 및 누적 (Zero-Drop guarantee, 원본 질문 저장)
+                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=stored_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
                 except Exception as e:
                     print(f"[Error] Stream routing exception: {e}")
                     # 스트림 에러 예외 발생 시에도 턴 추적 누락을 방지하기 위해 폴백 추적 실행
-                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=raw_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
+                    global_tracker.parse_and_track_from_buffer(accumulated_buffer, target_model, decision, prompt_text=stored_prompt_text, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id())
                     err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
                     yield f"data: {err_msg}\n\n".encode("utf-8")
 
@@ -589,7 +590,7 @@ async def route_harness(request: Request):
                 in_tok = usage.get("prompt_tokens", usage.get("input_tokens", 0))
                 out_tok = usage.get("completion_tokens", usage.get("output_tokens", 0))
                 if not in_tok and not out_tok:
-                    in_tok = max(100, int(len(raw_prompt_text) * 0.35))
+                    in_tok = max(100, int(len(stored_prompt_text) * 0.35))
                     out_tok = 150
                 
                 resp_text = ""
@@ -601,7 +602,7 @@ async def route_harness(request: Request):
                         resp_text = str(res_data["output_text"])
 
                 loc = global_tracker.extract_code_lines(resp_text)
-                global_tracker.track_request(target_model, decision, in_tok, out_tok, loc=loc, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id(), prompt_text=raw_prompt_text, response_text=resp_text)
+                global_tracker.track_request(target_model, decision, in_tok, out_tok, loc=loc, session_id=session_id, auth_token=enterprise_token, account_id=get_latest_enterprise_account_id(), prompt_text=stored_prompt_text, response_text=resp_text)
             return res
         except Exception as e:
             return PlainTextResponse(f"Proxy connection failed: {e}", status_code=500)
