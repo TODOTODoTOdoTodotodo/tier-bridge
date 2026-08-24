@@ -694,6 +694,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
                 <div class="flex items-center gap-2 mb-3">
                     <input type="text" id="memSearchInput" placeholder="질의어/에러문구/도메인 검색 (예: Lombok, 쿠폰, DTO, auth)..." 
+                           oninput="onMemorySearchRealtime(this.value)"
                            onkeyup="onMemorySearchInput(event)"
                            class="bg-slate-900/90 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2.5 focus:outline-none focus:border-purple-400 flex-1">
                     <button onclick="performMemorySearch()"
@@ -2514,6 +2515,13 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
             renderTopEdges(topEdges || currentTopEdges);
 
+            const searchInput = document.getElementById('memSearchInput');
+            if (searchInput && searchInput.value.trim()) {{
+                performMemorySearch(searchInput.value.trim());
+            }} else {{
+                renderDefaultRecentMemoryCards();
+            }}
+
             const sessionSelect = document.getElementById('sessionSelect');
             const targetSession = sessionSelect ? sessionSelect.value : 'ALL';
 
@@ -2548,25 +2556,17 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 else if (dec.includes('BRONZE')) badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
                 else if (dec.includes('PLATINUM')) badgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
 
-                let tagsHtml = '';
-                (m.tags || []).forEach(t => {{
-                    tagsHtml += `<span class="px-1.5 py-0.5 bg-slate-800 text-slate-300 border border-slate-700 rounded text-[10px] mr-1">#${{t}}</span>`;
-                }});
-
                 html += `
                 <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80">
                     <td class="px-4 py-3 font-mono text-purple-300 font-bold cursor-pointer" onclick="openNodeDetail('${{mid}}', event)">#${{midShort}}</td>
                     <td class="px-4 py-3 font-mono text-slate-300 text-xs" title="${{sid}}">${{sidShort}}</td>
                     <td class="px-4 py-3 text-center">
-                        <span class="px-2 py-0.5 text-xs font-semibold rounded-full border ${{badgeClass}}">${{dec}}</span>
+                        <span class="px-2.5 py-1 rounded-full text-xs font-bold border ${{badgeClass}}">${{dec}}</span>
                     </td>
-                    <td class="px-4 py-3 font-medium text-slate-200 max-w-sm truncate cursor-pointer" title="${{prob}}" onclick="openNodeDetail('${{mid}}', event)">
-                        <div class="text-xs font-semibold text-slate-200">${{prob}}</div>
-                        ${{loc > 0 ? `<div class="text-[10px] text-emerald-400 mt-0.5 font-mono">💻 LOC: ${{loc}}줄 코드 작성됨 ($${{cost.toFixed(4)}})</div>` : ''}}
-                    </td>
-                    <td class="px-4 py-3 text-slate-300 font-mono text-xs max-w-xs truncate" title="${{sol}}">${{sol}}</td>
-                    <td class="px-4 py-3">${{tagsHtml || '-'}}</td>
-                    <td class="px-4 py-3 text-right font-mono text-slate-400 whitespace-nowrap">${{timeStr}}</td>
+                    <td class="px-4 py-3 font-mono text-center text-xs ${{loc > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'}}">+${{loc}}</td>
+                    <td class="px-4 py-3 font-mono text-center text-xs text-yellow-400">$${{cost.toFixed(4)}}</td>
+                    <td class="px-4 py-3 text-xs text-slate-300 max-w-[280px] truncate cursor-pointer hover:text-purple-300" onclick="openNodeDetail('${{mid}}', event)" title="${{prob}}">${{prob}}</td>
+                    <td class="px-4 py-3 font-mono text-xs text-slate-400 text-center">${{timeStr}}</td>
                     <td class="px-4 py-3 text-center">
                         <button onclick="executeNeuralize('${{mid}}')" title="이 기억 노드만 정밀 소각"
                                 class="px-2 py-1 bg-rose-950/40 hover:bg-rose-900 border border-rose-500/40 text-rose-300 rounded-lg text-xs font-bold transition-all cursor-pointer">
@@ -2579,55 +2579,67 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             tbody.innerHTML = html;
         }}
 
+        let searchDebounceTimer = null;
+        function onMemorySearchRealtime(val) {{
+            if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {{
+                performMemorySearch(val);
+            }}, 150);
+        }}
+
         function onMemorySearchInput(event) {{
             if (event.key === 'Enter') {{
+                if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
                 performMemorySearch();
             }}
         }}
 
-        async function performMemorySearch() {{
-            const input = document.getElementById('memSearchInput');
-            if (!input) return;
-            const query = input.value.trim();
+        function renderDefaultRecentMemoryCards() {{
+            const resultsContainer = document.getElementById('memSearchResults');
+            if (!resultsContainer) return;
+            
+            const pool = (currentGraphData && currentGraphData.nodes && currentGraphData.nodes.length > 0)
+                ? currentGraphData.nodes
+                : (currentMemories || []);
+                
+            if (!pool || pool.length === 0) {{
+                resultsContainer.innerHTML = '<div class="text-center py-10 text-xs text-slate-500 font-mono">💡 검색어를 입력하여 연관 지식을 실시간 검색하세요.</div>';
+                return;
+            }}
+            
+            const topItems = pool.slice(0, 4).map(item => ({{
+                id: item.id,
+                problem: item.problem || item.label || item.title || item.raw_content || '',
+                solution: item.solution || item.decision || 'N/A',
+                raw_content: item.text || item.raw_content || '',
+                decision: item.decision || 'BRONZE',
+                session_id: item.session_id || 'sess_default',
+                score: 0.95
+            }}));
+            renderSearchResultsCards(topItems, null, "🌟 최근 축적된 순수 지식 열매 (Top Fruits)");
+        }}
+
+        function renderSearchResultsCards(searchResults, query, headerTitle) {{
             const resultsContainer = document.getElementById('memSearchResults');
             if (!resultsContainer) return;
 
-            if (!query) {{
-                resultsContainer.innerHTML = '<div class="text-center py-10 text-xs text-slate-500 font-mono">💡 검색어를 입력하고 엔터를 누르거나 [검색] 버튼을 클릭하세요.</div>';
-                return;
-            }}
-
-            resultsContainer.innerHTML = '<div class="text-center py-10 text-xs text-purple-400 font-mono animate-pulse"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 연관 기억 시맨틱 검색 중...</div>';
-
-            let searchResults = [];
-            try {{
-                let res = await fetch(`http://127.0.0.1:18080/v1/dashboard/memories/search?q=${{encodeURIComponent(query)}}`);
-                if (res.ok) {{
-                    const data = await res.json();
-                    searchResults = data.results || [];
-                }}
-            }} catch (e) {{
-                const qLower = query.toLowerCase();
-                searchResults = currentMemories.filter(m => 
-                    (m.problem && m.problem.toLowerCase().includes(qLower)) ||
-                    (m.raw_content && m.raw_content.toLowerCase().includes(qLower)) ||
-                    (m.tags && m.tags.some(t => t.toLowerCase().includes(qLower)))
-                );
-            }}
-
-            if (searchResults.length === 0) {{
-                resultsContainer.innerHTML = `<div class="text-center py-10 text-xs text-slate-500 font-mono">❌ "${{query}}" 와 일치하거나 연관된 기억이 없습니다.</div>`;
+            if (!searchResults || searchResults.length === 0) {{
+                resultsContainer.innerHTML = `<div class="text-center py-10 text-xs text-slate-500 font-mono">❌ "${{query || ''}}" 와 일치하거나 연관된 기억이 없습니다.</div>`;
                 return;
             }}
 
             let cardsHtml = '';
+            if (headerTitle) {{
+                cardsHtml += `<div class="text-[11px] font-bold text-purple-400 mb-2 flex items-center gap-1.5"><i class="fa-solid fa-sparkles"></i> ${{headerTitle}}</div>`;
+            }}
+
             searchResults.forEach((r, idx) => {{
                 const prob = (r.problem || r.raw_content || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 const sol = (r.solution || r.decision || 'N/A').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 const scorePct = r.score ? Math.round(r.score * 100) : 95;
-                const sid = r.session_id || 'sess_default';
+                const sid = String(r.session_id || 'sess_default');
                 const sidShort = sid.length > 10 ? sid.substring(0, 10) + '...' : sid;
-                const rid = (r.id || `node_${{idx+1}}`).replace(/^#/, '').trim();
+                const rid = String(r.id || `node_${{idx+1}}`).replace(/^#/, '').trim();
 
                 cardsHtml += `
                 <div class="p-3.5 rounded-xl bg-slate-800/80 border border-purple-500/30 hover:border-purple-400 transition-all shadow-md">
@@ -2640,7 +2652,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         <div class="flex items-center gap-1.5">
                             <button onclick="focusNodeInGraph('${{rid}}', event)" title="우측 생각나무에서 노드 위치로 줌인"
                                     class="px-2.5 py-1 bg-purple-600/30 hover:bg-purple-600/60 text-purple-200 border border-purple-400/40 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer">
-                                <i class="fa-solid fa-crosshairs text-purple-300"></i> 그래프 포커스
+                                <i class="fa-solid fa-crosshairs text-purple-300"></i> 포커스
                             </button>
                             <button onclick="openNodeDetail('${{rid}}', event)" title="상세 정보 및 소각 모달 열기"
                                     class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-[10px] font-semibold transition-all cursor-pointer">
@@ -2660,6 +2672,94 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 `;
             }});
             resultsContainer.innerHTML = cardsHtml;
+        }}
+
+        async function performMemorySearch(queryParam) {{
+            const input = document.getElementById('memSearchInput');
+            const query = (typeof queryParam === 'string' ? queryParam : (input ? input.value : '')).trim();
+            const resultsContainer = document.getElementById('memSearchResults');
+            if (!resultsContainer) return;
+
+            if (!query) {{
+                renderDefaultRecentMemoryCards();
+                return;
+            }}
+
+            let searchResults = [];
+            try {{
+                let res = null;
+                try {{
+                    res = await fetch(`http://127.0.0.1:18080/v1/dashboard/memories/search?q=${{encodeURIComponent(query)}}`);
+                }} catch(e1) {{
+                    try {{
+                        res = await fetch(`http://localhost:18080/v1/dashboard/memories/search?q=${{encodeURIComponent(query)}}`);
+                    }} catch(e2) {{}}
+                }}
+                if (res && res.ok) {{
+                    const data = await res.json();
+                    if (data.results && data.results.length > 0) {{
+                        searchResults = data.results;
+                    }}
+                }}
+            }} catch (e) {{}}
+
+            // 클라이언트 사이드 고속 시맨틱/키워드 다단계 검색 (0ms 즉시 폴백)
+            if (searchResults.length === 0) {{
+                const qLower = query.toLowerCase();
+                const allPool = [];
+                
+                if (currentGraphData && currentGraphData.nodes) {{
+                    currentGraphData.nodes.forEach(n => {{
+                        allPool.push({{
+                            id: n.id,
+                            problem: n.problem || n.title || n.label || '',
+                            solution: n.solution || '',
+                            raw_content: n.text || n.problem || '',
+                            decision: n.decision || 'BRONZE',
+                            session_id: n.session_id || 'sess_default',
+                            tags: n.tags || [],
+                            score: 0.90,
+                            loc: n.loc || 0
+                        }});
+                    }});
+                }}
+                if (currentMemories) {{
+                    currentMemories.forEach(m => {{
+                        if (!allPool.some(p => String(p.id).replace(/^#/, '') === String(m.id).replace(/^#/, ''))) {{
+                            allPool.push(m);
+                        }}
+                    }});
+                }}
+
+                const tokens = qLower.split(/[\\s,\\.\\-_]+/).filter(t => t.length >= 1);
+                const matched = [];
+
+                allPool.forEach(item => {{
+                    const prob = (item.problem || item.raw_content || '').toLowerCase();
+                    const sol = (item.solution || '').toLowerCase();
+                    const tags = (item.tags || []).map(t => String(t).toLowerCase()).join(' ');
+                    const fullText = `${{prob}} ${{sol}} ${{tags}}`;
+
+                    let matchCount = 0;
+                    tokens.forEach(tok => {{
+                        if (fullText.includes(tok)) matchCount++;
+                    }});
+
+                    if (matchCount > 0 || fullText.includes(qLower)) {{
+                        const matchRatio = matchCount / Math.max(1, tokens.length);
+                        const baseScore = fullText.includes(qLower) ? 0.95 : (0.65 + matchRatio * 0.30);
+                        matched.push({{
+                            ...item,
+                            score: baseScore
+                        }});
+                    }}
+                }});
+
+                matched.sort((a, b) => (b.score || 0) - (a.score || 0));
+                searchResults = matched.slice(0, 10);
+            }}
+
+            renderSearchResultsCards(searchResults, query);
         }}
 
         async function fetchLiveDashboardStats() {{
