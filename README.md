@@ -2,6 +2,10 @@
 
 > **Codex & ChatGPT Enterprise 크레딧을 최대 70%까지 자동 절감하고, 개발 맥락을 스스로 학습하는 자가진화형 LLM 라우팅 하네스 프록시**
 
+<p align="center">
+  <img src="docs/assets/tierbridge_architecture.png" alt="TierBridge Architecture Overview" width="100%" />
+</p>
+
 TierBridge는 에이전트 CLI(Codex 등)와 OpenAI 백엔드 사이에서 동작하는 지능형 로컬 프록시입니다. 에이전트 코드 수정 없이 투명하게 동작하며, 질문의 복잡도를 실시간으로 평가하여 **최적의 모델과 추론 레벨(Reasoning Effort)을 6단계 게이밍 랭크 티어로 자동 스왑**해 크레딧을 대폭 절약하고, 이전 문제 해결 지식을 **생각나무(Thought-Tree) 장기 기억망**으로 보존합니다.
 
 ---
@@ -62,12 +66,20 @@ tierbridge-log
 tierbridge-credit
 ```
 
+<p align="center">
+  <img src="docs/assets/dashboard_overview.png" alt="TierBridge Live Real-time Dashboard" width="100%" />
+</p>
+
 ---
 
 ## 🎮 주요 핵심 기능 (Core Features)
 
 ### 1. 🎯 6단계 게이밍 RPG 랭크 티어 동적 라우팅
 질문의 난이도, 변경 파일 범위, AST 복잡도를 실시간으로 판정하여 적합한 모델과 추론 강도로 자동 연결합니다:
+
+<p align="center">
+  <img src="docs/assets/routing_tier_matrix.png" alt="TierBridge 6-Tier Intelligent Routing Matrix" width="100%" />
+</p>
 
 * 🥉 **BRONZE** (`gpt-5.6-luna:low`): 단순 오타 수정, 명령어 안내, 파일 읽기/조회 스텝
 * 🥈 **SILVER** (`gpt-5.6-luna:medium`): 표준 비즈니스 로직 단위 구현, 단일 파일 리팩토링
@@ -103,9 +115,17 @@ tierbridge-credit
 * **좌측 검색 패널**: 키워드 입력 시 150ms 디바운스로 일치율(Match Score) 높은 기억을 실시간 카드로 렌더링 (검색어 미입력 시 상위 핵심 지식 열매 추천).
 * **우측 콤팩트 미니 그래프**: 자주 연결된 핵심 지식들이 유기적으로 성단을 형성하며, 카드 클릭 시 카메라가 즉시 1.5배 줌인 포커스 이동.
 
+<p align="center">
+  <img src="docs/assets/memory_semantic_search.png" alt="TierBridge Semantic Search & Mini Canvas" width="100%" />
+</p>
+
 #### 🌌🌿 전체화면 듀얼 뷰포트 (Dual Viewport)
 * **🌌 성단 네트워크 뷰 (`vis-network`)**: 물리 엔진 기반으로 가중치가 높은 핵심 허브와 연관 성단을 직관적으로 조망.
 * **🌿 생각나무 마인드맵 뷰 (`Markmap`)**: 도메인별(쿠폰, GNB 가이드, 여행네컷 등)로 지식을 Root ➔ Branch ➔ Leaf 접이식 브레인스토밍 트리로 펼쳐보며 문제와 해결책을 신속히 정독 (맥북 트랙패드 두 손가락 스크롤 줌 및 노드별 `[🔍 상세 확인]` 링크 완비).
+
+<p align="center">
+  <img src="docs/assets/memory_viewport_mindmap.png" alt="TierBridge Thought-Tree Mindmap Viewport" width="100%" />
+</p>
 
 #### ⚡ Neuralizer (기억 정밀 소각)
 * 잘못되거나 더 이상 유효하지 않은 지식을 클릭 한 번으로 **0ms 즉시 캔버스에서 소각**하고 DB(노드, 엣지, 메모리 테이블)에서 완전 영구 삭제.
@@ -118,6 +138,10 @@ tierbridge-credit
 
 ### 3. 🩹 Model Healing Factor & 무중단 핫패치
 OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가 인하 패치가 이루어지면 자동으로 감지하여 원클릭으로 반영합니다.
+
+<p align="center">
+  <img src="docs/assets/model_healing_factor.png" alt="TierBridge Model Healing Factor Cost Comparison" width="100%" />
+</p>
 
 * **신규 모델 자동 감지 배너**: 대시보드 상단에 `[ 🩹 최신 모델 핫패치 가능 (GPT-5.6 Lineup) ]` 알림 자동 트리거
 * **단가 & 절감율 대조표**: 현재 활성 모델 매핑 vs 추천 고효율 모델 단가 및 예상 절감율(예: 40% 절감) 실시간 계산
