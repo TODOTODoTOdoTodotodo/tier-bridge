@@ -185,7 +185,7 @@ OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가
 | | [dashboard_memory_integration.md](Controller/dashboard_memory_integration.md) | 2단 분할 시맨틱 검색 & 실시간 기억 카드 연동 명세 |
 | | [dashboard_neuralizer_and_compact_graph.md](Controller/dashboard_neuralizer_and_compact_graph.md) | 콤팩트 미니 그래프 & Neuralizer 정밀 소각 설계 |
 | | [memory_pruning_and_fruit_sanitization.md](Controller/memory_pruning_and_fruit_sanitization.md) | 기억 가지치기 및 34개 순수 지식 열매 보존 정책 |
-| | [enterprise_shared_memory_db_roadmap.md](Controller/enterprise_shared_memory_db_roadmap.md) | 🌐 전사 공유용 기억저장소 아키텍처 및 로드맵 검토서 |
+| | [preliminary_remote_db_extension_spec.md](Controller/preliminary_remote_db_extension_spec.md) | 🌐 원격 DB 확장 및 전사 동기화 예비 기술 명세서 (RFC) |
 | | [integration_step1_ingestion.md](Controller/integration_step1_ingestion.md) | Step 1 에피소드 자동 수집 엔지니어링 명세 |
 | | [integration_step2_recall.md](Controller/integration_step2_recall.md) | Step 2 50ms 사전 회수 샌드박스 설계 |
 | | [integration_step3_reinforcement.md](Controller/integration_step3_reinforcement.md) | Step 3 시너지 엣지 가중치 강화 엔진 설계 |

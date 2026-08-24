@@ -1,4 +1,7 @@
-# 🌐 [엔지니어링 로드맵] 로컬 퍼스트(SQLite) 기반 전사 비동기 RDB 동기화 아키텍처 검토서
+# 🌐 [예비 기술 명세서 / RFC] 원격 DB 확장 및 전사 기억 동기화 아키텍처 (Preliminary Remote DB Extension Spec)
+
+> 💡 **문서 목적 (Status: Draft / Proposed RFC)**:  
+> 본 문서는 TierBridge 기억저장소를 전사 공유 시스템으로 확장할 때 참조할 **예비 기술 명세서(Preliminary Specification)**입니다. 향후 전사 프로젝트 승인 시 즉시 구현 및 확장이 가능하도록 아키텍처, 동기화 프로토콜, 경합 해결 정책 및 체크리스트를 정의합니다.
 
 ## 1. 핵심 아키텍처 철학: 로컬 퍼스트 (Local-First Zero-Latency)
 런타임 프롬프트 인입 시마다 원격 DB를 직접 조회(Dynamic Remote Query)하면 네트워크 RTT(15~40ms)와 원격 부하로 인해 **50ms 사전 회수(Pre-fetch Recall) SLA가 위협**받을 수 있습니다.
