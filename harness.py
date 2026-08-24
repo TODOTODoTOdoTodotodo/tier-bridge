@@ -361,6 +361,9 @@ async def get_dashboard_top_edges(limit: int = 10):
             from src.tierbridge.memory_handler import MemoryHandler
         edges = MemoryHandler.get_top_weighted_edges(limit=limit)
         return {"status": "success", "total_count": len(edges), "edges": edges}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "edges": []}
+
 @app.post("/v1/dashboard/memories/neuralize/{node_id}")
 async def neuralize_dashboard_memory(node_id: str):
     """ Neuralizer: 특정 기억 노드를 안전하게 삭제하고 연결된 엣지만 정밀 소각 """
