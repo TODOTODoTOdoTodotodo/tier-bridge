@@ -146,38 +146,19 @@ class MemoryIngestionWorker:
     @classmethod
     def should_ingest(cls, decision: str, loc: int, is_first_turn: bool, prompt: str) -> bool:
         """
-        CPU 룰 기반 정밀 퀄리티 게이트 필터링 ($0.00)
+        CPU 룰 기반 기본 퀄리티 게이트 ($0.00)
         - 빈 프롬프트 또는 5자 미만 초단문 배제
-        - 서브스텝 / 중간 진행 보고 턴 노이즈 차단 ([Substep], [이전 대화 요약 등)
-        - 사용자의 실제 질의(서브스텝이 아닌 모든 프롬프트) 및 코드 작성 턴(LOC > 0)은 100% 보존
+        - [Substep]으로 시작하는 순수 내부 독백 턴만 배제 (코드 수정 턴 제외)
         """
         if not prompt or len(prompt.strip()) < 5:
             return False
 
         p_clean = prompt.strip()
-        is_substep = (
-            p_clean.startswith("[Substep]")
-            or "[이전 대화 요약" in p_clean
-            or "[대화 요약" in p_clean
-        )
-
-        # 1. 서브스텝 / 단순 진행 보고 턴은 노이즈 방어를 위해 스킵 (코드 수정한 턴 제외)
-        if is_substep and loc == 0:
+        # [Substep]으로 시작하는 순수 내부 독백 턴만 배제
+        if p_clean.startswith("[Substep]") and loc == 0:
             return False
 
-        # 2. 사용자의 실제 질문/요구사항(서브스텝이 아닌 모든 질문)은 턴 순서와 무관하게 무조건 수집
-        if not is_substep:
-            return True
-
-        # 3. 서브스텝 중이라도 실제 코드가 작성/수정된 턴(LOC > 0)은 수집
-        if loc > 0:
-            return True
-
-        # 4. 고난도 아키텍처 결정 수집
-        if decision.upper() in ("GOLD", "PLATINUM", "CHALLENGER", "SOL"):
-            return True
-
-        return False
+        return True
 
     @classmethod
     async def process_log_event(cls, event: Dict[str, Any]) -> bool:
