@@ -416,6 +416,7 @@ async def route_harness(request: Request):
 
     # Step 2: 사전 기억 회수 (Pre-fetch Recall, 50ms Strict Timeout Sandbox)
     # 사용자의 신규 턴(is_new_user_turn == True) 인입 시에만 1회 회수하여 내부 서브스텝 중복 주입 및 토큰 낭비 방지
+    recalled_context = None
     if is_new_user_turn:
         try:
             recalled_context = await MemoryPrefetcher.fetch_associated_context(user_prompt, current_session_id=session_id)
@@ -521,6 +522,12 @@ async def route_harness(request: Request):
                 final_payload["input"] = chatgpt_input
                 if instructions:
                     final_payload["instructions"] = instructions
+
+            # 사전 회수된 장기 기억 지식이 있는 경우 instructions 최상단에 투명 주입
+            if recalled_context:
+                curr_inst = final_payload.get("instructions", "")
+                if recalled_context not in curr_inst:
+                    final_payload["instructions"] = f"{recalled_context}\n\n{curr_inst}".strip()
 
             # /responses 규격의 instructions 영역에도 표준 보고서 가이드라인 투명 주입
             final_payload = SystemDirective.inject_into_payload(final_payload)
