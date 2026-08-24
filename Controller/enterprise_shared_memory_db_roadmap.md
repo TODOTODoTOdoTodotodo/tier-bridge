@@ -58,9 +58,59 @@
 
 ---
 
-## 3. 로컬 SQLite 스키마 확장 (Schema Extension)
+## 3. 원격 DB Pulling 전략 및 데이터 경합 해결 정책 (Conflict Resolution Policies)
 
-동기화 상태 추적을 위해 로컬 SQLite 테이블에 메타 컬럼을 추가합니다:
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                      경합 발생 시나리오 및 해결 정책 (Conflict Matrix)                    │
+├────────────────────────┬─────────────────────────────────────────────────────────────────┤
+│ 시나리오               │ 해결 정책 및 알고리즘                                           │
+├────────────────────────┼─────────────────────────────────────────────────────────────────┤
+│ 1. 엣지 가중치 충돌   │ 시너지 합산 공식: min(1.0 + Δlocal + Δremote, 3.0)              │
+│ 2. 노드 본문 수정 충돌 │ LWW (최신 수정 우선) + 시맨틱 포킹 (신규 서브 노드 자동 분기)    │
+│ 3. 소각 vs 참조 충돌   │ Tombstone(비석) 우선 소각 + 로컬 휴지통(Trash) 30일 보관       │
+│ 4. 태그 및 메타 충돌   │ 합집합(Union Set) 병합: Tags_local ∪ Tags_remote                │
+└────────────────────────┴─────────────────────────────────────────────────────────────────┘
+```
+
+### 3.1 ⏱️ Pulling 주기 및 네트워크 트래픽 제어 정책
+1. **Session-Start Pull (세션 진입 시 1회 즉시 실행)**:
+   * `tierbridge` 명령어로 터미널 세션 진입 시, 백그라운드 동기화 데몬이 1회 비동기 실행되어 최신 전사 지식을 로컬 SQLite로 복제.
+2. **Adaptive Idle Pull (유휴 시간 적응형 폴링)**:
+   * 개발자가 프롬프트 질의를 하지 않는 터미널 유휴 시간(Idle > 15분)에만 1회씩 경량 델타(`since={timestamp}`) 쿼리를 요청하여 작업 방해 0% 달성.
+3. **지수 백오프 (Exponential Backoff for Offline Resilience)**:
+   * 사내망/VPN 단절 시 재시도 간격을 1s ➔ 5s ➔ 30s ➔ 5m로 지연시키며, 에러 로그는 UI에 노출하지 않고 로컬에만 조용히 억제(Silent Fallback).
+
+---
+
+### 3.2 ⚔️ 데이터 경합 4대 해결 정책 (Conflict Resolution Rules)
+
+#### [정책 1] 엣지 가중치 시너지 결합 (Edge Weight Merging)
+* **문제점**: 로컬 개발자 A가 에피소드 1-2를 3회 재참조(`weight: 1.3`), 전사 다른 팀원들이 5회 재참조(`weight: 1.5`)했을 때 단순 덮어쓰기 시 어느 한쪽의 학습 이력이 유실됨.
+* **해결 공식**:
+  $$\text{Merged Weight} = \min\left(1.0 + (\text{weight}_{\text{local}} - 1.0) + (\text{weight}_{\text{remote}} - 1.0), \; 3.0\right)$$
+  *(예: 1.0 + 0.3 + 0.5 = **1.8x** ➔ 팀과 개인의 시너지가 누적 승격됨)*
+
+#### [정책 2] 노드 본문 수정 충돌 (Node Content Divergence)
+* 동일한 `global_id`를 가진 노드의 문제 해결책 본문이 양쪽에서 서로 다르게 수정된 경우:
+  1. `updated_at` 타임스탬프를 비교하여 **최신 수정본(Last-Write-Wins, LWW)**을 기본 채택.
+  2. 만약 수정 내용의 시맨틱 유사도가 70% 미만으로 완전히 새로운 해법인 경우:
+     * **시맨틱 포킹(Semantic Branching)**: 로컬 노드를 신규 UUID를 가진 대안 노드로 자동 복제 분기하고, 원본 노드와 `(weight: 1.1)` 엣지로 연결.
+
+#### [정책 3] 소각(Neuralize) vs 로컬 참조(Usage) 충돌 (Tombstone 비석 정책)
+* 전사 관리자나 팀원이 특정 노드를 중앙에서 소각(`is_deleted = true`)했으나, 로컬 개발자는 아직 해당 노드를 보존 중인 경우:
+  1. 중앙의 **Tombstone(비석) 레코드**가 항상 우선하여 로컬 SQLite에서도 노드가 자동 `DELETE` 처리됨.
+  2. 로컬 개발자의 예기치 않은 데이터 손실을 방지하기 위해, 소각 전 로컬 스냅샷을 `~/.tierbridge/trash/`에 30일간 백업 보존.
+
+#### [정책 4] 도메인 태그 병합 (Tag Set Union)
+* 전사 태그 `["MGTT-25938", "Gmarket"]`와 로컬 태그 `["Coupon_NPE", "Gmarket"]` 충돌 시:
+  * 중복을 제거한 **합집합(`Set.union`)**으로 병합 ➔ `["MGTT-25938", "Gmarket", "Coupon_NPE"]`.
+
+---
+
+## 4. 로컬 SQLite 스키마 확장 (Schema Extension)
+
+동기화 상태 및 Tombstone 추적을 위해 로컬 SQLite 테이블에 메타 컬럼을 추가합니다:
 
 ```sql
 -- 1. nodes 테이블 확장
@@ -68,6 +118,7 @@ ALTER TABLE nodes ADD COLUMN global_id TEXT;         -- 전사 공통 UUID
 ALTER TABLE nodes ADD COLUMN origin TEXT DEFAULT 'local'; -- 'local' | 'enterprise'
 ALTER TABLE nodes ADD COLUMN sync_status TEXT DEFAULT 'pending'; -- 'synced' | 'pending'
 ALTER TABLE nodes ADD COLUMN updated_at DATETIME;
+ALTER TABLE nodes ADD COLUMN is_deleted BOOLEAN DEFAULT 0;
 
 -- 2. 동기화 메타 테이블 신설
 CREATE TABLE IF NOT EXISTS sync_meta (
@@ -75,7 +126,7 @@ CREATE TABLE IF NOT EXISTS sync_meta (
     value TEXT,
     updated_at DATETIME
 );
--- 예: ('last_pull_timestamp', '2026-08-24T16:00:00')
+-- 예: ('last_pull_timestamp', '2026-08-24T16:00:00'), ('tombstone_sync_version', 'v12')
 ```
 
 ---
