@@ -8,12 +8,14 @@ from fastapi.responses import StreamingResponse, PlainTextResponse
 from dotenv import load_dotenv
 
 # TierBridge 패키지 임포트
-from tierbridge.models import UnifiedRequest
+from tierbridge.models import UnifiedRequest, Message
 from tierbridge.adapters.factory import AdapterFactory
 from tierbridge.stream_transpiler import StreamTranspiler
 from tierbridge.router import Router
 from tierbridge.auth_manager import AuthManager
 from tierbridge.usage_tracker import UsageTracker
+from tierbridge.memory_prefetcher import MemoryPrefetcher
+from tierbridge.memory_handler import MemoryHandler
 
 import logging
 
@@ -409,6 +411,15 @@ async def route_harness(request: Request):
     user_prompt, is_new_user_turn, substep_prompt = Router.extract_user_prompt_and_turn_status(unified_req)
     if not user_prompt:
         user_prompt = str(raw_body.get("instructions", "")) + str(raw_body.get("input", ""))
+
+    # Step 2: 사전 기억 회수 (Pre-fetch Recall, 50ms Strict Timeout Sandbox)
+    try:
+        recalled_context = await MemoryPrefetcher.fetch_associated_context(user_prompt, current_session_id=session_id)
+        if recalled_context:
+            if unified_req and hasattr(unified_req, "messages") and unified_req.messages:
+                unified_req.messages.insert(0, Message(role="system", content=recalled_context))
+    except Exception as e:
+        log.debug(f"[RecallHook] Memory prefetch bypassed: {e}")
 
     decision, target_model, effort = await Router.classify_request(
         unified_request=unified_req,

@@ -178,7 +178,7 @@ class MemoryHandler:
     @classmethod
     def search_associated_memories(cls, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
-        질의어 기반 연관 기억 시맨틱/키워드 검색
+        질의어 기반 연관 기억 다단계 시맨틱/키워드 랭킹 검색
         """
         if not query or not query.strip():
             return []
@@ -188,42 +188,78 @@ class MemoryHandler:
         if not db_path:
             return []
 
-        results = []
+        # 키워드 토큰화 (2글자 이상)
+        raw_keywords = re.findall(r"[\w\.\-@#]+", clean_q.lower())
+        stop_words = {"은", "는", "이", "가", "을", "를", "의", "에", "로", "으로", "에서", "하고", "하고있어", "해줘", "확인해줘", "관련", "질의"}
+        keywords = [k for k in raw_keywords if len(k) >= 2 and k not in stop_words]
+        if not keywords:
+            keywords = [k for k in raw_keywords if len(k) >= 1]
+
+        candidates = []
         try:
             conn = sqlite3.connect(db_path, timeout=2.0)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            # nodes 테이블 검색
+            # 1. nodes 테이블 전체 조회 후 인메모리 정밀 랭킹 (최대 100건)
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='nodes';")
             if cursor.fetchone():
-                cursor.execute(
-                    "SELECT id, text, timestamp FROM nodes WHERE text LIKE ? ORDER BY timestamp DESC LIMIT ?",
-                    (f"%{clean_q}%", limit)
-                )
+                cursor.execute("SELECT id, text, timestamp FROM nodes ORDER BY timestamp DESC LIMIT 100;")
                 for row in cursor.fetchall():
                     parsed = cls.parse_memory_content(row["text"] or "")
                     parsed["id"] = row["id"]
-                    parsed["score"] = 0.95
                     parsed["created_at"] = row["timestamp"] or "N/A"
-                    results.append(parsed)
+                    candidates.append(parsed)
 
-            # memories 테이블 검색
+            # 2. memories 테이블 전체 조회 후 인메모리 정밀 랭킹 (최대 100건)
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='memories';")
             if cursor.fetchone():
-                cursor.execute(
-                    "SELECT id, content, tags, created_at FROM memories WHERE content LIKE ? ORDER BY id DESC LIMIT ?",
-                    (f"%{clean_q}%", limit)
-                )
+                cursor.execute("SELECT id, content, tags, created_at FROM memories ORDER BY id DESC LIMIT 100;")
                 for row in cursor.fetchall():
                     parsed = cls.parse_memory_content(row["content"] or "")
                     parsed["id"] = row["id"]
-                    parsed["score"] = 0.95
                     parsed["created_at"] = row["created_at"] or "N/A"
-                    results.append(parsed)
+                    candidates.append(parsed)
 
             conn.close()
-            return results[:limit]
+
+            # 3. 다단계 유사도 점수 산출 및 랭킹
+            ranked = []
+            for item in candidates:
+                prob = (item.get("problem") or "").lower()
+                sol = (item.get("solution") or "").lower()
+                raw = (item.get("raw_content") or "").lower()
+                combined_text = f"{prob} {sol} {raw}"
+
+                # 전체 문장 통일치 검사
+                if clean_q.lower() in combined_text:
+                    base_score = 0.85
+                else:
+                    # 키워드 매칭 개수 기반 산출
+                    matched_count = sum(1 for kw in keywords if kw in combined_text)
+                    if matched_count == 0:
+                        continue
+                    base_score = min(0.80, (matched_count / max(1, len(keywords))) * 0.75 + 0.20)
+
+                # 퀄리티 가중치 보정
+                quality_boost = 0.0
+                if item.get("loc", 0) > 0:
+                    quality_boost += 0.15  # 실제 코드 수정 에피소드 보너스
+                if item.get("decision") in ("GOLD", "PLATINUM", "CHALLENGER", "SOL"):
+                    quality_boost += 0.10  # 고난도 아키텍처 결정 보너스
+                
+                # 서브스텝 패널티
+                if prob.startswith("[substep]"):
+                    quality_boost -= 0.30
+
+                final_score = round(min(0.99, max(0.10, base_score + quality_boost)), 4)
+                item["score"] = final_score
+                ranked.append(item)
+
+            # 점수 및 최신순 정렬
+            ranked.sort(key=lambda x: (x["score"], x.get("created_at", "")), reverse=True)
+            return ranked[:limit]
+
         except Exception as e:
             logger.debug(f"[MemoryHandler] SQLite search error: {e}")
             return []
