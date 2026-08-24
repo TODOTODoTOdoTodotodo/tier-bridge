@@ -39,7 +39,7 @@ Codex Enterprise CLI를 로컬 우회 모드(`--oss --local-provider=ollama`)로
 * **크레딧 정밀 분리 집계 (Classifier vs Main Model Credits)**: 라우팅 난이도 판단에 사용된 **분류기 크레딧 (`CLASSIFIER`)**, 실제 코드 생성 답변에 소모된 **메인 모델 크레딧 (`MAIN_MODEL`)**, 그리고 이 둘을 통합한 **전체 크레딧 (`TOTAL_CREDITS`)** 수치를 대시보드 KPI 카드 및 요약표에 구분하여 명확히 산출합니다.
 * **6단계 게이밍 RPG 랭크 티어 소모 분포 파싱 & 시각화**: `CLASSIFIER`, `BRONZE`, `SILVER`, `GOLD`, `PLATINUM`, `DIAMOND`, `CHALLENGER` 랭크 티어별 소모 비용, 토큰 비율 및 작성 LOC를 정밀하게 파싱하고 대시보드 도넛 차트 및 표에 직관적으로 시각화합니다.
 * **다운스케일링 누적 절감액 (Downscaling Savings) KPI & 수식 안내 모달**: 고비용 기본 모델(`TERRA:medium`, 턴당 ~$0.12) 대비 하네스 라우터가 단순 스텝을 경량 모델(`LUNA`)로 자동 다운스케일링하여 방어한 누적 크레딧 절감액을 산출합니다. 카드 우측의 `ℹ️` (Info) 아이콘을 통해 기준 모델, 산출 배경 및 수학적 계산 공식을 팝업 모달로 투명하게 안내합니다.
-* **실시간 델타 크레딧 인터셉터 연동 (Delta Credit Interceptor)**: OpenAI 백엔드(`https://chatgpt.com/backend-api/codex/usage`)의 실제 차감 크레딧($\Delta \text{Credit}$)을 비동기 백그라운드로 추적하여 실제 계정 과금액과 로컬 통계를 100% 일치시킵니다. *(상세 설계: [Controller/delta_credit_interceptor.md](Controller/delta_credit_interceptor.md))*
+* **실시간 델타 크레딧 인터셉터 연동 (Delta Credit Interceptor)**: OpenAI 백엔드(`https://chatgpt.com/backend-api/codex/usage`)의 실제 차감 크레딧($\Delta \text{Credit}$)을 비동기 백그라운드로 추적하여 실제 계정 과금액과 로컬 통계를 100% 일치시킵니다. *(상세 설계: [docs/model/delta_credit_interceptor.md](../model/delta_credit_interceptor.md))*
 
 ---
 
