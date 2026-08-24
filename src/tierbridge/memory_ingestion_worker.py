@@ -74,8 +74,12 @@ class MemoryIngestionWorker:
         has_nodes = cursor.fetchone() is not None
 
         if has_nodes:
+            clean_p = prompt.strip()
+            # 동일 질문의 이전 중간 턴이 있다면 삭제 후 최종 1:1 쌍으로 대체 (Single Pair Guarantee)
+            cursor.execute("DELETE FROM nodes WHERE text LIKE ?;", (f"User: {clean_p}\n%",))
+
             node_id = str(uuid.uuid4())
-            node_text = f"User: {prompt.strip()}\nAssistant: {clean_sol}"
+            node_text = f"User: {clean_p}\nAssistant: {clean_sol}"
             # 384 dims float32 = 1536 bytes
             zero_embedding = bytes(1536)
             iso_time = datetime.now(timezone.utc).isoformat()
@@ -94,11 +98,33 @@ class MemoryIngestionWorker:
             );
         """)
         tags_json = json.dumps(tags, ensure_ascii=False)
-        cursor.execute("INSERT INTO memories (content, tags) VALUES (?, ?);", (f"User: {prompt.strip()}\nAssistant: {clean_sol}", tags_json))
+        clean_p = prompt.strip()
+        cursor.execute("DELETE FROM memories WHERE content LIKE ?;", (f"User: {clean_p}\n%",))
+        cursor.execute("INSERT INTO memories (content, tags) VALUES (?, ?);", (f"User: {clean_p}\nAssistant: {clean_sol}", tags_json))
 
         conn.commit()
         conn.close()
         return True
+
+    @classmethod
+    def is_tool_call_payload(cls, text: str) -> bool:
+        """
+        응답 텍스트가 내부 쉘/도구 실행용 JSON 페이로드인지 판별 (최종 답변 선별용)
+        """
+        if not text:
+            return False
+        t = text.strip()
+        if t.startswith('{"cmd":') or t.startswith('{"name":') or t.startswith('{"tool":') or t.startswith('{"function":') or t.startswith('{"action":'):
+            return True
+        if t.startswith('{"call":') or t.startswith('{"tool_call_id":'):
+            return True
+        try:
+            obj = json.loads(t)
+            if isinstance(obj, dict) and any(k in obj for k in ("cmd", "command", "tool_calls", "function_call", "action", "yield_time_ms")):
+                return True
+        except Exception:
+            pass
+        return False
 
     @classmethod
     def format_problem_solution_episode(
@@ -176,6 +202,12 @@ class MemoryIngestionWorker:
         if not solution_text or len(solution_text.strip()) < 5:
             p_snippet = prompt.replace("\n", " ")[:30]
             print(f"➔ [MEMORY:SKIPPED] [{decision}] | prompt='{p_snippet}...' (no solution text)", flush=True)
+            return False
+
+        # 3. 중간 도구 호출(Tool Call JSON) 턴 배제 (최종 답변만 적재)
+        if cls.is_tool_call_payload(solution_text):
+            p_snippet = prompt.replace("\n", " ")[:30]
+            print(f"➔ [MEMORY:SKIPPED] [{decision}] | prompt='{p_snippet}...' (intermediate tool call)", flush=True)
             return False
 
         # 3. 순수 질문-답변 지식 에피소드 생성

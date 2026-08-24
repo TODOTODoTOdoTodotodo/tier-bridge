@@ -158,6 +158,14 @@ class TestMemoryIngestionWorker(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(called_event["solution"], "결과 코드입니다.")
             self.assertTrue(called_event["is_first_turn"])
 
+    def test_is_tool_call_payload(self):
+        """중간 도구 호출 JSON 페이로드 필터링 판별 검증"""
+        tool_json = '{"cmd":"git diff --stat","workdir":"/tmp","yield_time_ms":10000}'
+        self.assertTrue(MemoryIngestionWorker.is_tool_call_payload(tool_json))
+        
+        natural_response = "쿠폰 금액 계산 로직을 정상 복원하고 NPE 방어 코드를 적용했습니다."
+        self.assertFalse(MemoryIngestionWorker.is_tool_call_payload(natural_response))
+
 
 if __name__ == "__main__":
     unittest.main()
