@@ -160,7 +160,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             "output_tokens": r["output_tokens"],
             "total_tokens": r["total_tokens"],
             "loc": r["loc"],
-            "cost": r["cost"]
+            "cost": r["cost"],
+            "real_credit": r.get("real_credit"),
+            "credits": r.get("credits", r["cost"] / 0.20)
         })
     client_records_json = json.dumps(client_records)
 
@@ -1098,8 +1100,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         <i class="fa-solid fa-square-root-variable"></i> 정량적 산출 공식 (Mathematical Formula)
                     </div>
                     <div class="p-3 bg-slate-950 font-mono text-emerald-300 rounded-xl border border-slate-700 text-[11px] leading-relaxed space-y-1">
-                        <div>1. 가상 소모 비용 (하네스 미적용 시) = N(다운스케일 턴 수) × $0.12 (TERRA 평균 턴 비용)</div>
-                        <div>2. 실제 소모 비용 (하네스 적용 시)   = ∑(경량 모델 턴 실소모 비용)</div>
+                        <div>1. 가상 소모 비용 (하네스 미적용 시) = ∑(LUNA 턴 토큰 × TERRA 모델 단가 [$3.00/M in, $12.00/M out])</div>
+                        <div>2. 실제 소모 비용 (하네스 적용 시)   = ∑(LUNA 경량 모델 턴 실소모 비용)</div>
                         <div>3. 순수 절감액 (Saved USD)          = 가상 소모 비용 - 실제 소모 비용</div>
                         <div>4. 아낀 크레딧 (Saved Credits)      = 순수 절감액 / $0.20 (1 Credit = $0.20 USD)</div>
                     </div>
@@ -1353,17 +1355,25 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
             let mainCost = 0;
             let clfCost = 0;
-            let lunaCount = 0;
             let lunaCost = 0;
+            let lunaInTok = 0;
+            let lunaOutTok = 0;
+            let totalRealCredits = 0;
+            let hasRealCredit = false;
 
             filteredRecords.forEach(r => {{
+                if (r.real_credit !== undefined && r.real_credit !== null) {{
+                    totalRealCredits += r.real_credit;
+                    hasRealCredit = true;
+                }}
                 if (r.decision === 'CLASSIFIER') {{
                     clfCost += r.cost;
                 }} else {{
                     mainCost += r.cost;
                     if (r.decision.includes('BRONZE') || r.decision.includes('SILVER') || r.decision.includes('LUNA')) {{
                         lunaCost += r.cost;
-                        lunaCount += 1;
+                        lunaInTok += (r.input_tokens || 0);
+                        lunaOutTok += (r.output_tokens || 0);
                     }}
                 }}
             }});
@@ -1378,11 +1388,18 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const totalTok = totalIn + totalOut;
 
             const sessions = new Set(filteredRecords.map(r => r.session_id)).size;
-            const savedUsd = Math.max(0, (lunaCount * 0.12) - lunaCost);
+            const simTerraCost = (lunaInTok / 1000000.0) * 3.0 + (lunaOutTok / 1000000.0) * 12.0;
+            const savedUsd = Math.max(0, simTerraCost - lunaCost);
             const savedCredits = savedUsd / 0.20;
 
-            document.getElementById('kpiCredits').innerHTML = totalCredits.toFixed(2) + ' <span class="text-sm font-normal text-slate-400">Cr</span>';
-            document.getElementById('kpiCreditBreakdown').innerHTML = `<span class="text-indigo-300 font-bold">🤖 모델: ${{mainCredits.toFixed(2)}} Cr</span> <span class="text-slate-500">|</span> <span class="text-amber-300 font-bold">🔍 분류기: ${{clfCredits.toFixed(2)}} Cr</span>`;
+            let creditDisplayHtml = totalCredits.toFixed(2) + ' <span class="text-sm font-normal text-slate-400">Cr</span>';
+            let breakdownHtml = `<span class="text-indigo-300 font-bold">🤖 모델: ${{mainCredits.toFixed(2)}} Cr</span> <span class="text-slate-500">|</span> <span class="text-amber-300 font-bold">🔍 분류기: ${{clfCredits.toFixed(2)}} Cr</span>`;
+            if (hasRealCredit && totalRealCredits > 0) {{
+                breakdownHtml += ` <span class="text-slate-500">|</span> <span class="text-emerald-300 font-bold" title="OpenAI 프롬프트 캐싱 할인 적용 실제 차감">💳 실차감: ${{totalRealCredits.toFixed(2)}} Cr</span>`;
+            }}
+
+            document.getElementById('kpiCredits').innerHTML = creditDisplayHtml;
+            document.getElementById('kpiCreditBreakdown').innerHTML = breakdownHtml;
             document.getElementById('kpiCost').innerText = '$' + totalCost.toFixed(4);
             document.getElementById('kpiRequests').innerText = '총 ' + filteredRecords.length.toLocaleString() + '회 성사 (모델: $' + mainCost.toFixed(4) + ' / 분류기: $' + clfCost.toFixed(4) + ')';
             document.getElementById('kpiTokens').innerText = totalTok.toLocaleString();
