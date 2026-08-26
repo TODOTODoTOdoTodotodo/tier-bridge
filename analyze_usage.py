@@ -1597,6 +1597,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }}
             }}
 
+            function getRecordCredits(rec) {{
+                if (!rec) return 0.0;
+                if (rec.real_credit !== undefined && rec.real_credit !== null) {{
+                    return parseFloat(rec.real_credit);
+                }}
+                return parseFloat((rec.cost / 0.20).toFixed(4));
+            }}
+
             let chartLabels = [];
             let chartDatasets = [];
             let chartTurnMeta = [];
@@ -1610,7 +1618,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const titleTextEl = document.getElementById('timelineChartTitleText');
                 const subTextEl = document.getElementById('timelineChartSubText');
                 const iconEl = document.getElementById('timelineChartIcon');
-                if (titleTextEl) titleTextEl.innerText = '세션 턴별 정밀 소모 추이 (Session Turn Timeline)';
+                if (titleTextEl) titleTextEl.innerText = '세션 턴별 정밀 실차감 추이 (Session Turn Timeline)';
                 if (subTextEl) subTextEl.innerText = `세션 ID: ${{targetSession.length > 18 ? targetSession.substring(0, 18) + '...' : targetSession}}`;
                 if (iconEl) iconEl.className = 'fa-solid fa-clock-rotate-left text-emerald-400';
 
@@ -1632,7 +1640,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 if (sessionTurnsTableBody) {{
                     let turnsHtml = '';
                     sessionRecords.forEach((r, idx) => {{
-                        const credits = (r.cost / 0.20).toFixed(2);
+                        const credits = getRecordCredits(r).toFixed(2);
                         const timeStr = r.timestamp || r.date || 'N/A';
                         const safePrompt = (r.prompt || '(연속 서브스텝 / 툴 액션)').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
                         
@@ -1672,7 +1680,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     sessionTurnsTableBody.innerHTML = turnsHtml;
                 }}
 
-                // [지능형 턴 구성] 1턴 통합(페어링) vs 모델만 vs 원시 전체
+                // [지능형 턴 구성] 1턴 통합(페어링) vs 모델만 vs 원시 전체 (실차감 크레딧 기준)
                 let processedTurns = [];
                 if (currentSessionTurnFilter === 'merged') {{
                     let pendingClassifier = null;
@@ -1681,8 +1689,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             pendingClassifier = r;
                         }} else {{
                             const timeStr = (r.timestamp && r.timestamp.length >= 19) ? r.timestamp.substring(11, 19) : (r.date || '');
-                            const mainCredits = r.cost / 0.20;
-                            const clfCredits = pendingClassifier ? (pendingClassifier.cost / 0.20) : 0.0;
+                            const mainCredits = getRecordCredits(r);
+                            const clfCredits = pendingClassifier ? getRecordCredits(pendingClassifier) : 0.0;
                             const totalTurnCredits = mainCredits + clfCredits;
                             const mainIn = r.input_tokens || 0;
                             const mainOut = r.output_tokens || 0;
@@ -1712,6 +1720,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     }});
                     if (pendingClassifier) {{
                         const timeStr = (pendingClassifier.timestamp && pendingClassifier.timestamp.length >= 19) ? pendingClassifier.timestamp.substring(11, 19) : '';
+                        const clfCredits = getRecordCredits(pendingClassifier);
                         processedTurns.push({{
                             turnNumber: processedTurns.length + 1,
                             timeStr: timeStr,
@@ -1720,8 +1729,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             model: pendingClassifier.model || 'N/A',
                             prompt: pendingClassifier.prompt || '(분류기 턴)',
                             mainCredits: 0.0,
-                            clfCredits: parseFloat((pendingClassifier.cost / 0.20).toFixed(4)),
-                            totalCredits: parseFloat((pendingClassifier.cost / 0.20).toFixed(4)),
+                            clfCredits: parseFloat(clfCredits.toFixed(4)),
+                            totalCredits: parseFloat(clfCredits.toFixed(4)),
                             inTok: pendingClassifier.input_tokens || 0,
                             outTok: pendingClassifier.output_tokens || 0,
                             tokens: pendingClassifier.total_tokens || 0,
@@ -1731,7 +1740,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }} else if (currentSessionTurnFilter === 'model') {{
                     sessionRecords.filter(r => !r.decision.includes('CLASSIFIER')).forEach((r, idx) => {{
                         const timeStr = (r.timestamp && r.timestamp.length >= 19) ? r.timestamp.substring(11, 19) : (r.date || '');
-                        const credits = r.cost / 0.20;
+                        const credits = getRecordCredits(r);
                         processedTurns.push({{
                             turnNumber: idx + 1,
                             timeStr: timeStr,
@@ -1752,7 +1761,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     // 원시 전체 (all)
                     sessionRecords.forEach((r, idx) => {{
                         const timeStr = (r.timestamp && r.timestamp.length >= 19) ? r.timestamp.substring(11, 19) : (r.date || '');
-                        const credits = r.cost / 0.20;
+                        const credits = getRecordCredits(r);
                         processedTurns.push({{
                             turnNumber: idx + 1,
                             timeStr: timeStr,
@@ -1784,11 +1793,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     chartTurnMeta.push(pt);
                 }});
 
-                // currentMetricFocus 에 따라 인터랙티브 데이터셋 구성
+                // currentMetricFocus 에 따라 인터랙티브 데이터셋 구성 (실차감 기준)
                 if (currentMetricFocus === 'dual') {{
                     chartDatasets = [
                         {{
-                            label: '소모 크레딧 (Credits)',
+                            label: '계정 실차감 크레딧 (Cr)',
                             data: processedTurns.map(p => p.totalCredits),
                             borderColor: '#34d399',
                             backgroundColor: 'rgba(52, 211, 153, 0.12)',
@@ -1812,7 +1821,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }} else if (currentMetricFocus === 'credit') {{
                     chartDatasets = [
                         {{
-                            label: '🤖 메인 에이전트 크레딧 (Cr)',
+                            label: '🤖 메인 에이전트 실차감 (Cr)',
                             data: processedTurns.map(p => p.mainCredits),
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.15)',
@@ -1822,7 +1831,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             yAxisID: 'y'
                         }},
                         {{
-                            label: '🔍 분류기 오버헤드 (Cr)',
+                            label: '🔍 분류기 실차감 (Cr)',
                             data: processedTurns.map(p => p.clfCredits),
                             borderColor: '#f59e0b',
                             backgroundColor: 'rgba(245, 158, 11, 0.08)',
@@ -1859,7 +1868,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }} else if (currentMetricFocus === 'cumulative') {{
                     chartDatasets = [
                         {{
-                            label: '📈 누적 크레딧 (Cum Cr)',
+                            label: '📈 누적 실차감 크레딧 (Cum Cr)',
                             data: processedTurns.map(p => p.cumCredit),
                             borderColor: '#34d399',
                             backgroundColor: 'rgba(52, 211, 153, 0.2)',
@@ -1894,18 +1903,19 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
                 const dailyMap = {{}};
                 filteredRecords.forEach(r => {{
-                    if (!dailyMap[r.date]) dailyMap[r.date] = {{ cost: 0, tokens: 0, in_tok: 0, out_tok: 0 }};
+                    if (!dailyMap[r.date]) dailyMap[r.date] = {{ cost: 0, tokens: 0, in_tok: 0, out_tok: 0, credits: 0 }};
                     dailyMap[r.date].cost += r.cost;
                     dailyMap[r.date].tokens += r.total_tokens;
                     dailyMap[r.date].in_tok += r.input_tokens;
                     dailyMap[r.date].out_tok += r.output_tokens;
+                    dailyMap[r.date].credits += getRecordCredits(r);
                 }});
 
                 chartLabels = Object.keys(dailyMap).sort();
                 let cumC = 0;
                 let cumT = 0;
                 const dailyPoints = chartLabels.map(d => {{
-                    const cr = parseFloat((dailyMap[d].cost / 0.20).toFixed(2));
+                    const cr = parseFloat(dailyMap[d].credits.toFixed(2));
                     const tok = dailyMap[d].tokens;
                     cumC += cr;
                     cumT += tok;
@@ -1923,7 +1933,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 if (currentMetricFocus === 'dual') {{
                     chartDatasets = [
                         {{
-                            label: '일별 크레딧 (Cr)',
+                            label: '일별 실차감 크레딧 (Cr)',
                             data: dailyPoints.map(p => p.credits),
                             borderColor: '#34d399',
                             backgroundColor: 'rgba(52, 211, 153, 0.12)',
@@ -1947,7 +1957,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }} else if (currentMetricFocus === 'credit') {{
                     chartDatasets = [
                         {{
-                            label: '💳 일별 크레딧 (Cr)',
+                            label: '💳 일별 실차감 크레딧 (Cr)',
                             data: dailyPoints.map(p => p.credits),
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.15)',
@@ -1983,7 +1993,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }} else if (currentMetricFocus === 'cumulative') {{
                     chartDatasets = [
                         {{
-                            label: '📈 누적 크레딧 (Cum Cr)',
+                            label: '📈 누적 실차감 크레딧 (Cum Cr)',
                             data: dailyPoints.map(p => p.cumCredits),
                             borderColor: '#34d399',
                             backgroundColor: 'rgba(52, 211, 153, 0.2)',
@@ -2011,125 +2021,128 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             window.currentIsSessionSelected = isSessionSelected;
 
             if (dailyChart) {{
-                dailyChart.destroy();
-            }}
-
-            dailyChart = new Chart(document.getElementById('dailyTrendChart'), {{
-                type: 'line',
-                data: {{
-                    labels: chartLabels,
-                    datasets: chartDatasets
-                }},
-                options: {{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {{
-                        mode: 'index',
-                        intersect: false
+                dailyChart.data.labels = chartLabels;
+                dailyChart.data.datasets = chartDatasets;
+                dailyChart.options.scales.y1.display = needsDualAxis;
+                dailyChart.update('none');
+            }} else {{
+                dailyChart = new Chart(document.getElementById('dailyTrendChart'), {{
+                    type: 'line',
+                    data: {{
+                        labels: chartLabels,
+                        datasets: chartDatasets
                     }},
-                    plugins: {{
-                        legend: {{ 
-                            labels: {{ color: tickColor, font: {{ family: 'Inter', size: 11, weight: 'bold' }} }},
-                            onHover: function(e, legendItem, legend) {{
-                                const ci = legend.chart;
-                                ci.data.datasets.forEach((dataset, i) => {{
-                                    dataset._origBorderColor = dataset._origBorderColor || dataset.borderColor;
-                                    dataset._origBackgroundColor = dataset._origBackgroundColor || dataset.backgroundColor;
-                                    dataset._origBorderWidth = dataset._origBorderWidth || dataset.borderWidth;
-                                    if (i === legendItem.datasetIndex) {{
-                                        dataset.borderWidth = dataset._origBorderWidth + 1;
-                                    }} else {{
-                                        dataset.borderColor = (dataset._origBorderColor && dataset._origBorderColor.startsWith('rgba')) ? (dataset._origBorderColor.split(',').slice(0, 3).join(',') + ', 0.15)') : 'rgba(148, 163, 184, 0.15)';
-                                        dataset.backgroundColor = 'transparent';
-                                    }}
-                                }});
-                                ci.update('none');
-                            }},
-                            onLeave: function(e, legendItem, legend) {{
-                                const ci = legend.chart;
-                                ci.data.datasets.forEach((dataset) => {{
-                                    if (dataset._origBorderColor) dataset.borderColor = dataset._origBorderColor;
-                                    if (dataset._origBackgroundColor) dataset.backgroundColor = dataset._origBackgroundColor;
-                                    if (dataset._origBorderWidth) dataset.borderWidth = dataset._origBorderWidth;
-                                }});
-                                ci.update('none');
-                            }}
+                    options: {{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {{
+                            mode: 'index',
+                            intersect: false
                         }},
-                        tooltip: {{
-                            backgroundColor: isDark ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.98)',
-                            titleColor: isDark ? '#38bdf8' : '#0284c7',
-                            bodyColor: isDark ? '#e2e8f0' : '#1e293b',
-                            borderColor: isDark ? 'rgba(56, 189, 248, 0.3)' : 'rgba(203, 213, 225, 0.9)',
-                            borderWidth: 1,
-                            padding: 12,
-                            boxPadding: 6,
-                            usePointStyle: true,
-                            callbacks: {{
-                                title: function(items) {{
-                                    if (!items || items.length === 0) return '';
-                                    const idx = items[0].dataIndex;
-                                    const meta = window.currentChartTurnMeta;
-                                    if (window.currentIsSessionSelected && meta && meta[idx]) {{
-                                        const m = meta[idx];
-                                        return `🎯 Turn ${{m.turnNumber}} [${{m.timeStr || m.fullTime}}]`;
-                                    }}
-                                    return items[0].label;
+                        plugins: {{
+                            legend: {{ 
+                                labels: {{ color: tickColor, font: {{ family: 'Inter', size: 11, weight: 'bold' }} }},
+                                onHover: function(e, legendItem, legend) {{
+                                    const ci = legend.chart;
+                                    ci.data.datasets.forEach((dataset, i) => {{
+                                        dataset._origBorderColor = dataset._origBorderColor || dataset.borderColor;
+                                        dataset._origBackgroundColor = dataset._origBackgroundColor || dataset.backgroundColor;
+                                        dataset._origBorderWidth = dataset._origBorderWidth || dataset.borderWidth;
+                                        if (i === legendItem.datasetIndex) {{
+                                            dataset.borderWidth = dataset._origBorderWidth + 1;
+                                        }} else {{
+                                            dataset.borderColor = (dataset._origBorderColor && dataset._origBorderColor.startsWith('rgba')) ? (dataset._origBorderColor.split(',').slice(0, 3).join(',') + ', 0.15)') : 'rgba(148, 163, 184, 0.15)';
+                                            dataset.backgroundColor = 'transparent';
+                                        }}
+                                    }});
+                                    ci.update('none');
                                 }},
-                                afterTitle: function(items) {{
-                                    if (!items || items.length === 0) return '';
-                                    const idx = items[0].dataIndex;
-                                    const meta = window.currentChartTurnMeta;
-                                    if (window.currentIsSessionSelected && meta && meta[idx] && meta[idx].decision) {{
-                                        const m = meta[idx];
-                                        return `🤖 라우팅: [${{m.decision}}] (${{m.model}})`;
+                                onLeave: function(e, legendItem, legend) {{
+                                    const ci = legend.chart;
+                                    ci.data.datasets.forEach((dataset) => {{
+                                        if (dataset._origBorderColor) dataset.borderColor = dataset._origBorderColor;
+                                        if (dataset._origBackgroundColor) dataset.backgroundColor = dataset._origBackgroundColor;
+                                        if (dataset._origBorderWidth) dataset.borderWidth = dataset._origBorderWidth;
+                                    }});
+                                    ci.update('none');
+                                }}
+                            }},
+                            tooltip: {{
+                                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.98)',
+                                titleColor: isDark ? '#38bdf8' : '#0284c7',
+                                bodyColor: isDark ? '#e2e8f0' : '#1e293b',
+                                borderColor: isDark ? 'rgba(56, 189, 248, 0.3)' : 'rgba(203, 213, 225, 0.9)',
+                                borderWidth: 1,
+                                padding: 12,
+                                boxPadding: 6,
+                                usePointStyle: true,
+                                callbacks: {{
+                                    title: function(items) {{
+                                        if (!items || items.length === 0) return '';
+                                        const idx = items[0].dataIndex;
+                                        const meta = window.currentChartTurnMeta;
+                                        if (window.currentIsSessionSelected && meta && meta[idx]) {{
+                                            const m = meta[idx];
+                                            return `🎯 Turn ${{m.turnNumber}} [${{m.timeStr || m.fullTime}}]`;
+                                        }}
+                                        return items[0].label;
+                                    }},
+                                    afterTitle: function(items) {{
+                                        if (!items || items.length === 0) return '';
+                                        const idx = items[0].dataIndex;
+                                        const meta = window.currentChartTurnMeta;
+                                        if (window.currentIsSessionSelected && meta && meta[idx] && meta[idx].decision) {{
+                                            const m = meta[idx];
+                                            return `🤖 라우팅: [${{m.decision}}] (${{m.model}})`;
+                                        }}
+                                        return '';
+                                    }},
+                                    afterBody: function(items) {{
+                                        if (!items || items.length === 0) return '';
+                                        const idx = items[0].dataIndex;
+                                        const meta = window.currentChartTurnMeta;
+                                        if (window.currentIsSessionSelected && meta && meta[idx]) {{
+                                            const m = meta[idx];
+                                            let extra = '';
+                                            if (m.isMerged) {{
+                                                extra += `\n💳 턴 실차감: 모델 ${{m.mainCredits}} Cr + 분류기 ${{m.clfCredits}} Cr`;
+                                            }}
+                                            if (m.inTok !== undefined) {{
+                                                extra += `\n📦 토큰 세부: In ${{m.inTok.toLocaleString()}} / Out ${{m.outTok.toLocaleString()}}`;
+                                            }}
+                                            if (m.prompt) {{
+                                                const shortPrompt = m.prompt.length > 70 ? m.prompt.substring(0, 70) + '...' : m.prompt;
+                                                extra += `\n💬 프롬프트:\n"${{shortPrompt}}"`;
+                                            }}
+                                            return extra;
+                                        }}
+                                        return '';
                                     }}
-                                    return '';
-                                }},
-                                afterBody: function(items) {{
-                                    if (!items || items.length === 0) return '';
-                                    const idx = items[0].dataIndex;
-                                    const meta = window.currentChartTurnMeta;
-                                    if (window.currentIsSessionSelected && meta && meta[idx]) {{
-                                        const m = meta[idx];
-                                        let extra = '';
-                                        if (m.isMerged) {{
-                                            extra += `\n💳 턴 세부: 모델 ${{m.mainCredits}} Cr + 분류기 ${{m.clfCredits}} Cr`;
-                                        }}
-                                        if (m.inTok !== undefined) {{
-                                            extra += `\n📦 토큰 세부: In ${{m.inTok.toLocaleString()}} / Out ${{m.outTok.toLocaleString()}}`;
-                                        }}
-                                        if (m.prompt) {{
-                                            const shortPrompt = m.prompt.length > 70 ? m.prompt.substring(0, 70) + '...' : m.prompt;
-                                            extra += `\n💬 프롬프트:\n"${{shortPrompt}}"`;
-                                        }}
-                                        return extra;
-                                    }}
-                                    return '';
                                 }}
                             }}
+                        }},
+                        scales: {{
+                            x: {{ grid: {{ color: gridColor }}, ticks: {{ color: tickColor }} }},
+                            y: {{ position: 'left', grid: {{ color: gridColor }}, ticks: {{ color: '#34d399' }} }},
+                            y1: {{ display: needsDualAxis, position: 'right', grid: {{ drawOnChartArea: false }}, ticks: {{ color: '#38bdf8' }} }}
                         }}
-                    }},
-                    scales: {{
-                        x: {{ grid: {{ color: gridColor }}, ticks: {{ color: tickColor }} }},
-                        y: {{ position: 'left', grid: {{ color: gridColor }}, ticks: {{ color: '#34d399' }} }},
-                        y1: {{ display: needsDualAxis, position: 'right', grid: {{ drawOnChartArea: false }}, ticks: {{ color: '#38bdf8' }} }}
                     }}
-                }}
-            }});
+                }});
+            }}
 
             const decMap = {{}};
             filteredRecords.forEach(r => {{
                 if (!decMap[r.decision]) decMap[r.decision] = 0;
-                decMap[r.decision] += r.cost;
+                decMap[r.decision] += getRecordCredits(r);
             }});
 
             const decLabels = Object.keys(decMap).sort((a,b) => decMap[b] - decMap[a]);
-            const decCreditsData = decLabels.map(k => (decMap[k] / 0.20).toFixed(2));
+            const decCreditsData = decLabels.map(k => decMap[k].toFixed(2));
 
             if (decisionChart) {{
                 decisionChart.data.labels = decLabels;
                 decisionChart.data.datasets[0].data = decCreditsData;
-                decisionChart.update();
+                decisionChart.update('none');
             }} else {{
                 decisionChart = new Chart(document.getElementById('decisionChart'), {{
                     type: 'doughnut',
@@ -3280,6 +3293,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             renderSearchResultsCards(searchResults, query);
         }}
 
+        let lastLiveSignature = '';
+
         async function fetchLiveDashboardStats() {{
             let res = null;
             try {{
@@ -3293,26 +3308,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const badge = document.getElementById('liveSyncBadge');
             if (res && res.ok) {{
                 if (badge) {{
-                    badge.className = "flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg text-emerald-400 text-xs font-bold animate-pulse";
-                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>3s Live Connected</span>';
+                    badge.className = "flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg text-emerald-400 text-xs font-bold";
+                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>3s Live Connected</span>';
                 }}
                 const data = await res.json();
-                if (data.records && data.records.length > 0) {{
-                    allRecords = data.records;
-                    updateMonthSelector();
-                    updateSessionSelector();
-                }}
-                if (data.healing_status) {{
-                    healingData = data.healing_status;
-                    initVersionSelector();
-                }}
-                if (data.healing_history) {{
-                    healingHistoryData = data.healing_history;
-                    renderHealingHistory(data.healing_history);
-                }}
-                if (data.memory_stats) {{
-                    currentMemStats = data.memory_stats;
-                }}
+                
                 if (data.enterprise_balance) {{
                     const eb = data.enterprise_balance;
                     const limitVal = parseFloat(eb.limit) || 0;
@@ -3336,9 +3336,33 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         resetEl.innerText = `${{d.getFullYear()}}-${{String(d.getMonth()+1).padStart(2,'0')}}-${{String(d.getDate()).padStart(2,'0')}}`;
                     }}
                 }}
-                const currentMonth = document.getElementById('monthSelect').value;
-                const currentSession = document.getElementById('sessionSelect').value;
-                renderDashboard(currentMonth, currentSession);
+
+                const recordsLen = (data.records || []).length;
+                const lastRec = recordsLen > 0 ? data.records[recordsLen - 1] : {{}};
+                const newSig = `${{recordsLen}}:${{lastRec.timestamp || ''}}:${{lastRec.cost || 0}}:${{(data.healing_history || []).length}}`;
+
+                if (newSig !== lastLiveSignature) {{
+                    lastLiveSignature = newSig;
+                    if (data.records && data.records.length > 0) {{
+                        allRecords = data.records;
+                        updateMonthSelector();
+                        updateSessionSelector();
+                    }}
+                    if (data.healing_status) {{
+                        healingData = data.healing_status;
+                        initVersionSelector();
+                    }}
+                    if (data.healing_history) {{
+                        healingHistoryData = data.healing_history;
+                        renderHealingHistory(data.healing_history);
+                    }}
+                    if (data.memory_stats) {{
+                        currentMemStats = data.memory_stats;
+                    }}
+                    const currentMonth = document.getElementById('monthSelect').value;
+                    const currentSession = document.getElementById('sessionSelect').value;
+                    renderDashboard(currentMonth, currentSession);
+                }}
 
                 try {{
                     let memRes = await fetch('http://127.0.0.1:18080/v1/dashboard/memories');
