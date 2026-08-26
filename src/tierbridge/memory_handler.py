@@ -208,30 +208,44 @@ class MemoryHandler:
         """
         if not query:
             return []
-        raw_tokens = re.findall(r"[\w\.\-@#]+", query.lower())
+        clean_q = re.sub(r"[\.,;:!\?\"\'\(\)\[\]\{\}]", " ", query.lower())
+        raw_tokens = clean_q.split()
         meta_stop_words = {
             "은", "는", "이", "가", "을", "를", "의", "에", "로", "으로", "에서", "와", "과", "도",
             "하고", "하고있어", "해줘", "확인해줘", "알려줘", "기억나는거", "기억나", "있어", "있니", 
             "어떻게", "했었지", "했지", "작업", "작업한", "내용", "이력", "히스토리", "관련", "관련된", 
-            "대한", "대해", "대해서", "질의", "질문", "관련해서", "시작", "부탁해", "작업이"
+            "대한", "대해", "대해서", "질의", "질문", "관련해서", "시작", "부탁해", "작업이",
+            "확인", "수행", "요청", "지시", "진행", "경우", "코드", "수정", "테스트", "체크", "상태",
+            "기존", "현재", "다음", "필요", "있다면", "사용자", "인터랙션", "다시", "출력", "보기",
+            "검토", "분석", "처리", "적용", "동작", "위해", "통해", "참고", "조회", "호출", "파일",
+            "생각", "타당", "제시", "전달", "방안", "기준", "설정", "여부", "결과", "이후", "이전"
         }
         suffixes = [
-            "관련된", "관련해서", "관련", "에대해", "대해서", "대한", "대해",
-            "으로", "에서", "까지", "부터", "에게", "한테",
-            "은", "는", "이", "가", "을", "를", "의", "에", "로", "와", "과", "도"
+            "관련된", "관련해서", "관련", "에대해", "대해서", "대한", "대해", "보다는", "으로", "에서", 
+            "까지", "부터", "에게", "한테", "하고", "하면", "하는", "해야", "했다", "되어", "되는",
+            "이다", "이고", "이면", "이니", "인다", "은", "는", "이", "가", "을", "를", "의", "에",
+            "로", "와", "과", "도", "해", "한", "할", "된", "될", "며", "면"
         ]
         tokens = set()
         for raw in raw_tokens:
-            if raw in meta_stop_words:
+            raw_clean = raw.strip(".-_#@")
+            if not raw_clean or len(raw_clean) < 2 or raw_clean in meta_stop_words:
                 continue
-            tokens.add(raw)
-            stem = raw
+            stem = raw_clean
             for sfx in suffixes:
                 if stem.endswith(sfx) and len(stem) > len(sfx):
-                    stem = stem[:-len(sfx)]
-                    if len(stem) >= 2 and stem not in meta_stop_words:
-                        tokens.add(stem)
+                    cand = stem[:-len(sfx)]
+                    if len(cand) >= 2:
+                        stem = cand
                     break
+            
+            if stem in meta_stop_words:
+                continue
+
+            if len(stem) >= 2:
+                tokens.add(stem)
+            if len(raw_clean) >= 2:
+                tokens.add(raw_clean)
 
         return [t for t in tokens if len(t) >= 2]
 
@@ -251,8 +265,10 @@ class MemoryHandler:
         # 한국어 형태소 및 어간 토큰화
         keywords = cls.extract_search_tokens(clean_q)
         if not keywords:
-            raw_keywords = re.findall(r"[\w\.\-@#]+", clean_q.lower())
-            keywords = [k for k in raw_keywords if len(k) >= 2] or raw_keywords
+            raw_tokens = re.findall(r"[\w\.\-@#]+", clean_q.lower())
+            keywords = [k for k in raw_tokens if len(k) >= 2 and k not in {"git", "status", "diff", "log", "branch", "ls", "pwd", "clear"}]
+            if not keywords:
+                return []
 
         candidates = []
         try:
@@ -306,29 +322,35 @@ class MemoryHandler:
                 combined_text = f"{prob} {sol} {raw}"
 
                 # 전체 문장 통일치 검사
-                if clean_q.lower() in combined_text:
+                if len(clean_q) >= 15 and clean_q.lower() in combined_text:
                     base_score = 0.85
                 else:
                     # 키워드 매칭 개수 기반 산출 (어간/토큰 부분 매칭)
                     matched_count = sum(1 for kw in keywords if kw in combined_text)
                     if matched_count == 0:
                         continue
-                    # 단일 키워드 매칭이라도 고유 키워드(예: '쿠폰') 매칭 시 최소 0.70 보장
+                    
                     match_ratio = matched_count / max(1, len(keywords))
-                    base_score = min(0.85, match_ratio * 0.40 + 0.45)
+                    # 키워드가 2개 이상일 때 최소 2개 이상 일치하거나 50% 이상 일치해야 유효
+                    if len(keywords) >= 2 and matched_count < 2 and match_ratio < 0.5:
+                        continue
 
-                # 퀄리티 및 엣지 가중치 보정
+                    base_score = min(0.85, match_ratio * 0.40 + 0.35)
+
+                # [Relevance Gating]: 기본 의미 유사도가 0.55 이상일 때만 보너스 및 엣지 가중치 승격 가산
                 quality_boost = 0.0
-                if item.get("loc", 0) > 0:
-                    quality_boost += 0.15  # 실제 코드 수정 에피소드 보너스
-                if item.get("decision") in ("GOLD", "PLATINUM", "CHALLENGER", "SOL"):
-                    quality_boost += 0.10  # 고난도 아키텍처 결정 보너스
-                
-                # Step 3: edges 테이블 가중치 승격 가산
                 edge_w = edge_weights.get(str(item.get("id")), 1.0)
                 item["edge_weight"] = edge_w
-                if edge_w > 1.0:
-                    quality_boost += min(0.15, (edge_w - 1.0) * 0.02)
+
+                if base_score >= 0.55:
+                    if item.get("loc", 0) > 0:
+                        quality_boost += 0.08  # 실제 코드 수정 에피소드 보너스
+                    if item.get("decision") in ("GOLD", "PLATINUM", "CHALLENGER", "SOL"):
+                        quality_boost += 0.05  # 고난도 아키텍처 결정 보너스
+                    
+                    # Step 3: edges 테이블 가중치 승격 가산 (최대 +0.10 캡핑)
+                    if edge_w > 1.0:
+                        quality_boost += min(0.10, (edge_w - 1.0) * 0.015)
                 
                 # 서브스텝 패널티
                 if prob.startswith("[substep]"):

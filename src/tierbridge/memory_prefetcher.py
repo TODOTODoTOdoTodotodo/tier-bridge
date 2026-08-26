@@ -92,6 +92,12 @@ class MemoryPrefetcher:
         if p_clean.startswith("[Substep]") or "[이전 대화 요약" in p_clean:
             return None
 
+        # 단순 명령어 / 상태 확인 질의는 기억 회수 제외 (Bypass)
+        p_lower = p_clean.lower()
+        if any(p_lower.startswith(cmd) for cmd in ["git ", "npm ", "yarn ", "pnpm ", "mvn ", "gradle ", "docker ", "kubectl ", "ls", "pwd", "clear", "echo "]):
+            if not any(k in p_lower for k in ["기억", "이력", "히스토리", "과거", "작업한", "어떻게 했"]):
+                return None
+
         try:
             from tierbridge.memory_handler import MemoryHandler
 

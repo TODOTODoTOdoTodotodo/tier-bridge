@@ -3028,13 +3028,37 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                 records.append(item)
 
     if not records:
-        filter_msg = []
-        if target_month: filter_msg.append(f"월: {target_month}")
-        if target_date: filter_msg.append(f"일자: {target_date}")
-        if target_session: filter_msg.append(f"세션ID: {target_session}")
-        desc = ", ".join(filter_msg) if filter_msg else ""
-        print(f"⚠️  분석할 [USAGE] 로그 레코드가 없습니다. ({desc})")
-        return
+        if args.html:
+            print("ℹ️  [USAGE] 누적 로그가 아직 없습니다. 초기 대시보드를 생성하여 표시합니다.")
+            generate_html_dashboard(
+                all_raw_records=[],
+                records=[],
+                daily_stats=defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0, "credits": 0.0}),
+                monthly_stats=defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0, "credits": 0.0}),
+                session_stats=defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0, "credits": 0.0}),
+                decision_stats=defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "loc": 0, "cost": 0.0, "credits": 0.0}),
+                prompt_stats=defaultdict(lambda: {"count": 0, "in_tok": 0, "out_tok": 0, "cost": 0.0, "credits": 0.0, "prompt": "", "decision": "", "session_id": ""}),
+                total_cost=0.0,
+                total_credits=0.0,
+                total_tokens=0,
+                total_loc=0,
+                target_date=target_date,
+                target_month=target_month,
+                target_session=target_session,
+                healing_history=[]
+            )
+            if not args.no_open:
+                html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "usage_dashboard.html")
+                webbrowser.open(f"file://{html_path}")
+            return
+        else:
+            filter_msg = []
+            if target_month: filter_msg.append(f"월: {target_month}")
+            if target_date: filter_msg.append(f"일자: {target_date}")
+            if target_session: filter_msg.append(f"세션ID: {target_session}")
+            desc = ", ".join(filter_msg) if filter_msg else ""
+            print(f"⚠️  분석할 [USAGE] 로그 레코드가 없습니다. ({desc})")
+            return
 
     # 요약 집계
     total_reqs = len(records)
