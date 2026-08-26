@@ -1100,8 +1100,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         <i class="fa-solid fa-square-root-variable"></i> 정량적 산출 공식 (Mathematical Formula)
                     </div>
                     <div class="p-3 bg-slate-950 font-mono text-emerald-300 rounded-xl border border-slate-700 text-[11px] leading-relaxed space-y-1">
-                        <div>1. 가상 소모 비용 (하네스 미적용 시) = ∑(LUNA 턴 토큰 × TERRA 모델 단가 [$3.00/M in, $12.00/M out])</div>
-                        <div>2. 실제 소모 비용 (하네스 적용 시)   = ∑(LUNA 경량 모델 턴 실소모 비용)</div>
+                        <div>1. 가상 소모 비용 (하네스 미적용 시) = ∑(LUNA 턴 토큰 × TERRA 모델 단가 [$2.50/M in, $10.00/M out])</div>
+                        <div>2. 실제 소모 비용 (하네스 적용 시)   = ∑(LUNA 경량 모델 턴 실소모 비용 [$1.00/M in, $3.00/M out])</div>
                         <div>3. 순수 절감액 (Saved USD)          = 가상 소모 비용 - 실제 소모 비용</div>
                         <div>4. 아낀 크레딧 (Saved Credits)      = 순수 절감액 / $0.20 (1 Credit = $0.20 USD)</div>
                     </div>
@@ -1388,7 +1388,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const totalTok = totalIn + totalOut;
 
             const sessions = new Set(filteredRecords.map(r => r.session_id)).size;
-            const simTerraCost = (lunaInTok / 1000000.0) * 3.0 + (lunaOutTok / 1000000.0) * 12.0;
+            const simTerraCost = (lunaInTok / 1000000.0) * 2.50 + (lunaOutTok / 1000000.0) * 10.00;
             const savedUsd = Math.max(0, simTerraCost - lunaCost);
             const savedCredits = savedUsd / 0.20;
 
