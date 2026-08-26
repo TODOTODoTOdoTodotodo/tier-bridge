@@ -233,12 +233,54 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         html.light .text-slate-300 {{ color: #334155 !important; }}
         html.light .text-slate-400 {{ color: #64748b !important; }}
         
-        #memoryGraphCanvas div.vis-network:focus {{ outline: none; }}
+        #memoryGraphCanvas div.vis-network:focus, #expandedMemoryGraphCanvas div.vis-network:focus {{ outline: none; }}
+        
+        /* Markmap & Thought Tree Containers */
+        html.dark #expandedMarkmapContainer, html.dark #expandedMemoryGraphCanvas, html.dark #memoryGraphCanvas {{
+            background-color: #020617 !important;
+            border-color: #1e293b !important;
+        }}
+        html.light #expandedMarkmapContainer, html.light #expandedMemoryGraphCanvas, html.light #memoryGraphCanvas {{
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+        }}
+        
+        html.light #expandedGraphModal {{
+            background-color: rgba(248, 250, 252, 0.98) !important;
+            color: #0f172a !important;
+        }}
+        html.light #expandedGraphModal h2, html.light #expandedGraphModal h3 {{
+            color: #0f172a !important;
+        }}
+        html.light #expandedGraphModal .border-slate-800 {{
+            border-color: #e2e8f0 !important;
+        }}
+        html.light #expandedGraphModal .bg-slate-900 {{
+            background-color: #f1f5f9 !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }}
+        html.light #expandedGraphModal .text-slate-400 {{
+            color: #64748b !important;
+        }}
+        
+        /* Markmap Text & Element Theme Adaptation */
+        #markmapSvg {{ width: 100%; height: 100%; }}
         #markmapSvg text {{ font-family: 'Inter', Pretendard, -apple-system, sans-serif !important; font-weight: 500; font-size: 12px; }}
-        html.dark #markmapSvg text {{ fill: #f1f5f9 !important; }}
-        html.light #markmapSvg text {{ fill: #0f172a !important; }}
+        html.dark #markmapSvg text, html.dark #markmapSvg div, html.dark #markmapSvg span {{ fill: #f1f5f9 !important; color: #f1f5f9 !important; }}
+        html.light #markmapSvg text, html.light #markmapSvg div, html.light #markmapSvg span {{ fill: #0f172a !important; color: #0f172a !important; }}
+        html.dark #markmapSvg h1, html.dark #markmapSvg h2, html.dark #markmapSvg h3, html.dark #markmapSvg strong, html.dark #markmapSvg b {{ color: #f8fafc !important; }}
+        html.light #markmapSvg h1, html.light #markmapSvg h2, html.light #markmapSvg h3, html.light #markmapSvg strong, html.light #markmapSvg b {{ color: #0f172a !important; }}
+        html.dark #markmapSvg li, html.dark #markmapSvg p {{ color: #cbd5e1 !important; }}
+        html.light #markmapSvg li, html.light #markmapSvg p {{ color: #334155 !important; }}
+        
         #markmapSvg circle {{ cursor: pointer; stroke-width: 2px; }}
+        html.dark #markmapSvg circle {{ stroke: #a855f7 !important; fill: #0b0f19 !important; }}
+        html.light #markmapSvg circle {{ stroke: #7c3aed !important; fill: #ffffff !important; }}
+        
         #markmapSvg line, #markmapSvg path {{ stroke-linecap: round; }}
+        html.dark #markmapSvg line, html.dark #markmapSvg path {{ stroke: #818cf8 !important; }}
+        html.light #markmapSvg line, html.light #markmapSvg path {{ stroke: #6366f1 !important; }}
         
         .tb-node-link {{
             display: inline-flex;
@@ -264,13 +306,13 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             box-shadow: 0 0 8px rgba(168, 85, 247, 0.6);
         }}
         html.light .tb-node-link {{
-            background: rgba(147, 51, 234, 0.12);
-            color: #7e22ce;
-            border: 1px solid rgba(147, 51, 234, 0.35);
+            background: rgba(147, 51, 234, 0.15) !important;
+            color: #6b21a8 !important;
+            border: 1px solid rgba(147, 51, 234, 0.45) !important;
         }}
         html.light .tb-node-link:hover {{
-            background: rgba(147, 51, 234, 0.25);
-            color: #581c87;
+            background: rgba(147, 51, 234, 0.25) !important;
+            color: #4c1d95 !important;
         }}
     </style>
 </head>
@@ -1870,6 +1912,17 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             if (btnDark) btnDark.className = (theme === 'dark') ? activeBtnClass : inactiveBtnClass;
             if (btnLight) btnLight.className = (theme === 'light') ? activeBtnClass : inactiveBtnClass;
             if (btnSystem) btnSystem.className = (theme === 'system') ? activeBtnClass : inactiveBtnClass;
+
+            // 테마 변경 시 생각나무(성단 네트워크 & 마인드맵) 뷰포트 즉시 리렌더링
+            if (memoryMiniNetwork && currentGraphData) {{
+                initMemoryGraph(currentGraphData);
+            }}
+            if (memoryExpandedNetwork && currentGraphData) {{
+                initExpandedMemoryGraph(currentGraphData);
+            }}
+            if (markmapInstance) {{
+                initMarkmapTree();
+            }}
         }}
 
         function setTheme(theme) {{
@@ -1931,18 +1984,29 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             miniVisNodes = new vis.DataSet(nodes);
             miniVisEdges = new vis.DataSet(edges);
 
+            const isDark = document.documentElement.classList.contains('dark') || (!document.documentElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            const nodeFontColor = isDark ? '#f8fafc' : '#0f172a';
+            const nodeStrokeColor = isDark ? '#0b0f19' : '#ffffff';
+            const shadowColor = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.12)';
+            const edgeColor = isDark ? 'rgba(168, 85, 247, 0.4)' : 'rgba(147, 51, 234, 0.6)';
+
             const data = {{ nodes: miniVisNodes, edges: miniVisEdges }};
             const options = {{
                 nodes: {{
                     shape: 'dot',
                     scaling: {{ min: 14, max: 32, label: {{ min: 9, max: 12 }} }},
-                    font: {{ color: '#ffffff', face: 'Pretendard, -apple-system, sans-serif' }},
+                    font: {{ 
+                        color: nodeFontColor, 
+                        face: 'Pretendard, -apple-system, sans-serif',
+                        strokeWidth: isDark ? 2 : 3,
+                        strokeColor: nodeStrokeColor
+                    }},
                     borderWidth: 2,
-                    shadow: {{ enabled: true, color: 'rgba(0,0,0,0.6)', size: 6, x: 2, y: 2 }}
+                    shadow: {{ enabled: true, color: shadowColor, size: 6, x: 2, y: 2 }}
                 }},
                 edges: {{
                     arrows: {{ to: {{ enabled: true, scaleFactor: 0.5 }} }},
-                    color: {{ color: 'rgba(168, 85, 247, 0.4)', highlight: '#ec4899', hover: '#a855f7' }},
+                    color: {{ color: edgeColor, highlight: '#ec4899', hover: '#a855f7' }},
                     smooth: {{ type: 'continuous' }}
                 }},
                 physics: {{
@@ -1986,18 +2050,29 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             modalVisNodes = new vis.DataSet(nodes);
             modalVisEdges = new vis.DataSet(edges);
 
+            const isDark = document.documentElement.classList.contains('dark') || (!document.documentElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            const nodeFontColor = isDark ? '#f8fafc' : '#0f172a';
+            const nodeStrokeColor = isDark ? '#0b0f19' : '#ffffff';
+            const shadowColor = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.15)';
+            const edgeColor = isDark ? 'rgba(168, 85, 247, 0.45)' : 'rgba(147, 51, 234, 0.65)';
+
             const data = {{ nodes: modalVisNodes, edges: modalVisEdges }};
             const options = {{
                 nodes: {{
                     shape: 'dot',
                     scaling: {{ min: 18, max: 40, label: {{ min: 11, max: 14 }} }},
-                    font: {{ color: '#ffffff', face: 'Pretendard, -apple-system, sans-serif' }},
+                    font: {{ 
+                        color: nodeFontColor, 
+                        face: 'Pretendard, -apple-system, sans-serif',
+                        strokeWidth: isDark ? 2 : 3,
+                        strokeColor: nodeStrokeColor
+                    }},
                     borderWidth: 2,
-                    shadow: {{ enabled: true, color: 'rgba(0,0,0,0.6)', size: 8, x: 2, y: 2 }}
+                    shadow: {{ enabled: true, color: shadowColor, size: 8, x: 2, y: 2 }}
                 }},
                 edges: {{
                     arrows: {{ to: {{ enabled: true, scaleFactor: 0.7 }} }},
-                    color: {{ color: 'rgba(168, 85, 247, 0.45)', highlight: '#ec4899', hover: '#a855f7' }},
+                    color: {{ color: edgeColor, highlight: '#ec4899', hover: '#a855f7' }},
                     smooth: {{ type: 'continuous' }}
                 }},
                 physics: {{
