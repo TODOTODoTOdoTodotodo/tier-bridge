@@ -216,22 +216,67 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         html.dark .glass-card {{ background: rgba(15, 23, 42, 0.78); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.5); }}
         
         /* Light Theme Adaptation */
-        html.light body {{ background-color: #f8fafc; color: #0f172a; }}
-        html.light .glass-card {{ background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(12px); border: 1px solid rgba(226, 232, 240, 0.95); box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05); }}
+        html.light body {{ background-color: #f8fafc !important; color: #0f172a !important; }}
+        html.light .glass-card {{ 
+            background: rgba(255, 255, 255, 0.96) !important; 
+            border: 1px solid #e2e8f0 !important; 
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important; 
+        }}
         html.light header {{ border-color: #e2e8f0 !important; }}
-        html.light p.text-slate-400 {{ color: #64748b !important; }}
+        html.light p.text-slate-400, html.light .text-slate-400 {{ color: #64748b !important; }}
         html.light h1, html.light h2, html.light h3 {{ color: #0f172a !important; }}
-        html.light table thead tr {{ background-color: #f1f5f9 !important; border-color: #e2e8f0 !important; }}
+        html.light table thead tr, html.light tr[class*="bg-slate-800"], html.light tr[class*="bg-slate-900"] {{ 
+            background-color: #f1f5f9 !important; 
+            border-color: #e2e8f0 !important; 
+            color: #475569 !important; 
+        }}
         html.light table th {{ color: #475569 !important; }}
         html.light table tbody tr {{ border-color: #f1f5f9 !important; }}
         html.light table tbody tr:hover {{ background-color: rgba(241, 245, 249, 0.9) !important; }}
         html.light table td {{ color: #1e293b !important; }}
-        html.light input, html.light select {{ background-color: #ffffff !important; color: #0f172a !important; border-color: #cbd5e1 !important; }}
-        html.light .bg-slate-900, html.light .bg-slate-950, html.light .bg-slate-800 {{ background-color: #ffffff !important; }}
-        html.light .border-slate-800, html.light .border-slate-700 {{ border-color: #e2e8f0 !important; }}
+        
+        /* Form Controls & Fields in Light Mode */
+        html.light input[type="text"], html.light input, html.light select {{ 
+            background-color: #ffffff !important; 
+            color: #0f172a !important; 
+            border-color: #cbd5e1 !important; 
+        }}
+        html.light select option {{
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }}
+        html.light input::placeholder {{
+            color: #94a3b8 !important;
+        }}
+        
+        /* Container and Field Backgrounds in Light Mode */
+        html.light .bg-slate-900, html.light .bg-slate-950, html.light .bg-slate-800,
+        html.light [class*="bg-slate-900"], html.light [class*="bg-slate-950"], html.light [class*="bg-slate-800"] {{ 
+            background-color: #ffffff !important; 
+            border-color: #cbd5e1 !important; 
+        }}
+        
+        /* Segmented Tab Bars and Pill Containers in Light Mode */
+        html.light .inline-flex[class*="bg-slate-900"] {{
+            background-color: #e2e8f0 !important;
+            border-color: #cbd5e1 !important;
+        }}
+        html.light .border-slate-800, html.light .border-slate-700, html.light [class*="border-slate-700"] {{ 
+            border-color: #e2e8f0 !important; 
+        }}
+        html.light .divide-slate-800 > :not([hidden]) ~ :not([hidden]) {{
+            border-color: #e2e8f0 !important;
+        }}
         html.light .text-slate-100, html.light .text-slate-200 {{ color: #0f172a !important; }}
         html.light .text-slate-300 {{ color: #334155 !important; }}
-        html.light .text-slate-400 {{ color: #64748b !important; }}
+        
+        /* Memory View Card Background Gradient Adaptation */
+        html.light [class*="from-slate-900"], html.light [class*="via-slate-900"], html.light [class*="via-slate-950"], html.light [class*="to-purple-950"] {{
+            background: #ffffff !important;
+        }}
+        html.light #memSearchResults {{
+            background-color: #f8fafc !important;
+        }}
         
         #memoryGraphCanvas div.vis-network:focus, #expandedMemoryGraphCanvas div.vis-network:focus {{ outline: none; }}
         
@@ -1887,11 +1932,29 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         let currentTheme = localStorage.getItem('tb_theme') || 'dark';
 
+        function formatGraphNodesForTheme(rawNodes, isDark) {{
+            const fontColor = isDark ? '#f8fafc' : '#0f172a';
+            const strokeColor = isDark ? '#020617' : '#ffffff';
+            const strokeWidth = isDark ? 2 : 4;
+            return (rawNodes || []).map(n => {{
+                const nodeCopy = Object.assign({{}}, n);
+                nodeCopy.font = {{
+                    color: fontColor,
+                    size: 11,
+                    face: 'Pretendard, -apple-system, sans-serif',
+                    strokeWidth: strokeWidth,
+                    strokeColor: strokeColor
+                }};
+                return nodeCopy;
+            }});
+        }}
+
         function applyTheme(theme) {{
             currentTheme = theme;
             localStorage.setItem('tb_theme', theme);
             
-            const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            const isOsDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = (theme === 'dark') || (theme === 'system' && isOsDark);
             const htmlEl = document.documentElement;
             
             if (isDark) {{
@@ -1911,13 +1974,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
             if (btnDark) btnDark.className = (theme === 'dark') ? activeBtnClass : inactiveBtnClass;
             if (btnLight) btnLight.className = (theme === 'light') ? activeBtnClass : inactiveBtnClass;
-            if (btnSystem) btnSystem.className = (theme === 'system') ? activeBtnClass : inactiveBtnClass;
+            if (btnSystem) {{
+                btnSystem.className = (theme === 'system') ? activeBtnClass : inactiveBtnClass;
+                btnSystem.title = `시스템 기본 (현재 OS: ${{isOsDark ? '어두운' : '밝은'}} 모드)`;
+            }}
 
             // 테마 변경 시 생각나무(성단 네트워크 & 마인드맵) 뷰포트 즉시 리렌더링
-            if (memoryMiniNetwork && currentGraphData) {{
+            if (currentGraphData) {{
                 initMemoryGraph(currentGraphData);
-            }}
-            if (memoryExpandedNetwork && currentGraphData) {{
                 initExpandedMemoryGraph(currentGraphData);
             }}
             if (markmapInstance) {{
@@ -1981,12 +2045,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 return;
             }}
 
-            miniVisNodes = new vis.DataSet(nodes);
+            const isDark = document.documentElement.classList.contains('dark') || (!document.documentElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            const themedNodes = formatGraphNodesForTheme(nodes, isDark);
+
+            miniVisNodes = new vis.DataSet(themedNodes);
             miniVisEdges = new vis.DataSet(edges);
 
-            const isDark = document.documentElement.classList.contains('dark') || (!document.documentElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
             const nodeFontColor = isDark ? '#f8fafc' : '#0f172a';
-            const nodeStrokeColor = isDark ? '#0b0f19' : '#ffffff';
+            const nodeStrokeColor = isDark ? '#020617' : '#ffffff';
             const shadowColor = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.12)';
             const edgeColor = isDark ? 'rgba(168, 85, 247, 0.4)' : 'rgba(147, 51, 234, 0.6)';
 
@@ -1998,7 +2064,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     font: {{ 
                         color: nodeFontColor, 
                         face: 'Pretendard, -apple-system, sans-serif',
-                        strokeWidth: isDark ? 2 : 3,
+                        strokeWidth: isDark ? 2 : 4,
                         strokeColor: nodeStrokeColor
                     }},
                     borderWidth: 2,
@@ -2047,12 +2113,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 return;
             }}
 
-            modalVisNodes = new vis.DataSet(nodes);
+            const isDark = document.documentElement.classList.contains('dark') || (!document.documentElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            const themedNodes = formatGraphNodesForTheme(nodes, isDark);
+
+            modalVisNodes = new vis.DataSet(themedNodes);
             modalVisEdges = new vis.DataSet(edges);
 
-            const isDark = document.documentElement.classList.contains('dark') || (!document.documentElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
             const nodeFontColor = isDark ? '#f8fafc' : '#0f172a';
-            const nodeStrokeColor = isDark ? '#0b0f19' : '#ffffff';
+            const nodeStrokeColor = isDark ? '#020617' : '#ffffff';
             const shadowColor = isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.15)';
             const edgeColor = isDark ? 'rgba(168, 85, 247, 0.45)' : 'rgba(147, 51, 234, 0.65)';
 
@@ -2064,7 +2132,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     font: {{ 
                         color: nodeFontColor, 
                         face: 'Pretendard, -apple-system, sans-serif',
-                        strokeWidth: isDark ? 2 : 3,
+                        strokeWidth: isDark ? 2 : 4,
                         strokeColor: nodeStrokeColor
                     }},
                     borderWidth: 2,

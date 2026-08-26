@@ -448,7 +448,6 @@ class MemoryHandler:
                     "value": round(weight, 1),
                     "size": min(38, max(16, int(16 + weight * 2.2))),
                     "color": node_color,
-                    "font": {"color": "#ffffff", "size": 11, "face": "Pretendard, -apple-system, sans-serif"},
                     "decision": dec,
                     "loc": loc,
                     "cost": cost,
