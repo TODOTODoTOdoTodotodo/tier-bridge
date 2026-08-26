@@ -1392,10 +1392,12 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const savedUsd = Math.max(0, simTerraCost - lunaCost);
             const savedCredits = savedUsd / 0.20;
 
-            let creditDisplayHtml = totalCredits.toFixed(2) + ' <span class="text-sm font-normal text-slate-400">Cr</span>';
+            let displayCredits = (hasRealCredit && totalRealCredits > 0) ? totalRealCredits : totalCredits;
+            let creditDisplayHtml = displayCredits.toFixed(2) + ' <span class="text-sm font-normal text-slate-400">Cr</span>';
             let breakdownHtml = `<span class="text-indigo-300 font-bold">🤖 모델: ${{mainCredits.toFixed(2)}} Cr</span> <span class="text-slate-500">|</span> <span class="text-amber-300 font-bold">🔍 분류기: ${{clfCredits.toFixed(2)}} Cr</span>`;
             if (hasRealCredit && totalRealCredits > 0) {{
-                breakdownHtml += ` <span class="text-slate-500">|</span> <span class="text-emerald-300 font-bold" title="OpenAI 프롬프트 캐싱 할인 적용 실제 차감">💳 실차감: ${{totalRealCredits.toFixed(2)}} Cr</span>`;
+                const cacheDiscountPct = totalCredits > 0 ? Math.max(0, Math.round((1 - (totalRealCredits / totalCredits)) * 100)) : 0;
+                breakdownHtml = `<span class="text-emerald-300 font-bold" title="OpenAI 엔터프라이즈 계정 실제 차감">💳 계정 실차감</span> <span class="text-slate-500">|</span> <span class="text-slate-400" title="캐시 미적용 정가 기준">정가: ${{totalCredits.toFixed(2)}} Cr (${{cacheDiscountPct}}% 캐시할인)</span>`;
             }}
 
             document.getElementById('kpiCredits').innerHTML = creditDisplayHtml;
