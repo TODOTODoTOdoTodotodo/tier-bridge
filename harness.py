@@ -383,6 +383,8 @@ async def neuralize_dashboard_memory(node_id: str):
 
 @app.post("/v1/chat/completions")
 @app.post("/v1/v1/chat/completions")
+@app.post("/chat/completions")
+@app.post("/api/chat")
 @app.post("/v1/responses")
 @app.post("/v1/v1/responses")
 async def route_harness(request: Request):

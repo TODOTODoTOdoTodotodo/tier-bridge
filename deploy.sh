@@ -58,6 +58,11 @@ if os.path.exists(dev_log):
 " 2>/dev/null || true
 fi
 
+# 신규 설치 사용자용 초기 harness.log 보장 (초기 대시보드 및 로그 파일 즉시 활성화)
+if [ ! -f "$LIVE_DIR/harness.log" ] || [ ! -s "$LIVE_DIR/harness.log" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [sid: init] ➔ [USAGE: BRONZE] (gpt-5.6-luna) | input=0 output=0 tokens | real_credit=0.0000 | balance=0.00 | loc=0 lines | cost=\$0.000000 USD" > "$LIVE_DIR/harness.log"
+fi
+
 # 2-2. 기억저장소(memory.db) TierBridge 런타임($HOME/.tierbridge/memory.db) 일원화 및 자동 마이그레이션
 TIERBRIDGE_MEM_DB="$HOME/.tierbridge/memory.db"
 if [ ! -f "$TIERBRIDGE_MEM_DB" ]; then
