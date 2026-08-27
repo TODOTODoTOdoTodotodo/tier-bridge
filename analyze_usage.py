@@ -145,6 +145,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     if not version_options_html:
         version_options_html = '<option value="v1.0.0" selected>v1.0.0 - Standard Baseline (Active)</option>'
 
+    try:
+        try:
+            from tierbridge.version import get_version_info
+        except ImportError:
+            from src.tierbridge.version import get_version_info
+        app_version_tag = get_version_info().get("tag", "v0.1.1")
+    except Exception:
+        app_version_tag = "v0.1.1"
+
     # Client-side JavaScript 처리를 위한 원본 JSON 데이터 구성
     client_records = []
     for r in all_raw_records:
@@ -370,8 +379,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <span class="p-2.5 bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-xl">
                     <i class="fa-solid fa-chart-line text-xl"></i>
                 </span>
-                <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-sky-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
-                    TierBridge Dashboard
+                <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-sky-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent flex items-center gap-2.5">
+                    <span>TierBridge Dashboard</span>
+                    <span id="appVersionBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold align-middle shadow-sm">{app_version_tag}</span>
                 </h1>
             </div>
             <p class="text-slate-400 text-sm pl-12">
@@ -3425,7 +3435,6 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 livePollIntervalTimer = null;
             }}
 
-            const badgeText = document.getElementById('liveSyncBadgeText');
             const badge = document.getElementById('liveSyncBadge');
             const toggleIcon = document.getElementById('pollToggleIcon');
             const customInput = document.getElementById('customPollInput');
@@ -3441,16 +3450,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }});
 
             if (sec > 0) {{
-                if (badgeText) badgeText.innerText = `${{sec}}s Live`;
                 if (badge) {{
                     badge.className = "flex items-center gap-1.5 bg-emerald-950/70 border border-emerald-500/50 px-2.5 py-1 rounded-lg text-emerald-400 text-xs font-bold cursor-pointer hover:bg-emerald-900/60 transition-all";
+                    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span id="liveSyncBadgeText">${{sec}}s Live</span><i class="fa-solid fa-chevron-down text-[10px] text-emerald-400/70 ml-0.5"></i>`;
                 }}
                 if (toggleIcon) toggleIcon.className = "fa-solid fa-pause text-xs text-slate-400 hover:text-amber-300";
                 livePollIntervalTimer = setInterval(fetchLiveDashboardStats, sec * 1000);
             }} else {{
-                if (badgeText) badgeText.innerText = `수동 갱신`;
                 if (badge) {{
                     badge.className = "flex items-center gap-1.5 bg-slate-800/80 border border-slate-600 px-2.5 py-1 rounded-lg text-slate-400 text-xs font-bold cursor-pointer hover:bg-slate-700/60 transition-all";
+                    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-500"></span><span id="liveSyncBadgeText">수동 갱신</span><i class="fa-solid fa-chevron-down text-[10px] text-slate-400/70 ml-0.5"></i>`;
                 }}
                 if (toggleIcon) toggleIcon.className = "fa-solid fa-play text-xs text-emerald-400 hover:text-emerald-300";
             }}
@@ -3552,7 +3561,17 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }} catch(e2) {{ }}
             }}
 
+            const badge = document.getElementById('liveSyncBadge');
             if (res && res.ok) {{
+                if (badge) {{
+                    if (currentPollIntervalSeconds > 0) {{
+                        badge.className = "flex items-center gap-1.5 bg-emerald-950/70 border border-emerald-500/50 px-2.5 py-1 rounded-lg text-emerald-400 text-xs font-bold cursor-pointer hover:bg-emerald-900/60 transition-all";
+                        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span id="liveSyncBadgeText">${{currentPollIntervalSeconds}}s Live</span><i class="fa-solid fa-chevron-down text-[10px] text-emerald-400/70 ml-0.5"></i>`;
+                    }} else {{
+                        badge.className = "flex items-center gap-1.5 bg-slate-800/80 border border-slate-600 px-2.5 py-1 rounded-lg text-slate-400 text-xs font-bold cursor-pointer hover:bg-slate-700/60 transition-all";
+                        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-500"></span><span id="liveSyncBadgeText">수동 갱신</span><i class="fa-solid fa-chevron-down text-[10px] text-slate-400/70 ml-0.5"></i>`;
+                    }}
+                }}
                 const data = await res.json();
                 
                 if (data.git_status) {{
@@ -3671,10 +3690,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     }}
                 }} catch(me) {{ }}
             }} else {{
-                const badge = document.getElementById('liveSyncBadge');
                 if (badge) {{
-                    badge.className = "flex items-center gap-2 bg-rose-950/60 border border-rose-500/40 px-3 py-1.5 rounded-xl shadow-lg text-rose-400 text-xs font-bold";
-                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span><span>Live Disconnected</span>';
+                    badge.className = "flex items-center gap-1.5 bg-rose-950/80 border border-rose-500/60 px-2.5 py-1 rounded-lg text-rose-400 text-xs font-bold cursor-pointer hover:bg-rose-900/60 transition-all";
+                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400 animate-ping"></span><span id="liveSyncBadgeText">Disconnected</span><i class="fa-solid fa-chevron-down text-[10px] text-rose-400/70 ml-0.5"></i>';
                 }}
             }}
         }}

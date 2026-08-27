@@ -297,7 +297,17 @@ async def get_dashboard_stats():
     except Exception:
         git_sync_data = {"is_git": False, "needs_pull": False, "behind_count": 0, "pending_commits": []}
 
+    try:
+        try:
+            from tierbridge.version import get_version_info
+        except ImportError:
+            from src.tierbridge.version import get_version_info
+        app_version_tag = get_version_info().get("tag", "v0.1.1")
+    except Exception:
+        app_version_tag = "v0.1.1"
+
     return {
+        "app_version": app_version_tag,
         "records": records,
         "healing_status": HealingEngine.get_healing_status(),
         "healing_history": list(reversed(healing_history)),
@@ -305,6 +315,18 @@ async def get_dashboard_stats():
         "memory_stats": mem_stats,
         "git_status": git_sync_data
     }
+
+@app.get("/v1/version")
+async def get_app_version():
+    """ TierBridge 시스템 버전 정보 반환 """
+    try:
+        try:
+            from tierbridge.version import get_version_info
+        except ImportError:
+            from src.tierbridge.version import get_version_info
+        return get_version_info()
+    except Exception:
+        return {"version": "0.1.1", "tag": "v0.1.1", "name": "TierBridge Core", "release_date": "2026-08-27"}
 
 # ==========================================
 # GiyEOK (SUB-MEMORY) DASHBOARD APIS
