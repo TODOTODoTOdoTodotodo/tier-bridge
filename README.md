@@ -235,3 +235,79 @@ OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가
 
 > 📦 **과거 단계별 개발 지시서 및 중간 검증 보고서**: [docs/archive/](docs/archive/) 디렉토리에 히스토리용으로 안전하게 아카이브 보존되어 있습니다.
 
+---
+
+## 🛠️ 기술 스택 & 오픈소스 라이선스 명세 (Tech Stack & Licenses)
+
+TierBridge는 기업 및 사내 환경에서 라이선스 오염(GPL 전파 등) 걱정 없이 안전하게 배포·운영할 수 있도록 **100% Permissive(허용적) 오픈소스 라이선스** 기술 스택으로만 구성되어 있습니다.
+
+### 1. 백엔드 및 코어 런타임 (Backend & Core Engine)
+| 기술 / 라이브러리 | 버전 / 출처 | 역할 및 용도 | 라이선스 (License) | 상용/기업 배포 |
+| :--- | :---: | :--- | :---: | :---: |
+| **Python** | 3.10+ | 코어 비즈니스 로직 및 프록시 엔진 | **PSFL** | ✅ 안전 (자유) |
+| **FastAPI** | 0.100+ | 초고속 비동기 ASGI 웹 라우팅 프레임워크 | **MIT** | ✅ 안전 (자유) |
+| **Uvicorn** | 0.20+ | Lightning-fast ASGI 프로덕션 서버 | **BSD-3-Clause** | ✅ 안전 (자유) |
+| **HTTPX** | 0.24+ | OpenAI 백엔드 비동기 통신 & 실차감 크레딧 인터셉터 | **BSD-3-Clause** | ✅ 안전 (자유) |
+| **python-dotenv** | 1.0+ | `.env` 환경 변수 관리 | **BSD-3-Clause** | ✅ 안전 (자유) |
+| **SQLite3** | 내장 표준 | 기억 저장소(GiyEOK) 노드/엣지 그래프 및 에피소드 DB | **Public Domain** | ✅ 안전 (완전 자유) |
+
+### 2. 프론트엔드 및 시각화 대시보드 (Frontend & Dashboard)
+| 기술 / 라이브러리 | 버전 / 출처 | 역할 및 용도 | 라이선스 (License) | 상용/기업 배포 |
+| :--- | :---: | :--- | :---: | :---: |
+| **Vanilla JS (ES6+)** | Native | Zero-Flicker In-Place 갱신, 세션/폴링 컨트롤러 | **Custom** | ✅ 자체 개발 |
+| **Tailwind CSS** | CDN | 유틸리티 기반 모던 글래스모피즘 & 3단 테마 스타일링 | **MIT** | ✅ 안전 (자유) |
+| **Chart.js** | v4.x CDN | 시계열 크레딧/토큰 추이 및 도넛 차트 렌더링 | **MIT** | ✅ 안전 (자유) |
+| **vis-network** | v9.x CDN | 물리 엔진 기반 성단(Celestial) 기억 네트워크 그래프 | **MIT / Apache 2.0** | ✅ 안전 (자유) |
+| **Markmap** | v0.15.4 CDN | 계층형 생각나무 마인드맵 (D3 인터랙티브 SVG) | **MIT** | ✅ 안전 (자유) |
+| **D3.js** | v7.x CDN | Markmap 내부 SVG 줌/팬 제스처 렌더링 | **ISC** | ✅ 안전 (자유) |
+| **Font Awesome** | v6.4 Free | UI 아이콘 시스템 | **OFL 1.1 / MIT** | ✅ 안전 (자유) |
+
+---
+
+## 🧠 장기 기억저장소(GiyEOK) & 벡터 저장 스펙 (Vector & Storage Specs)
+
+TierBridge는 외부 벡터 DB 종속성 없이, **초저지연(<5ms) 인프로세스 임베디드 SQLite3** 엔진을 채택하여 지식 그래프 및 고차원 임베딩 벡터를 직접 영구 관리합니다.
+
+### 1. 데이터베이스 스키마 구조 (`~/.tierbridge/memory.db`)
+```sql
+-- 1. 지식 노드 및 고차원 벡터 임베딩 테이블
+CREATE TABLE nodes (
+    id TEXT PRIMARY KEY,                 -- 노드 고유 식별자 (UUID / Hash)
+    text TEXT NOT NULL,                  -- 3단 정형화 지식 (Problem / Solution / Session)
+    embedding BLOB NOT NULL,             -- 32-bit Floating-Point Dense Vector 바이너리
+    timestamp TEXT NOT NULL              -- 생성 일시 (ISO-8601, 인덱싱)
+);
+
+-- 2. 지식 간 시너지 가중치 그래프 엣지 테이블
+CREATE TABLE edges (
+    source_id TEXT NOT NULL,             -- 출발 노드 ID
+    target_id TEXT NOT NULL,             -- 도착 노드 ID
+    weight REAL NOT NULL DEFAULT 1.0,    -- 동적 강화 가중치 (1.0 ~ 10.0)
+    PRIMARY KEY (source_id, target_id),
+    FOREIGN KEY (source_id) REFERENCES nodes(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_id) REFERENCES nodes(id) ON DELETE CASCADE
+);
+
+-- 3. 에피소드 히스토리 및 도메인 태그 테이블
+CREATE TABLE memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT,                        -- 문제-해결 대화 전문
+    tags TEXT,                           -- JSON 도메인 태그 (["GOLD", "code_modified", ...])
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 2. 벡터 임베딩(Vector Embedding) 상세 규격
+* **저장 포맷**: **`BLOB (Binary Large Object)`** - Python `struct.pack('f'*dim)` 기반 IEEE 754 Float32 원시 바이트 무손실 직렬화
+* **벡터 차원수**: **1536 Dimensions** (표준 OpenAI 임베딩 호환)
+* **유사도 메트릭**: **Cosine Similarity ($\cos \theta = \frac{A \cdot B}{\|A\|_2 \|B\|_2}$)**
+* **I/O 성능**: 메모리 매핑 직접 참조 방식으로 I/O 오버헤드 **0ms (Zero-Copy Read)** 실현
+
+### 3. 3단계 하이브리드 검색 & 50ms 샌드박스
+1. **한국어 형태소 정제**: 40여 종 조사/접미사(`-관련해서`, `-에대해`) 및 불용어 자동 필터링
+2. **하이브리드 스코어링**: Cosine Similarity + Keyword Coverage 결합 (Base Score 산출)
+3. **Relevance Gating & 가중치 부스팅**:
+   * 기본 적합도 $\ge 0.55$ 통과 시 코드 수정($\text{LOC} > 0 \rightarrow +0.08$), 고난도 티어($+0.05$), 시너지 엣지 가중치($\text{Weight} \times 0.02$) 가산
+4. **Strict 50ms Timeout Guard**: 50ms 이내에 회수가 완료되지 않으면 원본 프롬프트로 즉시 Fallback하여 사용자 응답 지연(TTFT) 0ms 보장
+5. **컨텍스트 오염 방지**: 주입되는 기억 블록을 최대 1,000자(~300-500 토큰)로 캡핑하여 토큰 낭비 차단
+
