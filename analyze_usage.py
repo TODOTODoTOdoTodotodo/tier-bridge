@@ -370,8 +370,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <span class="p-2.5 bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-xl">
                     <i class="fa-solid fa-chart-line text-xl"></i>
                 </span>
-                <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-sky-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
-                    TierBridge Dashboard
+                <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-sky-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent flex items-center gap-2.5">
+                    <span>TierBridge Dashboard</span>
+                    <span id="appVersionBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold align-middle shadow-sm">v0.1.1</span>
                 </h1>
             </div>
             <p class="text-slate-400 text-sm pl-12">

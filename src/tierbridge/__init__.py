@@ -1,3 +1,4 @@
+from tierbridge.version import __version__, get_version_info
 from tierbridge.models import UnifiedRequest, Message
 from tierbridge.adapters.factory import AdapterFactory
 from tierbridge.stream_transpiler import StreamTranspiler

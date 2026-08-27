@@ -5,7 +5,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [1.2.0] - 2026-08-24 (Step 4: Thought-Tree Dual Viewport, Neuralizer & Full Documentation Hub)
+## [0.1.1] - 2026-08-27 (Official Baseline Release: Real Credits, Zero-Flicker UX, Git Sync & Polling Control)
+
+### 🌟 Added
+* **🏷️ System Versioning (`v0.1.1`)**:
+  * TierBridge 공식 릴리즈 버전 관리 체계(`VERSION`, `src/tierbridge/version.py`, `GET /v1/version`) 구축 및 대시보드 타이틀 뱃지 연동.
+* **🔄 Configurable Live Polling (기본 5초 & `localStorage` 영구 기억)**:
+  * 실시간 대시보드 갱신 주기를 `3초`, `5초`, `10초`, `30초`, `수동(중지)`, `직접 입력`으로 세분화하고 새로고침 후에도 유지되도록 구현.
+  * 즉시 새로고침(`[🔄]`) 및 일시정지(`[⏸️ / ▶️]`) 원클릭 퀵 컨트롤 툴바 탑재.
+* **📦 Git Sync & Pull Status Detection (`git_sync_checker.py`)**:
+  * 백그라운드 3분 캐싱 기반 원격 저장소(`origin`) 상태 자동 감지.
+  * 신규 커밋 대기 시 `[🟡 N개 Pull 필요]` 뱃지 표시 및 커밋 목록/`git pull && ./deploy.sh` 원클릭 복사 모달 제공.
+* **💳 OpenAI Enterprise Real Deducted Credits (`real_credit`) Integration**:
+  * 프롬프트 캐싱(50~80% 절감)이 반영된 계정 실차감 크레딧을 메인 KPI, 시계열 선형 차트, 1턴 페어링, 도넛 차트 및 테이블 전체에 일원화.
+* **📈 Zero-Flicker Chart & 1-Turn Pairing UX**:
+  * `[분류기 + 모델]`을 1턴으로 지능형 묶음 처리하여 지그재그 파동 제거 및 진행 중 단독 분류기 레코드의 우측 토큰 선 곤두박질 원천 차단.
+  * In-Place 데이터 갱신 및 Diffing으로 3초 폴링 시 Canvas 파괴 깜빡거림 100% 제거.
+  * `[✨ 듀얼 뷰]`, `[💳 크레딧만]`, `[📦 토큰만]`, `[📈 누적 추이]` 원클릭 지표 스위처 및 범례 호버 스포트라이트 제공.
+* **☀️ Complete Light & System Theme Optimization**:
+  * 성단 네트워크 노드 텍스트의 라이트 모드 가독성(진한 블랙 + 4px 화이트 외곽선) 보정 및 탭/필드/헤더 전 영역 라이트 테마 전환.
+
+---
+
+## [0.1.0] - 2026-08-24 (Step 4: Thought-Tree Dual Viewport, Neuralizer & Full Documentation Hub)
 
 ### 🌟 Added
 * **🌌🌿 Dual Viewport (성단 네트워크 ↔ 생각나무 마인드맵)**:
