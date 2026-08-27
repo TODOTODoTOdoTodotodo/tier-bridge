@@ -145,6 +145,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     if not version_options_html:
         version_options_html = '<option value="v1.0.0" selected>v1.0.0 - Standard Baseline (Active)</option>'
 
+    try:
+        try:
+            from tierbridge.version import get_version_info
+        except ImportError:
+            from src.tierbridge.version import get_version_info
+        app_version_tag = get_version_info().get("tag", "v0.1.1")
+    except Exception:
+        app_version_tag = "v0.1.1"
+
     # Client-side JavaScript 처리를 위한 원본 JSON 데이터 구성
     client_records = []
     for r in all_raw_records:
@@ -372,7 +381,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 </span>
                 <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-sky-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent flex items-center gap-2.5">
                     <span>TierBridge Dashboard</span>
-                    <span id="appVersionBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold align-middle shadow-sm">v0.1.1</span>
+                    <span id="appVersionBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold align-middle shadow-sm">{app_version_tag}</span>
                 </h1>
             </div>
             <p class="text-slate-400 text-sm pl-12">

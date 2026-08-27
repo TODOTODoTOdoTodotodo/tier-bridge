@@ -297,8 +297,17 @@ async def get_dashboard_stats():
     except Exception:
         git_sync_data = {"is_git": False, "needs_pull": False, "behind_count": 0, "pending_commits": []}
 
+    try:
+        try:
+            from tierbridge.version import get_version_info
+        except ImportError:
+            from src.tierbridge.version import get_version_info
+        app_version_tag = get_version_info().get("tag", "v0.1.1")
+    except Exception:
+        app_version_tag = "v0.1.1"
+
     return {
-        "app_version": "v0.1.1",
+        "app_version": app_version_tag,
         "records": records,
         "healing_status": HealingEngine.get_healing_status(),
         "healing_history": list(reversed(healing_history)),

@@ -125,7 +125,28 @@ else
     echo "⚠️ [배포 경고] 헬스체크 응답 대기 중입니다. 로그를 확인하세요: $LIVE_DIR/harness.log"
 fi
 
-# 7. Shell Alias (~/.zshrc, ~/.bashrc) 자동 등록 및 업데이트
+# 7. Global CLI Executables (~/.local/bin) & Shell Alias 등록
+mkdir -p "$HOME/.local/bin"
+
+cat << 'EOF' > "$HOME/.local/bin/tierbridge-dash"
+#!/usr/bin/env bash
+LIVE_DIR="$HOME/.tierbridge/live"
+PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$LIVE_DIR/analyze_usage.py" "$LIVE_DIR/harness.log" --html "$@"
+EOF
+chmod +x "$HOME/.local/bin/tierbridge-dash"
+
+cat << 'EOF' > "$HOME/.local/bin/tierbridge-log"
+#!/usr/bin/env bash
+tail -f "$HOME/.tierbridge/live/harness.log" "$@"
+EOF
+chmod +x "$HOME/.local/bin/tierbridge-log"
+
+cat << 'EOF' > "$HOME/.local/bin/tierbridge"
+#!/usr/bin/env bash
+source "$HOME/.tierbridge/live/run_harness.sh" "$@"
+EOF
+chmod +x "$HOME/.local/bin/tierbridge"
+
 setup_alias() {
     local shell_rc="$1"
     if [ -f "$shell_rc" ]; then
@@ -143,4 +164,4 @@ setup_alias() {
 
 setup_alias "$HOME/.zshrc"
 setup_alias "$HOME/.bashrc"
-echo "💡 어디서든 'tierbridge'로 세션 연결, 'tierbridge-log'로 로그 모니터링이 가능합니다!"
+echo "💡 어디서든 'tierbridge-dash', 'tierbridge', 'tierbridge-log' 명령어를 바로 실행할 수 있습니다!"
