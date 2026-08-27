@@ -123,13 +123,38 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         selected_attr = 'selected' if target_month == m else ''
         month_options_html += f'<option value="{m}" {selected_attr}>{m}</option>'
 
-    # 동적 세션 선택 드롭다운 옵션 구성
-    available_sessions = sorted(list(set(r["session_id"] for r in all_raw_records if r["session_id"] and r["session_id"] != "N/A")))
-    session_options_html = '<option value="ALL" ' + ('selected' if not target_session else '') + '>전체 세션 (All Sessions)</option>'
-    for s in available_sessions:
-        s_short = s[:8] if len(s) > 8 else s
-        selected_attr = 'selected' if target_session == s else ''
-        session_options_html += f'<option value="{s}" {selected_attr}>{s} ({s_short})</option>'
+    # 동적 세션 선택 드롭다운 옵션 구성 (최근 활동 시간 내림차순 정렬)
+    session_map = {}
+    for r in all_raw_records:
+        sid = r.get("session_id")
+        if not sid or sid == "N/A":
+            continue
+        if sid not in session_map:
+            session_map[sid] = {"id": sid, "last_dt": r.get("datetime"), "count": 0, "credit": 0.0}
+        session_map[sid]["count"] += 1
+        rc = r.get("real_credit")
+        if rc is not None:
+            session_map[sid]["credit"] += float(rc)
+        else:
+            session_map[sid]["credit"] += float(r.get("cost", 0)) / 0.20
+        if r.get("datetime") and (session_map[sid]["last_dt"] is None or r.get("datetime") > session_map[sid]["last_dt"]):
+            session_map[sid]["last_dt"] = r.get("datetime")
+    
+    sorted_sessions = sorted(session_map.values(), key=lambda x: x["last_dt"] or datetime.min, reverse=True)
+    
+    session_options_html = '<option value="ALL" ' + ('selected' if not target_session or target_session == 'ALL' else '') + '>🌐 전체 세션 (All Sessions)</option>'
+    if sorted_sessions:
+        session_options_html += '<option value="LATEST" ' + ('selected' if target_session == 'LATEST' else '') + '>🔥 최신 활성 세션 (Current Active)</option>'
+    
+    for idx, s in enumerate(sorted_sessions):
+        sid = s["id"]
+        s_short = sid[:8] if len(sid) > 8 else sid
+        time_str = s["last_dt"].strftime("%m-%d %H:%M") if s["last_dt"] else "N/A"
+        is_latest = (idx == 0)
+        prefix = "🔥 [최신] " if is_latest else ""
+        label = f"{prefix}{time_str} | {s_short} ({s['count']}턴 · {s['credit']:.2f} Cr)"
+        selected_attr = 'selected' if target_session == sid else ''
+        session_options_html += f'<option value="{sid}" {selected_attr}>{label}</option>'
 
     # 동적 모델 버전 선택 드롭다운 옵션 구성
     all_versions = healing_status.get("all_versions", [])
@@ -425,7 +450,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <i class="fa-solid fa-network-wired text-purple-400 text-sm"></i>
                 <span class="text-xs font-semibold text-slate-300">세션:</span>
                 <select id="sessionSelect" onchange="onFilterChange()" 
-                        class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer max-w-[170px] truncate">
+                        class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer max-w-[240px] md:max-w-[320px] truncate">
                     {session_options_html}
                 </select>
             </div>
@@ -1430,18 +1455,58 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             if (!select) return;
             const currentVal = select.value || 'ALL';
             
-            const sessions = Array.from(new Set(allRecords.map(r => r.session_id).filter(s => s && s !== 'N/A'))).sort();
-            
-            select.innerHTML = '<option value="ALL">전체 세션 (All Sessions)</option>';
-            sessions.forEach(s => {{
-                const opt = document.createElement('option');
-                opt.value = s;
-                const sShort = s.length > 8 ? s.substring(0, 8) : s;
-                opt.text = `${{s}} (${{sShort}})`;
-                if (s === currentVal) opt.selected = true;
-                select.appendChild(opt);
+            // Map session stats
+            const sessionMap = {{}};
+            allRecords.forEach(r => {{
+                const sid = r.session_id;
+                if (!sid || sid === 'N/A') return;
+                if (!sessionMap[sid]) {{
+                    sessionMap[sid] = {{
+                        id: sid,
+                        lastTime: r.timestamp || '',
+                        count: 0,
+                        credit: 0
+                    }};
+                }}
+                sessionMap[sid].count += 1;
+                const cr = (r.real_credit !== undefined && r.real_credit !== null && !isNaN(r.real_credit)) ? parseFloat(r.real_credit) : ((r.cost || 0) / 0.20);
+                sessionMap[sid].credit += cr;
+                if (r.timestamp && (!sessionMap[sid].lastTime || r.timestamp > sessionMap[sid].lastTime)) {{
+                    sessionMap[sid].lastTime = r.timestamp;
+                }}
             }});
-            if (currentVal === 'ALL') select.value = 'ALL';
+
+            // Sort by most recent activity descending
+            const sortedSessions = Object.values(sessionMap).sort((a, b) => {{
+                return (b.lastTime || '').localeCompare(a.lastTime || '');
+            }});
+
+            let html = '<option value="ALL">🌐 전체 세션 (All Sessions)</option>';
+            if (sortedSessions.length > 0) {{
+                html += '<option value="LATEST">🔥 최신 활성 세션 (Current Active)</option>';
+            }}
+
+            sortedSessions.forEach((s, idx) => {{
+                const sShort = s.id.length > 8 ? s.id.substring(0, 8) : s.id;
+                const timeLabel = s.lastTime ? s.lastTime.substring(5, 16) : 'N/A'; // MM-DD HH:mm
+                const isLatest = idx === 0;
+                const prefix = isLatest ? '🔥 [최신] ' : '';
+                const label = `${{prefix}}${{timeLabel}} | ${{sShort}} (${{s.count}}턴 · ${{s.credit.toFixed(2)}} Cr)`;
+                const isSelected = (s.id === currentVal);
+                html += `<option value="${{s.id}}" ${{isSelected ? 'selected' : ''}}>${{label}}</option>`;
+            }});
+
+            select.innerHTML = html;
+            if (currentVal === 'ALL' || currentVal === 'LATEST') select.value = currentVal;
+        }}
+
+        function selectSessionFilter(sid) {{
+            const select = document.getElementById('sessionSelect');
+            if (select) {{
+                select.value = sid;
+                onFilterChange();
+                window.scrollTo({{ top: 0, behavior: 'smooth' }});
+            }}
         }}
 
         function initVersionSelector() {{
@@ -1631,7 +1696,21 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
 
             if (targetSession && targetSession !== 'ALL') {{
-                filteredRecords = filteredRecords.filter(r => r.session_id === targetSession || r.session_id.includes(targetSession));
+                if (targetSession === 'LATEST') {{
+                    let latestSid = null;
+                    let maxTime = '';
+                    allRecords.forEach(r => {{
+                        if (r.session_id && r.session_id !== 'N/A' && r.timestamp && r.timestamp > maxTime) {{
+                            maxTime = r.timestamp;
+                            latestSid = r.session_id;
+                        }}
+                    }});
+                    if (latestSid) {{
+                        filteredRecords = filteredRecords.filter(r => r.session_id === latestSid);
+                    }}
+                }} else {{
+                    filteredRecords = filteredRecords.filter(r => r.session_id === targetSession || r.session_id.includes(targetSession));
+                }}
             }}
 
             if (filteredRecords.length === 0) {{
@@ -2331,7 +2410,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 tableHtml += `
                 <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/80" data-session-id="${{sidFull}}" data-session-short="${{sidShort}}">
                     <td class="px-4 py-3 text-slate-400 font-mono text-sm font-bold">${{idx + 1}}</td>
-                    <td class="px-4 py-3 font-mono text-xs text-sky-400" title="${{sidFull}}">${{sidShort}}</td>
+                    <td class="px-4 py-3 font-mono text-xs"><button onclick="selectSessionFilter('${{sidFull}}')" class="text-sky-400 hover:text-sky-200 hover:underline cursor-pointer flex items-center gap-1 font-bold" title="${{sidFull}} 세션 필터 적용"><i class="fa-solid fa-filter text-[10px] opacity-70"></i>${{sidShort}}</button></td>
                     <td class="px-4 py-3 text-slate-200 font-medium max-w-md truncate" title="${{safePrompt}}">${{safePrompt}}</td>
                     <td class="px-4 py-3 text-right text-slate-300">${{p.count.toLocaleString()}}회</td>
                     <td class="px-4 py-3 text-right text-sky-400 font-mono">${{p.tokens.toLocaleString()}}</td>
