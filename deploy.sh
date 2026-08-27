@@ -18,6 +18,7 @@ echo "🌐 라이브 런타임 경로: $LIVE_DIR"
 # 1. 라이브 디렉토리 생성
 mkdir -p "$LIVE_DIR"
 mkdir -p "$HOME/.tierbridge"
+echo "$DEV_DIR" > "$HOME/.tierbridge/source_repo.path"
 
 # 2. 소스코드 동기화 & 로그 마이그레이션
 echo "📦 소스코드 핫-동기화 진행 중..."
@@ -106,7 +107,7 @@ fi
 
 # 5. 라이브 런타임에서 하네스 백그라운드 가동 (PYTHONPATH=src 설정 & --log-level warning 적용, append 모드 >>)
 echo "⚡ 라이브 하네스 프록시 서버 가동 중 (Port: $PORT, LogLevel: WARNING)..."
-MEMORY_DB_PATH="$TIERBRIDGE_MEM_DB" PYTHONPATH="$LIVE_DIR/src:$PYTHONPATH" nohup .venv/bin/python -m uvicorn harness:app --host 0.0.0.0 --port $PORT --log-level warning >> "$LIVE_DIR/harness.log" 2>&1 &
+TIERBRIDGE_DEV_DIR="$DEV_DIR" MEMORY_DB_PATH="$TIERBRIDGE_MEM_DB" PYTHONPATH="$LIVE_DIR/src:$PYTHONPATH" nohup .venv/bin/python -m uvicorn harness:app --host 0.0.0.0 --port $PORT --log-level warning >> "$LIVE_DIR/harness.log" 2>&1 &
 NEW_PID=$!
 echo "$NEW_PID" > "$PID_FILE"
 
