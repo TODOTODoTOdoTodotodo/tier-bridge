@@ -430,10 +430,66 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 </select>
             </div>
 
-            <!-- 3s Live Sync Badge -->
-            <div id="liveSyncBadge" class="flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg text-emerald-400 text-xs font-bold animate-pulse">
-                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <span>3s Live</span>
+            <!-- Git Pull / Version Sync Badge -->
+            <div id="gitStatusBadge" class="hidden md:flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/60 px-2.5 py-1.5 rounded-xl text-slate-400 text-xs font-mono cursor-pointer hover:bg-slate-700/60 transition-all" onclick="openGitPullModal()" title="Git 원격 동기화 상태 확인">
+                <i class="fa-solid fa-code-pull-request text-indigo-400"></i>
+                <span id="gitStatusText">Git Checking...</span>
+            </div>
+
+            <!-- Interactive Live Sync Control Toolbar -->
+            <div class="relative inline-flex items-center bg-slate-800/90 border border-emerald-500/40 rounded-xl shadow-lg p-0.5 gap-1">
+                <!-- Manual Refresh Button -->
+                <button onclick="triggerManualRefresh()" id="manualRefreshBtn" title="지금 즉시 데이터 갱신"
+                        class="p-1.5 px-2 hover:bg-slate-700/80 rounded-lg text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer">
+                    <i id="manualRefreshIcon" class="fa-solid fa-rotate-right text-xs"></i>
+                </button>
+                <!-- Live Polling Badge / Dropdown Trigger -->
+                <div id="liveSyncBadge" onclick="togglePollDropdown(event)" 
+                     class="flex items-center gap-1.5 bg-emerald-950/70 border border-emerald-500/50 px-2.5 py-1 rounded-lg text-emerald-400 text-xs font-bold cursor-pointer hover:bg-emerald-900/60 transition-all">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="liveSyncBadgeText">5s Live</span>
+                    <i class="fa-solid fa-chevron-down text-[10px] text-emerald-400/70 ml-0.5"></i>
+                </div>
+                <!-- Pause/Play Quick Toggle -->
+                <button onclick="toggleLivePolling()" id="pollToggleBtn" title="자동 갱신 일시정지 / 재개"
+                        class="p-1.5 px-2 hover:bg-slate-700/80 rounded-lg text-slate-400 hover:text-amber-300 transition-all cursor-pointer">
+                    <i id="pollToggleIcon" class="fa-solid fa-pause text-xs"></i>
+                </button>
+
+                <!-- Polling Interval Dropdown Popover -->
+                <div id="pollIntervalDropdown" class="hidden absolute top-full right-0 mt-2 z-50 w-56 p-2 rounded-2xl bg-slate-900/95 border border-slate-700 shadow-2xl backdrop-blur-xl text-xs space-y-1">
+                    <div class="px-2.5 py-1.5 font-bold text-slate-300 border-b border-slate-800 flex items-center justify-between">
+                        <span>⏱️ 자동 갱신 주기</span>
+                        <span class="text-[10px] text-slate-500 font-mono">localStorage 저장</span>
+                    </div>
+                    <button onclick="setPollInterval(3)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-slate-200">
+                        <span>⚡ 3초 (고속 동기화)</span>
+                        <span id="pollCheck3" class="text-emerald-400 text-xs font-bold hidden">✓</span>
+                    </button>
+                    <button onclick="setPollInterval(5)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-slate-200">
+                        <span>🎯 5초 (기본 권장)</span>
+                        <span id="pollCheck5" class="text-emerald-400 text-xs font-bold hidden">✓</span>
+                    </button>
+                    <button onclick="setPollInterval(10)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-slate-200">
+                        <span>🌱 10초 (저부하 모드)</span>
+                        <span id="pollCheck10" class="text-emerald-400 text-xs font-bold hidden">✓</span>
+                    </button>
+                    <button onclick="setPollInterval(30)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-slate-200">
+                        <span>🌙 30초 (백그라운드)</span>
+                        <span id="pollCheck30" class="text-emerald-400 text-xs font-bold hidden">✓</span>
+                    </button>
+                    <button onclick="setPollInterval(0)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-amber-300">
+                        <span>⏸️ 수동 갱신 (중지)</span>
+                        <span id="pollCheck0" class="text-amber-400 text-xs font-bold hidden">✓</span>
+                    </button>
+                    <div class="pt-1.5 mt-1 border-t border-slate-800 px-1 flex items-center gap-1.5">
+                        <span class="text-[11px] text-slate-400 whitespace-nowrap">직접 입력:</span>
+                        <input id="customPollInput" type="number" min="1" max="3600" placeholder="초"
+                               class="w-14 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-center font-mono text-emerald-400 text-xs focus:outline-none focus:border-emerald-500"
+                               onkeydown="if(event.key==='Enter') applyCustomPollInterval()">
+                        <button onclick="applyCustomPollInterval()" class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-bold">적용</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Healing Factor Demo Sample Test Button -->
@@ -1087,6 +1143,60 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 💡 맥북 트랙패드 두 손가락 스크롤 / 핀치 줌 / 툴바 🔍 버튼 완벽 지원
             </div>
         </div>
+    <!-- Git Pull / Update Available Modal -->
+    <div id="gitPullModal" class="hidden fixed inset-0 z-[70] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-card max-w-lg w-full p-6 rounded-3xl border border-amber-500/40 shadow-2xl relative bg-slate-900/95 max-h-[85vh] overflow-y-auto">
+            <button onclick="closeGitPullModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-lg cursor-pointer">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-4 pr-8">
+                <span class="p-2.5 bg-amber-500/20 border border-amber-500/40 text-amber-400 rounded-2xl text-xl">
+                    <i class="fa-solid fa-code-pull-request"></i>
+                </span>
+                <div>
+                    <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                        Git 원격 저장소 동기화 상태
+                    </h3>
+                    <p class="text-xs text-slate-400">
+                        브랜치: <span id="gitModalBranch" class="font-mono text-indigo-300 font-bold">main</span> | 상태: <span id="gitModalBehind" class="font-mono text-amber-400 font-bold">-</span>
+                    </p>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <div class="text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
+                        <span>📦 대기 중인 원격 커밋 내역</span>
+                        <span class="text-[10px] text-slate-500 font-mono">origin tracking</span>
+                    </div>
+                    <ul id="gitModalCommitsList" class="space-y-1.5 max-h-48 overflow-y-auto p-1 bg-slate-950/60 rounded-xl border border-slate-800">
+                        <!-- Populated dynamically via JS -->
+                    </ul>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/80 rounded-2xl border border-indigo-500/30">
+                    <div class="text-xs font-semibold text-indigo-300 mb-1.5 flex items-center justify-between">
+                        <span>🚀 업데이트 & 핫-재배포 명령어</span>
+                        <button id="copyGitCmdBtn" onclick="copyGitPullCommand()" 
+                                class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow transition-all flex items-center gap-1 cursor-pointer">
+                            <i class="fa-solid fa-copy"></i> 복사
+                        </button>
+                    </div>
+                    <div class="p-2.5 bg-slate-900 rounded-xl border border-slate-800 font-mono text-xs text-emerald-400 select-all">
+                        git pull && ./deploy.sh
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-2">
+                        💡 터미널에서 위 명령어를 실행하면 최신 소스코드를 가져와 즉시 라이브 프록시에 무중단 핫-배포합니다.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-4 mt-4 border-t border-slate-800">
+                <button onclick="closeGitPullModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition-all cursor-pointer">
+                    닫기
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Graph Node Inspector Modal (With Neuralizer Wipe Button) -->
@@ -1718,25 +1828,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             pendingClassifier = null;
                         }}
                     }});
-                    if (pendingClassifier) {{
-                        const timeStr = (pendingClassifier.timestamp && pendingClassifier.timestamp.length >= 19) ? pendingClassifier.timestamp.substring(11, 19) : '';
-                        const clfCredits = getRecordCredits(pendingClassifier);
-                        processedTurns.push({{
-                            turnNumber: processedTurns.length + 1,
-                            timeStr: timeStr,
-                            fullTime: pendingClassifier.timestamp || 'N/A',
-                            decision: pendingClassifier.decision,
-                            model: pendingClassifier.model || 'N/A',
-                            prompt: pendingClassifier.prompt || '(분류기 턴)',
-                            mainCredits: 0.0,
-                            clfCredits: parseFloat(clfCredits.toFixed(4)),
-                            totalCredits: parseFloat(clfCredits.toFixed(4)),
-                            inTok: pendingClassifier.input_tokens || 0,
-                            outTok: pendingClassifier.output_tokens || 0,
-                            tokens: pendingClassifier.total_tokens || 0,
-                            isMerged: false
-                        }});
-                    }}
+                    // Note: In 'merged' mode, any in-flight pendingClassifier waiting for the main model response
+                    // is not pushed as an isolated incomplete turn, completely preventing the rightmost token plunge.
                 }} else if (currentSessionTurnFilter === 'model') {{
                     sessionRecords.filter(r => !r.decision.includes('CLASSIFIER')).forEach((r, idx) => {{
                         const timeStr = (r.timestamp && r.timestamp.length >= 19) ? r.timestamp.substring(11, 19) : (r.date || '');
@@ -3293,6 +3386,160 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             renderSearchResultsCards(searchResults, query);
         }}
 
+        let livePollIntervalTimer = null;
+        let currentPollIntervalSeconds = 5; // default 5초
+
+        function initPollInterval() {{
+            const saved = localStorage.getItem('tierbridge_poll_interval');
+            if (saved !== null && saved !== undefined) {{
+                const parsed = parseInt(saved, 10);
+                if (!isNaN(parsed) && parsed >= 0) {{
+                    currentPollIntervalSeconds = parsed;
+                }}
+            }} else {{
+                currentPollIntervalSeconds = 5;
+            }}
+            applyPollInterval(currentPollIntervalSeconds, false);
+        }}
+
+        function setPollInterval(sec) {{
+            currentPollIntervalSeconds = parseInt(sec, 10);
+            if (isNaN(currentPollIntervalSeconds) || currentPollIntervalSeconds < 0) currentPollIntervalSeconds = 5;
+            localStorage.setItem('tierbridge_poll_interval', currentPollIntervalSeconds);
+            applyPollInterval(currentPollIntervalSeconds, true);
+            closePollDropdown();
+        }}
+
+        function applyCustomPollInterval() {{
+            const input = document.getElementById('customPollInput');
+            if (!input) return;
+            const val = parseInt(input.value, 10);
+            if (!isNaN(val) && val > 0) {{
+                setPollInterval(val);
+            }}
+        }}
+
+        function applyPollInterval(sec, doImmediateFetch) {{
+            if (livePollIntervalTimer) {{
+                clearInterval(livePollIntervalTimer);
+                livePollIntervalTimer = null;
+            }}
+
+            const badgeText = document.getElementById('liveSyncBadgeText');
+            const badge = document.getElementById('liveSyncBadge');
+            const toggleIcon = document.getElementById('pollToggleIcon');
+            const customInput = document.getElementById('customPollInput');
+            if (customInput) customInput.value = (sec > 0 && ![3,5,10,30].includes(sec)) ? sec : '';
+
+            // Update dropdown checkmarks
+            [0, 3, 5, 10, 30].forEach(p => {{
+                const el = document.getElementById(`pollCheck${{p}}`);
+                if (el) {{
+                    if (p === sec) el.classList.remove('hidden');
+                    else el.classList.add('hidden');
+                }}
+            }});
+
+            if (sec > 0) {{
+                if (badgeText) badgeText.innerText = `${{sec}}s Live`;
+                if (badge) {{
+                    badge.className = "flex items-center gap-1.5 bg-emerald-950/70 border border-emerald-500/50 px-2.5 py-1 rounded-lg text-emerald-400 text-xs font-bold cursor-pointer hover:bg-emerald-900/60 transition-all";
+                }}
+                if (toggleIcon) toggleIcon.className = "fa-solid fa-pause text-xs text-slate-400 hover:text-amber-300";
+                livePollIntervalTimer = setInterval(fetchLiveDashboardStats, sec * 1000);
+            }} else {{
+                if (badgeText) badgeText.innerText = `수동 갱신`;
+                if (badge) {{
+                    badge.className = "flex items-center gap-1.5 bg-slate-800/80 border border-slate-600 px-2.5 py-1 rounded-lg text-slate-400 text-xs font-bold cursor-pointer hover:bg-slate-700/60 transition-all";
+                }}
+                if (toggleIcon) toggleIcon.className = "fa-solid fa-play text-xs text-emerald-400 hover:text-emerald-300";
+            }}
+
+            if (doImmediateFetch) {{
+                fetchLiveDashboardStats();
+            }}
+        }}
+
+        function toggleLivePolling() {{
+            if (currentPollIntervalSeconds > 0) {{
+                setPollInterval(0); // Pause
+            }} else {{
+                setPollInterval(5); // Default resume to 5s
+            }}
+        }}
+
+        function togglePollDropdown(event) {{
+            if (event) event.stopPropagation();
+            const dd = document.getElementById('pollIntervalDropdown');
+            if (dd) dd.classList.toggle('hidden');
+        }}
+
+        function closePollDropdown() {{
+            const dd = document.getElementById('pollIntervalDropdown');
+            if (dd) dd.classList.add('hidden');
+        }}
+
+        document.addEventListener('click', function(e) {{
+            const dd = document.getElementById('pollIntervalDropdown');
+            const badge = document.getElementById('liveSyncBadge');
+            if (dd && !dd.classList.contains('hidden') && !dd.contains(e.target) && (!badge || !badge.contains(e.target))) {{
+                dd.classList.add('hidden');
+            }}
+        }});
+
+        async function triggerManualRefresh() {{
+            const icon = document.getElementById('manualRefreshIcon');
+            if (icon) icon.classList.add('fa-spin');
+            await fetchLiveDashboardStats();
+            setTimeout(() => {{
+                if (icon) icon.classList.remove('fa-spin');
+            }}, 600);
+        }}
+
+        function openGitPullModal() {{
+            const gs = window.currentGitStatus || {{ current_branch: 'main', needs_pull: false, behind_count: 0, pending_commits: [] }};
+            const modal = document.getElementById('gitPullModal');
+            if (!modal) return;
+            document.getElementById('gitModalBranch').innerText = gs.current_branch || 'main';
+            document.getElementById('gitModalBehind').innerText = gs.needs_pull ? `${{gs.behind_count}}개 커밋 뒤처짐 (Pull 필요)` : '최신 상태 (Up to date)';
+            
+            const commitsListEl = document.getElementById('gitModalCommitsList');
+            if (commitsListEl) {{
+                if (gs.pending_commits && gs.pending_commits.length > 0) {{
+                    commitsListEl.innerHTML = gs.pending_commits.map(c => `
+                        <li class="py-1.5 px-2.5 bg-slate-800/60 rounded-lg text-xs font-mono text-slate-300 flex items-center gap-2 border border-slate-700/50">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                            <span class="truncate">${{c.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}}</span>
+                        </li>
+                    `).join('');
+                }} else {{
+                    commitsListEl.innerHTML = `<li class="py-3 text-center text-xs text-slate-400 font-mono">현재 로컬 저장소가 원격 저장소(origin)와 최신 동기화 상태입니다.</li>`;
+                }}
+            }}
+            modal.classList.remove('hidden');
+        }}
+
+        function closeGitPullModal() {{
+            const modal = document.getElementById('gitPullModal');
+            if (modal) modal.classList.add('hidden');
+        }}
+
+        function copyGitPullCommand() {{
+            const cmd = "git pull && ./deploy.sh";
+            navigator.clipboard.writeText(cmd).then(() => {{
+                const btn = document.getElementById('copyGitCmdBtn');
+                if (btn) {{
+                    const origHtml = btn.innerHTML;
+                    btn.innerHTML = `<i class="fa-solid fa-check text-emerald-300"></i> 복사 완료!`;
+                    btn.className = "px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow transition-all flex items-center gap-1 cursor-pointer";
+                    setTimeout(() => {{
+                        btn.innerHTML = origHtml;
+                        btn.className = "px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow transition-all flex items-center gap-1 cursor-pointer";
+                    }}, 2000);
+                }}
+            }});
+        }}
+
         let lastLiveSignature = '';
 
         async function fetchLiveDashboardStats() {{
@@ -3305,14 +3552,30 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }} catch(e2) {{ }}
             }}
 
-            const badge = document.getElementById('liveSyncBadge');
             if (res && res.ok) {{
-                if (badge) {{
-                    badge.className = "flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl shadow-lg text-emerald-400 text-xs font-bold";
-                    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>3s Live Connected</span>';
-                }}
                 const data = await res.json();
                 
+                if (data.git_status) {{
+                    window.currentGitStatus = data.git_status;
+                    const gitBadge = document.getElementById('gitStatusBadge');
+                    const gitText = document.getElementById('gitStatusText');
+                    if (data.git_status.needs_pull) {{
+                        if (gitBadge) {{
+                            gitBadge.classList.remove('hidden');
+                            gitBadge.className = "flex items-center gap-1.5 bg-amber-950/80 border border-amber-500/70 px-2.5 py-1.5 rounded-xl shadow-lg text-amber-300 text-xs font-bold hover:bg-amber-900/80 transition-all cursor-pointer animate-pulse";
+                            gitBadge.onclick = openGitPullModal;
+                        }}
+                        if (gitText) gitText.innerHTML = `<i class="fa-solid fa-arrow-down mr-1"></i>${{data.git_status.behind_count}} Pull 필요`;
+                    }} else if (data.git_status.is_git) {{
+                        if (gitBadge) {{
+                            gitBadge.classList.remove('hidden');
+                            gitBadge.className = "hidden md:flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/60 px-2.5 py-1.5 rounded-xl text-slate-400 text-xs font-mono cursor-pointer hover:bg-slate-700/60 transition-all";
+                            gitBadge.onclick = openGitPullModal;
+                        }}
+                        if (gitText) gitText.innerHTML = `<i class="fa-solid fa-check text-emerald-400 mr-1"></i>Up to date`;
+                    }}
+                }}
+
                 if (data.enterprise_balance) {{
                     const eb = data.enterprise_balance;
                     const limitVal = parseFloat(eb.limit) || 0;
@@ -3408,6 +3671,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     }}
                 }} catch(me) {{ }}
             }} else {{
+                const badge = document.getElementById('liveSyncBadge');
                 if (badge) {{
                     badge.className = "flex items-center gap-2 bg-rose-950/60 border border-rose-500/40 px-3 py-1.5 rounded-xl shadow-lg text-rose-400 text-xs font-bold";
                     badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span><span>Live Disconnected</span>';
@@ -3423,7 +3687,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const initialMonth = document.getElementById('monthSelect').value;
             const initialSession = document.getElementById('sessionSelect').value;
             renderDashboard(initialMonth, initialSession);
-            setInterval(fetchLiveDashboardStats, 3000);
+            initPollInterval();
         }};
     </script>
 </body>
