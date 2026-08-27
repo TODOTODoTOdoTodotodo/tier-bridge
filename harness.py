@@ -288,12 +288,22 @@ async def get_dashboard_stats():
     except Exception:
         mem_stats = {"total_memories": 0, "total_tags": 0, "code_modified_count": 0, "structured_rate": 100.0}
 
+    try:
+        try:
+            from tierbridge.git_sync_checker import get_git_sync_status
+        except ImportError:
+            from src.tierbridge.git_sync_checker import get_git_sync_status
+        git_sync_data = get_git_sync_status()
+    except Exception:
+        git_sync_data = {"is_git": False, "needs_pull": False, "behind_count": 0, "pending_commits": []}
+
     return {
         "records": records,
         "healing_status": HealingEngine.get_healing_status(),
         "healing_history": list(reversed(healing_history)),
         "enterprise_balance": ent_balance,
-        "memory_stats": mem_stats
+        "memory_stats": mem_stats,
+        "git_status": git_sync_data
     }
 
 # ==========================================
