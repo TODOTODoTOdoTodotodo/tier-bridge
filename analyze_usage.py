@@ -1178,6 +1178,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 💡 맥북 트랙패드 두 손가락 스크롤 / 핀치 줌 / 툴바 🔍 버튼 완벽 지원
             </div>
         </div>
+    </div>
+
     <!-- Git Pull / Update Available Modal -->
     <div id="gitPullModal" class="hidden fixed inset-0 z-[70] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="glass-card max-w-lg w-full p-6 rounded-3xl border border-amber-500/40 shadow-2xl relative bg-slate-900/95 max-h-[85vh] overflow-y-auto">
@@ -1235,7 +1237,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     </div>
 
     <!-- Graph Node Inspector Modal (With Neuralizer Wipe Button) -->
-    <div id="graphNodeModal" class="hidden fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div id="graphNodeModal" class="hidden fixed inset-0 z-[80] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="glass-card max-w-2xl w-full p-6 rounded-3xl border border-purple-500/40 shadow-2xl relative bg-slate-900/95 max-h-[85vh] overflow-y-auto">
             <button onclick="closeGraphNodeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-lg">
                 <i class="fa-solid fa-xmark"></i>
@@ -1281,7 +1283,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     </div>
 
     <!-- Healing Factor Comparison Modal -->
-    <div id="healingModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div id="healingModal" class="hidden fixed inset-0 z-[70] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="glass-card max-w-3xl w-full p-6 rounded-3xl border border-slate-700 shadow-2xl relative">
             <button onclick="closeHealingModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-lg">
                 <i class="fa-solid fa-xmark"></i>
@@ -1331,7 +1333,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     </div>
 
     <!-- Downscaling Savings Info Modal -->
-    <div id="savingsInfoModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div id="savingsInfoModal" class="hidden fixed inset-0 z-[70] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="glass-card max-w-2xl w-full p-6 rounded-3xl border border-emerald-500/40 shadow-2xl relative bg-slate-900/95">
             <button onclick="closeSavingsInfoModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 text-lg">
                 <i class="fa-solid fa-xmark"></i>
@@ -2969,8 +2971,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         document.addEventListener('keydown', e => {{
             if (e.key === 'Escape') {{
-                closeExpandedGraphModal();
+                closeSavingsInfoModal();
+                closeHealingModal();
+                closeGitPullModal();
                 closeGraphNodeModal();
+                closeExpandedGraphModal();
             }}
         }});
 
