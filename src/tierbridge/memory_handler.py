@@ -412,6 +412,32 @@ class MemoryHandler:
                     edge_weights[s_id] = max(edge_weights.get(s_id, 1.0), w)
                     edge_weights[t_id] = max(edge_weights.get(t_id, 1.0), w)
 
+            # 1. memories 메타데이터(세션 ID 및 태그) 매핑 조회
+            mem_meta_map = {}
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='memories';")
+            if cursor.fetchone():
+                cursor.execute("SELECT content, tags, created_at FROM memories ORDER BY id DESC LIMIT 300;")
+                for m_row in cursor.fetchall():
+                    m_content = m_row["content"] or ""
+                    m_tags = m_row["tags"] or []
+                    if isinstance(m_tags, str):
+                        try:
+                            m_tags = json.loads(m_tags)
+                        except Exception:
+                            m_tags = [t.strip() for t in m_tags.split(",") if t.strip()]
+                    
+                    m_sid = "sess_default"
+                    for t in m_tags:
+                        t_str = str(t).strip()
+                        if t_str.startswith("01a") or t_str.startswith("sess_") or len(t_str) == 36:
+                            m_sid = t_str
+                            break
+                    
+                    is_initial = "initial_request" in m_tags
+                    prob_key = m_content.split("Assistant:", 1)[0].replace("User:", "").strip()[:80]
+                    if prob_key and prob_key not in mem_meta_map:
+                        mem_meta_map[prob_key] = {"session_id": m_sid, "tags": m_tags, "is_root": is_initial}
+
             # 2. nodes 조회
             cursor.execute("SELECT id, text, timestamp FROM nodes ORDER BY timestamp DESC LIMIT ?;", (limit_nodes,))
             nodes_data = []
@@ -427,8 +453,14 @@ class MemoryHandler:
                 cost = parsed.get("cost", 0.0)
                 weight = edge_weights.get(nid, 1.0)
 
-                label = prob.replace("\n", " ")[:16] + ("..." if len(prob) > 16 else "")
-                title = f"<b>[{dec}] #{nid[:8]}</b> (가중치: {weight:.2f}x)<br><br><b>📌 문제:</b> {prob[:100]}...<br><br><b>💡 해결:</b> {sol[:100]}...<br>💻 LOC: {loc}줄 | 💰 Cost: ${cost:.4f}"
+                prob_key = prob[:80]
+                meta_info = mem_meta_map.get(prob_key, {})
+                sid = meta_info.get("session_id") or parsed.get("session_id") or "sess_default"
+                is_root = meta_info.get("is_root", False)
+
+                root_tag = " 👑 [뿌리 질의]" if is_root else ""
+                label = ("👑 " if is_root else "") + prob.replace("\n", " ")[:14] + ("..." if len(prob) > 14 else "")
+                title = f"<b>[{dec}] #{nid[:8]}{root_tag}</b> (세션: {sid[:8]}... | 가중치: {weight:.2f}x)<br><br><b>📌 문제:</b> {prob[:100]}...<br><br><b>💡 해결:</b> {sol[:100]}...<br>💻 LOC: {loc}줄 | 💰 Cost: ${cost:.4f}"
 
                 # 노드 색상 매핑
                 color_map = {
@@ -445,8 +477,10 @@ class MemoryHandler:
                     "label": label,
                     "title": title,
                     "group": dec,
+                    "session_id": sid,
+                    "is_root": is_root,
                     "value": round(weight, 1),
-                    "size": min(38, max(16, int(16 + weight * 2.2))),
+                    "size": min(42, max(18, int(18 + (weight * 2.2) + (6 if is_root else 0)))),
                     "color": node_color,
                     "decision": dec,
                     "loc": loc,
@@ -456,6 +490,22 @@ class MemoryHandler:
                     "solution": sol,
                     "timestamp": row["timestamp"] or "N/A"
                 })
+
+            # 세션별 최소 1개의 뿌리 노드(Root Node) 지정 보장 (가장 이른 타임스탬프 기준)
+            session_earliest = {}
+            for n in reversed(nodes_data):
+                sid = n.get("session_id")
+                if not sid or sid == "sess_default":
+                    continue
+                if sid not in session_earliest:
+                    session_earliest[sid] = n["id"]
+
+            for n in nodes_data:
+                sid = n.get("session_id")
+                if sid in session_earliest and session_earliest[sid] == n["id"]:
+                    n["is_root"] = True
+                    if not n["label"].startswith("👑"):
+                        n["label"] = "👑 " + n["label"]
 
             # 3. 유효한 엣지만 필터링 및 굵기 설정
             edges_data = []

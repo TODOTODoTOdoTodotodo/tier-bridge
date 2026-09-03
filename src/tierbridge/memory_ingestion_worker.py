@@ -89,10 +89,10 @@ class MemoryIngestionWorker:
 
         clean_p = prompt.strip()
         # 동일 질문의 이전 중간 턴이 있다면 삭제 후 최종 1:1 쌍으로 대체 (Single Pair Guarantee)
-        cursor.execute("DELETE FROM nodes WHERE text LIKE ?;", (f"User: {clean_p}\n%",))
+        cursor.execute("DELETE FROM nodes WHERE text LIKE ? OR text LIKE ?;", (f"User: {clean_p}\n%", f"%User: {clean_p}\n%"))
 
         node_id = str(uuid.uuid4())
-        node_text = f"User: {clean_p}\nAssistant: {clean_sol}"
+        node_text = f"[Session: {session_id}] [Decision: {decision}] [LOC: {loc}] [Cost: ${cost:.4f}] User: {clean_p}\nAssistant: {clean_sol}"
         # 384 dims float32 = 1536 bytes
         zero_embedding = bytes(1536)
         iso_time = datetime.now(timezone.utc).isoformat()
