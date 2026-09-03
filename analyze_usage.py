@@ -2441,6 +2441,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
 
             filterTable();
+            // 🧠 생각나무 질의 뿌리 재구성 및 성단형 그래프 선택 세션 포커스 동기화
+            focusSessionInGraph(targetSession);
+            if (markmapInstance) {{
+                initMarkmapTree();
+            }}
         }}
 
         function onFilterChange() {{
@@ -2572,6 +2577,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
                 setTimeout(() => {{
                     initMemoryGraph(currentGraphData);
+                    const curSid = document.getElementById('sessionSelect') ? document.getElementById('sessionSelect').value : 'ALL';
+                    focusSessionInGraph(curSid);
                 }}, 50);
             }}
         }}
@@ -2766,7 +2773,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 if (treeLegend) treeLegend.classList.add('hidden');
                 if (desc) desc.innerText = '성단 뷰: 노드 크기(엣지 가중치), 연결 강도, 1-hop 하이라이트 • 물리엔진 기반 유기적 성단 네트워크';
                 setTimeout(() => {{
-                    if (memoryExpandedNetwork) memoryExpandedNetwork.fit();
+                    if (memoryExpandedNetwork) {{
+                        const curSid = document.getElementById('sessionSelect') ? document.getElementById('sessionSelect').value : 'ALL';
+                        focusSessionInGraph(curSid);
+                    }}
                 }}, 60);
             }} else {{
                 if (btnNet) btnNet.className = inactiveBtnClass;
@@ -2788,52 +2798,133 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const nodes = (currentGraphData && currentGraphData.nodes && currentGraphData.nodes.length > 0)
                 ? currentGraphData.nodes
                 : (currentMemories || []);
+            const edges = (currentGraphData && currentGraphData.edges) ? currentGraphData.edges : [];
 
-            const categories = {{
-                coupon: {{ title: "🎫 쿠폰 및 결제 XML 동기화 (MGTT-25938)", items: [] }},
-                gnb: {{ title: "🧭 GNB 가이드 툴팁 & 캐시 전략 (MGTT-25184)", items: [] }},
-                image: {{ title: "📸 여행네컷 & 나노바나나2 서비스 (MGTT-25076)", items: [] }},
-                level: {{ title: "🏆 여행만렙 레벨 개편 & 챌린지 피드 (MGTT-25353)", items: [] }},
-                etc: {{ title: "🛠️ 시스템 인프라 & 공통 지식 (Core)", items: [] }}
-            }};
+            if (!nodes || nodes.length === 0) {{
+                return '# 🌿 Giyeok 생각나무\\n- 지식 노드가 아직 없습니다.';
+            }}
 
-            nodes.forEach(n => {{
-                const prob = String(n.problem || n.raw_content || '').trim();
-                const sol = String(n.solution || n.decision || '').trim();
-                const dec = n.decision || 'BRONZE';
-                const mid = String(n.id || '').replace(/^#/, '').substring(0, 8);
-                const loc = n.loc || 0;
-                const cost = n.cost || 0.0;
-                const weight = n.weight || 1.0;
+            const targetSession = document.getElementById('sessionSelect') ? document.getElementById('sessionSelect').value : 'ALL';
+            let targetSid = targetSession;
 
-                const combined = (prob + " " + sol).toLowerCase();
-
-                let catKey = 'etc';
-                if (combined.includes('쿠폰') || combined.includes('coupon') || combined.includes('gmarket') || combined.includes('aplamt') || combined.includes('결제')) {{
-                    catKey = 'coupon';
-                }} else if (combined.includes('gnb') || combined.includes('툴팁') || combined.includes('guide-status') || combined.includes('guidestatus') || combined.includes('cache')) {{
-                    catKey = 'gnb';
-                }} else if (combined.includes('여행네컷') || combined.includes('fourcut') || combined.includes('aspectratio') || combined.includes('imagecreation') || combined.includes('prompt')) {{
-                    catKey = 'image';
-                }} else if (combined.includes('여행만렙') || combined.includes('챌린지') || combined.includes('challenge') || combined.includes('feed') || combined.includes('레벨')) {{
-                    catKey = 'level';
+            if (targetSession === 'LATEST') {{
+                let maxTime = '';
+                allRecords.forEach(r => {{
+                    if (r.session_id && r.session_id !== 'N/A' && r.timestamp && r.timestamp > maxTime) {{
+                        maxTime = r.timestamp;
+                        targetSid = r.session_id;
+                    }}
+                }});
+                if (!targetSid && nodes.length > 0) {{
+                    targetSid = nodes[0].session_id || 'sess_default';
                 }}
+            }}
 
-                categories[catKey].items.push({{ id: n.id, mid, prob, sol, dec, loc, cost, weight }});
+            // 1. 단일 세션 모드: 사용자의 신규/해당 세션 질의가 최상위 ROOT가 됨!
+            if (targetSid && targetSid !== 'ALL') {{
+                const sessionNodes = nodes.filter(n => n.session_id === targetSid || (n.session_id && n.session_id.includes(targetSid)));
+                
+                if (sessionNodes.length > 0) {{
+                    // 세션의 뿌리 질의 노드 (is_root가 우선, 없으면 가장 이른 노드)
+                    const rootNode = sessionNodes.find(n => n.is_root) || sessionNodes[sessionNodes.length - 1] || sessionNodes[0];
+                    const rawRootId = String(rootNode.id || '').replace(/^#/, '').trim();
+                    const rootMid = rawRootId.substring(0, 8);
+                    const rootProb = String(rootNode.problem || rootNode.raw_content || '').trim().replace(/[\\n\\r]+/g, ' ');
+                    const rootProbShort = rootProb.length > 60 ? rootProb.substring(0, 60) + '...' : rootProb;
+                    const rootSol = String(rootNode.solution || '').trim().replace(/[\\n\\r]+/g, ' ');
+                    const rootSolShort = rootSol.length > 90 ? rootSol.substring(0, 90) + '...' : rootSol;
+
+                    let md = `# 🎯 [신규 질의 뿌리] #${{rootMid}} ${{rootProbShort || '(현재 세션 질의)'}} <a href="javascript:void(0)" onclick="openNodeDetail('${{rawRootId}}', event)" class="tb-node-link">🔍 상세 확인</a>\\n`;
+                    
+                    // 1-1. 적용 해결책 & 아키텍처
+                    md += `## 💡 [적용 해결책 & 아키텍처]\\n`;
+                    md += `- ${{rootSolShort || '(적용된 솔루션 요약)'}}\\n`;
+                    md += `- 🏷️ **메타데이터**: 등급 [${{rootNode.decision || 'BRONZE'}}] | LOC: ${{rootNode.loc || 0}}줄 | 비용: $${{Number(rootNode.cost || 0).toFixed(4)}} | 가중치: ${{Number(rootNode.weight || 1.0).toFixed(2)}}x <a href="javascript:void(0)" onclick="openNodeDetail('${{rawRootId}}', event)" class="tb-node-link">📖 에피소드 소각</a>\\n`;
+
+                    // 1-2. 회수된 과거 연관 지식 (Referenced Past Memories) - 엣지로 연결된 노드들
+                    const sessionNodeIds = new Set(sessionNodes.map(n => n.id));
+                    const refNodeIds = new Set();
+                    edges.forEach(e => {{
+                        if (sessionNodeIds.has(e.from) && !sessionNodeIds.has(e.to)) refNodeIds.add(e.to);
+                        if (sessionNodeIds.has(e.to) && !sessionNodeIds.has(e.from)) refNodeIds.add(e.from);
+                    }});
+                    const referencedNodes = nodes.filter(n => refNodeIds.has(n.id));
+
+                    md += `## 🔗 [회수된 과거 연관 지식 (Referenced Memories)]\\n`;
+                    if (referencedNodes.length > 0) {{
+                        referencedNodes.forEach(ref => {{
+                            const refRawId = String(ref.id || '').replace(/^#/, '').trim();
+                            const refMid = refRawId.substring(0, 8);
+                            const refProb = String(ref.problem || '').trim().replace(/[\\n\\r]+/g, ' ');
+                            const refProbShort = refProb.length > 50 ? refProb.substring(0, 50) + '...' : refProb;
+                            const refSol = String(ref.solution || '').trim().replace(/[\\n\\r]+/g, ' ');
+                            const refSolShort = refSol.length > 70 ? refSol.substring(0, 70) + '...' : refSol;
+                            md += `### 📌 #${{refMid}} ${{refProbShort}} <a href="javascript:void(0)" onclick="openNodeDetail('${{refRawId}}', event)" class="tb-node-link">🔍 과거 사례</a>\\n`;
+                            md += `- 💡 **해결 요약**: ${{refSolShort}}\\n`;
+                            md += `- 🏷️ [${{ref.decision || 'BRONZE'}}] 가중치: ${{Number(ref.weight || 1.0).toFixed(2)}}x\\n`;
+                        }});
+                    }} else {{
+                        md += `- ✨ 독립 세션: 과거 지식의 직접 의존성 없이 새롭게 생성된 지식 에피소드입니다.\\n`;
+                    }}
+
+                    // 1-3. 세션 내 후속/서브스텝 질문들
+                    const subNodes = sessionNodes.filter(n => n.id !== rootNode.id);
+                    if (subNodes.length > 0) {{
+                        md += `## 🌿 [세션 세부 실행 단계 (Sub-steps & Follow-ups)]\\n`;
+                        subNodes.forEach(sub => {{
+                            const subRawId = String(sub.id || '').replace(/^#/, '').trim();
+                            const subMid = subRawId.substring(0, 8);
+                            const subProb = String(sub.problem || '').trim().replace(/[\\n\\r]+/g, ' ');
+                            const subProbShort = subProb.length > 50 ? subProb.substring(0, 50) + '...' : subProb;
+                            const subSol = String(sub.solution || '').trim().replace(/[\\n\\r]+/g, ' ');
+                            const subSolShort = subSol.length > 70 ? subSol.substring(0, 70) + '...' : subSol;
+                            md += `### 🔄 #${{subMid}} ${{subProbShort}} <a href="javascript:void(0)" onclick="openNodeDetail('${{subRawId}}', event)" class="tb-node-link">🔍 확인</a>\\n`;
+                            md += `- 💡 ${{subSolShort}}\\n`;
+                            md += `- 🏷️ 등급 [${{sub.decision || 'BRONZE'}}] | LOC: ${{sub.loc || 0}}줄\\n`;
+                        }});
+                    }}
+
+                    return md;
+                }}
+            }}
+
+            // 2. 전체(ALL) 세션 모드: 세션별 / 질의별 뿌리 노드 그룹화 (최신순 정렬)
+            const sessionMap = {{}};
+            nodes.forEach(n => {{
+                const sid = n.session_id || 'sess_default';
+                if (!sessionMap[sid]) {{
+                    sessionMap[sid] = [];
+                }}
+                sessionMap[sid].push(n);
             }});
 
-            let md = `# 🌿 TierBridge Thought-Tree (${{nodes.length}} Pure Fruits)\\n`;
-            Object.values(categories).forEach(cat => {{
-                if (cat.items.length === 0) return;
-                md += `## ${{cat.title}}\\n`;
-                cat.items.forEach(item => {{
-                    const rawId = String(item.id || '').replace(/^#/, '').trim();
-                    const pShort = item.prob.length > 55 ? item.prob.substring(0, 55).replace(/[\\n\\r]+/g, ' ') + '...' : item.prob.replace(/[\\n\\r]+/g, ' ');
-                    const sShort = item.sol.length > 80 ? item.sol.substring(0, 80).replace(/[\\n\\r]+/g, ' ') + '...' : item.sol.replace(/[\\n\\r]+/g, ' ');
-                    md += `### 📌 #${{item.mid}} ${{pShort || '(문제 요약)'}} <a href="javascript:void(0)" onclick="openNodeDetail('${{rawId}}', event)" class="tb-node-link">🔍 상세 확인</a>\\n`;
-                    md += `- 💡 **해결책**: ${{sShort || '(해결책)'}}\\n`;
-                    md += `- 🏷️ **메타**: 등급 [${{item.dec}}] | LOC: ${{item.loc}}줄 | 비용: $${{Number(item.cost).toFixed(4)}} | 가중치: ${{Number(item.weight).toFixed(2)}}x <a href="javascript:void(0)" onclick="openNodeDetail('${{rawId}}', event)" class="tb-node-link">📖 에피소드 & 소각</a>\\n`;
-                }});
+            let md = `# 🌿 Giyeok 생각나무 (${{nodes.length}} Pure Fruits - 전체 세션)\\n`;
+            
+            // 세션별로 뿌리 노드를 최상단에 배치
+            Object.keys(sessionMap).forEach(sid => {{
+                const sNodes = sessionMap[sid];
+                const rootNode = sNodes.find(n => n.is_root) || sNodes[sNodes.length - 1] || sNodes[0];
+                const rawId = String(rootNode.id || '').replace(/^#/, '').trim();
+                const sidShort = sid.substring(0, 8);
+                const prob = String(rootNode.problem || rootNode.raw_content || '').trim().replace(/[\\n\\r]+/g, ' ');
+                const pShort = prob.length > 50 ? prob.substring(0, 50) + '...' : prob;
+                const sol = String(rootNode.solution || '').trim().replace(/[\\n\\r]+/g, ' ');
+                const sShort = sol.length > 70 ? sol.substring(0, 70) + '...' : sol;
+
+                md += `## 🎯 [세션 ${{sidShort}}] 👑 ${{pShort}} <a href="javascript:void(0)" onclick="openNodeDetail('${{rawId}}', event)" class="tb-node-link">🔍 상세</a>\\n`;
+                md += `- 💡 **해결책**: ${{sShort || '(해결책 요약)'}}\\n`;
+                md += `- 🏷️ **메타**: [${{rootNode.decision || 'BRONZE'}}] | LOC: ${{rootNode.loc || 0}}줄 | 세션 노드: ${{sNodes.length}}개 <a href="javascript:void(0)" onclick="selectSessionFilter('${{sid}}')" class="tb-node-link">🎯 이 세션 필터링</a>\\n`;
+                
+                const otherNodes = sNodes.filter(n => n.id !== rootNode.id);
+                if (otherNodes.length > 0) {{
+                    md += `### 🌿 세션 세부 턴 (${{otherNodes.length}}개 단계)\\n`;
+                    otherNodes.slice(0, 3).forEach(on => {{
+                        const oRawId = String(on.id || '').replace(/^#/, '').trim();
+                        const oProb = String(on.problem || '').trim().replace(/[\\n\\r]+/g, ' ');
+                        const opShort = oProb.length > 40 ? oProb.substring(0, 40) + '...' : oProb;
+                        md += `- 📌 #${{on.id.substring(0, 8)}} ${{opShort}} <a href="javascript:void(0)" onclick="openNodeDetail('${{oRawId}}', event)" class="tb-node-link">🔍 확인</a>\\n`;
+                    }});
+                }}
             }});
 
             return md;
@@ -2955,8 +3046,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             if (modal) {{
                 modal.classList.remove('hidden');
                 setTimeout(() => {{
+                    const curSid = document.getElementById('sessionSelect') ? document.getElementById('sessionSelect').value : 'ALL';
                     if (currentModalViewMode === 'network') {{
                         initExpandedMemoryGraph(currentGraphData);
+                        focusSessionInGraph(curSid);
                     }} else {{
                         initMarkmapTree();
                     }}
@@ -3047,6 +3140,98 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             if (expModal && !expModal.classList.contains('hidden') && memoryExpandedNetwork) {{
                 memoryExpandedNetwork.focus(cleanId, {{ scale: 1.5, animation: {{ duration: 600, easingFunction: 'easeInOutQuad' }} }});
                 try {{ memoryExpandedNetwork.selectNodes([cleanId]); }} catch(e) {{}}
+            }}
+        }}
+
+        // 🌌 선택한 세션의 뿌리 노드(Root Node)로 성단형 그래프 카메라 자동 포커스 및 하이라이트
+        function focusSessionInGraph(targetSession) {{
+            if (!targetSession) return;
+            const nodes = (currentGraphData && currentGraphData.nodes) ? currentGraphData.nodes : [];
+            const edges = (currentGraphData && currentGraphData.edges) ? currentGraphData.edges : [];
+            if (nodes.length === 0) return;
+
+            let targetSid = targetSession;
+            if (targetSession === 'LATEST') {{
+                let maxTime = '';
+                allRecords.forEach(r => {{
+                    if (r.session_id && r.session_id !== 'N/A' && r.timestamp && r.timestamp > maxTime) {{
+                        maxTime = r.timestamp;
+                        targetSid = r.session_id;
+                    }}
+                }});
+                if (!targetSid && nodes.length > 0) {{
+                    targetSid = nodes[0].session_id || 'sess_default';
+                }}
+            }}
+
+            if (targetSession === 'ALL' || !targetSid) {{
+                const resetNodes = nodes.map(n => ({{
+                    id: n.id,
+                    opacity: 1.0,
+                    borderWidth: 2,
+                    color: n.color
+                }}));
+                if (miniVisNodes) miniVisNodes.update(resetNodes);
+                if (modalVisNodes) modalVisNodes.update(resetNodes);
+                if (miniVisEdges) miniVisEdges.update(edges.map(e => ({{ id: e.id, opacity: 1.0 }})));
+                if (modalVisEdges) modalVisEdges.update(edges.map(e => ({{ id: e.id, opacity: 1.0 }})));
+                return;
+            }}
+
+            const sessionNodes = nodes.filter(n => n.session_id === targetSid || (n.session_id && n.session_id.includes(targetSid)));
+            if (sessionNodes.length === 0) return;
+
+            // 세션 뿌리 노드 식별 (is_root가 우선, 없으면 가장 이른 노드)
+            const rootNode = sessionNodes.find(n => n.is_root) || sessionNodes[sessionNodes.length - 1] || sessionNodes[0];
+            const sessionNodeIds = new Set(sessionNodes.map(n => n.id));
+
+            // 연결된 1-hop 연관 노드 식별
+            const connectedNodeIds = new Set(sessionNodeIds);
+            edges.forEach(e => {{
+                if (sessionNodeIds.has(e.from)) connectedNodeIds.add(e.to);
+                if (sessionNodeIds.has(e.to)) connectedNodeIds.add(e.from);
+            }});
+
+            const updateNodes = nodes.map(n => {{
+                const isThisRoot = (n.id === rootNode.id);
+                const isSessionNode = sessionNodeIds.has(n.id);
+                const isConnected = connectedNodeIds.has(n.id);
+                return {{
+                    id: n.id,
+                    opacity: isConnected ? 1.0 : 0.15,
+                    borderWidth: isThisRoot ? 5 : (isSessionNode ? 3 : 2),
+                    color: isThisRoot ? {{
+                        border: '#f59e0b',
+                        background: n.color ? (n.color.background || '#f59e0b') : '#f59e0b',
+                        highlight: {{ border: '#fbbf24', background: '#f59e0b' }}
+                    }} : n.color
+                }};
+            }});
+
+            if (miniVisNodes) miniVisNodes.update(updateNodes);
+            if (modalVisNodes) modalVisNodes.update(updateNodes);
+
+            const updateEdges = edges.map(e => ({{
+                id: e.id,
+                opacity: (connectedNodeIds.has(e.from) && connectedNodeIds.has(e.to)) ? 1.0 : 0.08
+            }}));
+            if (miniVisEdges) miniVisEdges.update(updateEdges);
+            if (modalVisEdges) modalVisEdges.update(updateEdges);
+
+            // 🚀 선택된 세션의 뿌리 노드로 카메라 포커스 이동 & 노드 선택
+            if (memoryMiniNetwork) {{
+                memoryMiniNetwork.focus(rootNode.id, {{
+                    scale: 1.35,
+                    animation: {{ duration: 750, easingFunction: 'easeInOutQuad' }}
+                }});
+                try {{ memoryMiniNetwork.selectNodes([rootNode.id]); }} catch(e) {{}}
+            }}
+            if (memoryExpandedNetwork) {{
+                memoryExpandedNetwork.focus(rootNode.id, {{
+                    scale: 1.35,
+                    animation: {{ duration: 750, easingFunction: 'easeInOutQuad' }}
+                }});
+                try {{ memoryExpandedNetwork.selectNodes([rootNode.id]); }} catch(e) {{}}
             }}
         }}
 
