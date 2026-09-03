@@ -2794,6 +2794,38 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
         }}
 
+        // 🎯 성단/기억 저장소 노드와 실제 일치하는 최신 활성 세션 ID 스마트 탐색
+        function resolveTargetSessionId(targetSession, nodes) {{
+            if (!targetSession || targetSession === 'ALL') return 'ALL';
+            if (!nodes || nodes.length === 0) return targetSession;
+
+            if (targetSession === 'LATEST') {{
+                // 1순위: allRecords에서 가장 최신 타임스탬프를 가진 세션 중, 현재 성단 노드(nodes)에 실제 존재하는 세션 탐색
+                const graphSessionIds = new Set(nodes.map(n => n.session_id).filter(s => s && s !== 'sess_default'));
+                let maxTime = '';
+                let matchedSid = null;
+                allRecords.forEach(r => {{
+                    if (r.session_id && r.session_id !== 'N/A' && graphSessionIds.has(r.session_id)) {{
+                        if (r.timestamp && r.timestamp > maxTime) {{
+                            maxTime = r.timestamp;
+                            matchedSid = r.session_id;
+                        }}
+                    }}
+                }});
+                if (matchedSid) return matchedSid;
+
+                // 2순위: nodes 배열 중 유효한 세션 ID를 가진 첫 번째(가장 최신) 노드의 세션
+                for (let i = 0; i < nodes.length; i++) {{
+                    if (nodes[i].session_id && nodes[i].session_id !== 'sess_default') {{
+                        return nodes[i].session_id;
+                    }}
+                }}
+                return nodes[0].session_id || 'sess_default';
+            }}
+
+            return targetSession;
+        }}
+
         function buildMarkmapMarkdown() {{
             const nodes = (currentGraphData && currentGraphData.nodes && currentGraphData.nodes.length > 0)
                 ? currentGraphData.nodes
@@ -2805,20 +2837,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
 
             const targetSession = document.getElementById('sessionSelect') ? document.getElementById('sessionSelect').value : 'ALL';
-            let targetSid = targetSession;
-
-            if (targetSession === 'LATEST') {{
-                let maxTime = '';
-                allRecords.forEach(r => {{
-                    if (r.session_id && r.session_id !== 'N/A' && r.timestamp && r.timestamp > maxTime) {{
-                        maxTime = r.timestamp;
-                        targetSid = r.session_id;
-                    }}
-                }});
-                if (!targetSid && nodes.length > 0) {{
-                    targetSid = nodes[0].session_id || 'sess_default';
-                }}
-            }}
+            const targetSid = resolveTargetSessionId(targetSession, nodes);
 
             // 1. 단일 세션 모드: 사용자의 신규/해당 세션 질의가 최상위 ROOT가 됨!
             if (targetSid && targetSid !== 'ALL') {{
@@ -3150,25 +3169,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const edges = (currentGraphData && currentGraphData.edges) ? currentGraphData.edges : [];
             if (nodes.length === 0) return;
 
-            let targetSid = targetSession;
-            if (targetSession === 'LATEST') {{
-                let maxTime = '';
-                allRecords.forEach(r => {{
-                    if (r.session_id && r.session_id !== 'N/A' && r.timestamp && r.timestamp > maxTime) {{
-                        maxTime = r.timestamp;
-                        targetSid = r.session_id;
-                    }}
-                }});
-                if (!targetSid && nodes.length > 0) {{
-                    targetSid = nodes[0].session_id || 'sess_default';
-                }}
-            }}
+            const targetSid = resolveTargetSessionId(targetSession, nodes);
 
-            if (targetSession === 'ALL' || !targetSid) {{
+            if (targetSession === 'ALL' || !targetSid || targetSid === 'ALL') {{
                 const resetNodes = nodes.map(n => ({{
                     id: n.id,
                     opacity: 1.0,
                     borderWidth: 2,
+                    borderWidthSelected: 4,
                     color: n.color
                 }}));
                 if (miniVisNodes) miniVisNodes.update(resetNodes);
@@ -3179,7 +3187,21 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
 
             const sessionNodes = nodes.filter(n => n.session_id === targetSid || (n.session_id && n.session_id.includes(targetSid)));
-            if (sessionNodes.length === 0) return;
+            if (sessionNodes.length === 0) {{
+                // 해당 세션에 직접 적재된 지식 노드가 없는 경우, 성단 최신 지식 노드로 안내 포커스
+                const fallbackNode = nodes[0];
+                if (fallbackNode) {{
+                    if (memoryMiniNetwork) {{
+                        memoryMiniNetwork.focus(fallbackNode.id, {{ scale: 1.25, animation: {{ duration: 700, easingFunction: 'easeInOutQuad' }} }});
+                        try {{ memoryMiniNetwork.selectNodes([fallbackNode.id]); }} catch(e) {{}}
+                    }}
+                    if (memoryExpandedNetwork) {{
+                        memoryExpandedNetwork.focus(fallbackNode.id, {{ scale: 1.25, animation: {{ duration: 700, easingFunction: 'easeInOutQuad' }} }});
+                        try {{ memoryExpandedNetwork.selectNodes([fallbackNode.id]); }} catch(e) {{}}
+                    }}
+                }}
+                return;
+            }}
 
             // 세션 뿌리 노드 식별 (is_root가 우선, 없으면 가장 이른 노드)
             const rootNode = sessionNodes.find(n => n.is_root) || sessionNodes[sessionNodes.length - 1] || sessionNodes[0];
@@ -3199,11 +3221,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 return {{
                     id: n.id,
                     opacity: isConnected ? 1.0 : 0.15,
-                    borderWidth: isThisRoot ? 5 : (isSessionNode ? 3 : 2),
+                    borderWidth: isThisRoot ? 6 : (isSessionNode ? 3 : 2),
+                    borderWidthSelected: isThisRoot ? 7 : 4,
+                    size: isThisRoot ? Math.max(34, (n.size || 20) * 1.35) : n.size,
+                    shadow: isThisRoot ? {{ enabled: true, color: '#f59e0b', size: 18, x: 0, y: 0 }} : (n.shadow || {{ enabled: false }}),
                     color: isThisRoot ? {{
                         border: '#f59e0b',
                         background: n.color ? (n.color.background || '#f59e0b') : '#f59e0b',
-                        highlight: {{ border: '#fbbf24', background: '#f59e0b' }}
+                        highlight: {{ border: '#fbbf24', background: n.color ? (n.color.background || '#f59e0b') : '#f59e0b' }},
+                        hover: {{ border: '#fbbf24', background: n.color ? (n.color.background || '#f59e0b') : '#f59e0b' }}
                     }} : n.color
                 }};
             }});
