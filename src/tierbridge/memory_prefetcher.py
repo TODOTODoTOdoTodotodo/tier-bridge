@@ -98,6 +98,18 @@ class MemoryPrefetcher:
             if not any(k in p_lower for k in ["기억", "이력", "히스토리", "과거", "작업한", "어떻게 했"]):
                 return None
 
+        # IDE 내부 보조/백그라운드 관리 작업 질의 제외 (Bypass: 불필요한 연산 및 토큰 낭비 방지)
+        ide_internal_keywords = [
+            "generate a concise, single-line task title",
+            "write a brief catch-up for a user",
+            "you are performing a context checkpoint",
+            "summarize the conversation",
+            "title of the conversation",
+            "recap the conversation"
+        ]
+        if any(kw in p_lower for kw in ide_internal_keywords):
+            return None
+
         try:
             from tierbridge.memory_handler import MemoryHandler
 
