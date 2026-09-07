@@ -3805,14 +3805,20 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const modal = document.getElementById('gitPullModal');
             if (!modal) return;
             document.getElementById('gitModalBranch').innerText = gs.current_branch || 'main';
-            document.getElementById('gitModalBehind').innerText = gs.needs_pull ? `${{gs.behind_count}}개 커밋 뒤처짐 (Pull 필요)` : '최신 상태 (Up to date)';
+            if (gs.needs_pull) {{
+                document.getElementById('gitModalBehind').innerText = `${{gs.behind_count}}개 커밋 뒤처짐 (git pull && ./deploy.sh 필요)`;
+            }} else if (gs.ahead_count > 0) {{
+                document.getElementById('gitModalBehind').innerText = `${{gs.ahead_count}}개 신규 커밋 대기 (./deploy.sh 필요)`;
+            }} else {{
+                document.getElementById('gitModalBehind').innerText = '최신 상태 (Up to date)';
+            }}
             
             const commitsListEl = document.getElementById('gitModalCommitsList');
             if (commitsListEl) {{
                 if (gs.pending_commits && gs.pending_commits.length > 0) {{
                     commitsListEl.innerHTML = gs.pending_commits.map(c => `
                         <li class="py-1.5 px-2.5 bg-slate-800/60 rounded-lg text-xs font-mono text-slate-300 flex items-center gap-2 border border-slate-700/50">
-                            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                            <span class="w-1.5 h-1.5 rounded-full ${{gs.needs_pull ? 'bg-amber-400' : 'bg-indigo-400'}} shrink-0"></span>
                             <span class="truncate">${{c.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}}</span>
                         </li>
                     `).join('');
@@ -3829,7 +3835,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         }}
 
         function copyGitPullCommand() {{
-            const cmd = "git pull && ./deploy.sh";
+            const cmd = (window.currentGitStatus && window.currentGitStatus.needs_pull) ? "git pull && ./deploy.sh" : "./deploy.sh";
             navigator.clipboard.writeText(cmd).then(() => {{
                 const btn = document.getElementById('copyGitCmdBtn');
                 if (btn) {{
@@ -3869,6 +3875,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }}
                 const data = await res.json();
                 
+                if (data.app_version) {{
+                    const vBadge = document.getElementById('appVersionBadge');
+                    if (vBadge) vBadge.innerText = data.app_version;
+                }}
+
                 if (data.git_status) {{
                     window.currentGitStatus = data.git_status;
                     const gitBadge = document.getElementById('gitStatusBadge');
@@ -3880,6 +3891,13 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             gitBadge.onclick = openGitPullModal;
                         }}
                         if (gitText) gitText.innerHTML = `<i class="fa-solid fa-arrow-down mr-1"></i>${{data.git_status.behind_count}} Pull 필요`;
+                    }} else if (data.git_status.ahead_count > 0) {{
+                        if (gitBadge) {{
+                            gitBadge.classList.remove('hidden');
+                            gitBadge.className = "flex items-center gap-1.5 bg-indigo-950/80 border border-indigo-500/70 px-2.5 py-1.5 rounded-xl shadow-lg text-indigo-300 text-xs font-bold hover:bg-indigo-900/80 transition-all cursor-pointer animate-pulse";
+                            gitBadge.onclick = openGitPullModal;
+                        }}
+                        if (gitText) gitText.innerHTML = `<i class="fa-solid fa-arrow-up mr-1"></i>${{data.git_status.ahead_count}} Deploy 대기`;
                     }} else if (data.git_status.is_git) {{
                         if (gitBadge) {{
                             gitBadge.classList.remove('hidden');

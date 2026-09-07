@@ -5,6 +5,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.1.2] - 2026-09-07 (Prompt Caching Prefix Preservation, IDE Task Bypass & Git Sync Tracking)
+
+### 🌟 Added
+* **⚡ OpenAI Prompt Caching 접두사(Prefix) 100% 보존**:
+  * 사전 기억 회수(Memory Prefetch Recall) 시 `messages.insert(0)`를 배제하고, 사용자 프롬프트 하단(`messages[-1]`)에 RAG 컨텍스트를 병합하여 고정 시스템 프롬프트(`messages[0]`, 15k~30k 토큰) 접두사 해시 및 80% 캐시 적중률 완전 보존.
+* **🛡️ IDE 내부 백그라운드 관리 태스크 메모리 회수 바이패스 (0ms / 0토큰)**:
+  * 채팅 탭 제목 짓기(`Generate a concise...`), 세션 요약 캐치업(`Write a brief catch-up...`), 컨텍스트 체크포인트(`CONTEXT CHECKPOINT`) 등 IDE 자체 관리용 1회성 턴(8.5%)의 불필요한 기억 회수 사전 차단.
+* **🔄 Git 동기화 감지 주기 15초 단축 및 신규 배포 대기(`ahead_count`) 뱃지 연동**:
+  * 로컬 커밋 발생 시 `[🚀 N개 Deploy 대기]` 뱃지 표시 및 커밋 내역/`./deploy.sh` 원클릭 복사 모달 제공.
+* **📜 Controller 명세서 작성**:
+  * `Controller/memory_prefetch_cache_optimizer_controller.md` 작성 및 아키텍처 불변식 수립.
+
+---
+
 ## [0.1.1] - 2026-08-27 (Official Baseline Release: Real Credits, Zero-Flicker UX, Git Sync & Polling Control)
 
 ### 🌟 Added

@@ -9,7 +9,7 @@ logger = logging.getLogger("tierbridge.git_sync")
 
 _cached_status = None
 _last_check_time = 0
-CACHE_TTL_SECONDS = 180  # 3분 캐시 유지
+CACHE_TTL_SECONDS = 15  # 15초 캐시 유지 (반응성 향상)
 
 
 def _resolve_git_root(candidate_dir: str = None) -> str:
@@ -155,7 +155,21 @@ def get_git_sync_status(force: bool = False, repo_dir: str = None) -> dict:
                 timeout=2
             )
             if ahead_check.returncode == 0:
-                result["ahead_count"] = int(ahead_check.stdout.strip() or 0)
+                ahead_count = int(ahead_check.stdout.strip() or 0)
+                result["ahead_count"] = ahead_count
+                if ahead_count > 0 and not result["pending_commits"]:
+                    log_check = subprocess.run(
+                        ["git", "log", "-n", "5", f"{target_ref}..HEAD", "--oneline"],
+                        cwd=git_root,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=2
+                    )
+                    if log_check.returncode == 0 and log_check.stdout.strip():
+                        result["pending_commits"] = [
+                            line.strip() for line in log_check.stdout.strip().split("\n") if line.strip()
+                        ]
 
     except Exception as e:
         logger.warning(f"Failed to check git sync status: {e}")
