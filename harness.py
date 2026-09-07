@@ -495,7 +495,15 @@ async def route_harness(request: Request):
             recalled_context = await MemoryPrefetcher.fetch_associated_context(user_prompt, current_session_id=session_id)
             if recalled_context:
                 if unified_req and hasattr(unified_req, "messages") and unified_req.messages:
-                    unified_req.messages.insert(0, Message(role="system", content=recalled_context))
+                    last_msg = unified_req.messages[-1]
+                    if last_msg.role == "user":
+                        # OpenAI Prompt Caching 접두사(Prefix) 보존:
+                        # messages[0] 시스템 프롬프트를 밀지 않고, 사용자 프롬프트 하단에 RAG 연관 지식 블록 첨부
+                        last_msg.content = f"{last_msg.content.strip()}\n\n---\n{recalled_context}"
+                    else:
+                        # Fallback: 비정형 메시지 구조인 경우 messages[0] 뒤(인덱스 1)에 주입하여 0번 프리픽스 보존
+                        insert_idx = 1 if len(unified_req.messages) > 1 else 0
+                        unified_req.messages.insert(insert_idx, Message(role="system", content=recalled_context))
         except Exception as e:
             log.debug(f"[RecallHook] Memory prefetch bypassed: {e}")
 

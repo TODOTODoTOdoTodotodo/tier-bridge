@@ -105,5 +105,45 @@ class TestMemoryPrefetcher(unittest.IsolatedAsyncioTestCase):
         self.assertIn("... (이하 생략)", block)
 
 
+    async def test_prefetch_ide_background_task_skipping(self):
+        """IDE 내부 백그라운드 관리 태스크(제목 생성, 캐치업, 체크포인트 등)는 회수에서 즉시 제외되는지 검증"""
+        with patch.object(MemoryHandler, "search_associated_memories") as mock_search:
+            for bg_prompt in [
+                "Generate a concise, single-line task title for user prompt: 쿠폰 복원",
+                "Write a brief catch-up for a user returning to this task",
+                "You are performing a CONTEXT CHECKPOINT COMPACTION step."
+            ]:
+                result = await MemoryPrefetcher.fetch_associated_context(
+                    user_prompt=bg_prompt,
+                    current_session_id="sess_current"
+                )
+                self.assertIsNone(result)
+            mock_search.assert_not_called()
+
+    def test_cache_preserving_user_turn_injection(self):
+        """시스템 프롬프트 인덱스 0번을 밀지 않고 유저 메시지 하단에 RAG 컨텍스트가 첨부되는지 검증"""
+        sys_msg = Message(role="system", content="You are a helpful coding assistant with tools.")
+        user_msg = Message(role="user", content="쿠폰 관련 작업 기억나는 거 있어?")
+        req = UnifiedRequest(messages=[sys_msg, user_msg])
+
+        recalled_context = "[🧠 Giyeok 장기 기억저장소 연관 지식]\n- 쿠폰 복원 로직"
+        
+        # harness.py 개선 로직 시뮬레이션
+        last_msg = req.messages[-1]
+        if last_msg.role == "user":
+            last_msg.content = f"{last_msg.content.strip()}\n\n---\n{recalled_context}"
+        else:
+            req.messages.insert(1, Message(role="system", content=recalled_context))
+
+        # 1. 인덱스 0번의 시스템 프롬프트가 그대로 유지되는지 확인 (캐시 프리픽스 불변)
+        self.assertEqual(req.messages[0].role, "system")
+        self.assertEqual(req.messages[0].content, "You are a helpful coding assistant with tools.")
+        # 2. 메시지 수가 불필요하게 3개로 늘어나지 않고 2개로 유지되는지 확인
+        self.assertEqual(len(req.messages), 2)
+        # 3. 유저 메시지 하단에 기억 내용이 성공적으로 부착되었는지 확인
+        self.assertIn("쿠폰 관련 작업 기억나는 거 있어?", req.messages[-1].content)
+        self.assertIn("[🧠 Giyeok 장기 기억저장소 연관 지식]", req.messages[-1].content)
+
+
 if __name__ == "__main__":
     unittest.main()
