@@ -306,8 +306,23 @@ async def get_dashboard_stats():
     except Exception:
         app_version_tag = "v0.1.1"
 
+    try:
+        try:
+            from tierbridge.router import Router
+        except ImportError:
+            from src.tierbridge.router import Router
+        clf_status = dict(Router.last_classifier_status)
+        if not clf_status.get("last_timestamp"):
+            clf_records = [r for r in records if "CLASSIFIER" in r.get("decision", "")]
+            if clf_records:
+                clf_status["last_used"] = clf_records[-1].get("model", "gpt-reserve")
+                clf_status["last_timestamp"] = clf_records[-1].get("timestamp")
+    except Exception:
+        clf_status = {"primary": "gpt-reserve", "fallback": "gpt-5.6-luna", "last_used": "gpt-reserve", "last_timestamp": None}
+
     return {
         "app_version": app_version_tag,
+        "classifier_status": clf_status,
         "records": records,
         "healing_status": HealingEngine.get_healing_status(),
         "healing_history": list(reversed(healing_history)),
