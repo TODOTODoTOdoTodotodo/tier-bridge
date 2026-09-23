@@ -20,12 +20,12 @@ def _read_version():
                         return v
             except Exception:
                 pass
-    return "0.1.1"
+    return "0.1.2"
 
 
 __version__ = _read_version()
 __release_name__ = "TierBridge Core"
-__release_date__ = "2026-08-27"
+__release_date__ = "2026-09-07"
 
 
 def get_version_info() -> dict:

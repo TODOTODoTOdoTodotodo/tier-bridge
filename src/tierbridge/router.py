@@ -6,6 +6,12 @@ from tierbridge.models import UnifiedRequest
 
 class Router:
     _client = None
+    last_classifier_status = {
+        "primary": "gpt-reserve",
+        "fallback": "gpt-5.6-luna",
+        "last_used": "gpt-reserve",
+        "last_timestamp": None
+    }
 
     @classmethod
     def get_client(cls) -> httpx.AsyncClient:
@@ -88,7 +94,7 @@ class Router:
 
         # 지능형 라우터 프롬프트 설정 (서브 스텝 자동 강하 지침 포함)
         payload = {
-            "model": "gpt-5.6-luna",
+            "model": "gpt-reserve",
             "store": False,
             "stream": True,
             "reasoning": {"effort": "low"},
@@ -125,11 +131,12 @@ class Router:
         import asyncio
         from datetime import datetime
 
-        verdict_text = "BRONZE"
-        max_retries = 2
-        retry_delay = 0.5
-        
-        for attempt in range(max_retries + 1):
+        candidate_models = ["gpt-reserve", "gpt-5.6-luna"]
+        classifier_model_used = None
+        verdict_text = ""
+
+        for cand_idx, cand_model in enumerate(candidate_models):
+            payload["model"] = cand_model
             verdict_accumulated = ""
             try:
                 client = cls.get_client()
@@ -159,21 +166,26 @@ class Router:
                                 except Exception:
                                     pass
                         if verdict_accumulated.strip():
-                            verdict_text = verdict_accumulated
+                            verdict_text = verdict_accumulated.strip()
+                            classifier_model_used = cand_model if cand_idx == 0 else f"{cand_model}-fallback"
                             break
                         else:
-                            print(f"[Warning] Classifier HTTP status {response.status_code} with empty body on attempt {attempt+1}/{max_retries+1}.")
+                            print(f"[Warning] Classifier ({cand_model}) HTTP 200 with empty body.")
                     else:
-                        print(f"[Warning] Classifier HTTP status {response.status_code} on attempt {attempt+1}/{max_retries+1}.")
+                        print(f"[Warning] Classifier ({cand_model}) HTTP status {response.status_code}.")
             except Exception as e:
-                print(f"[Warning] Classifier connection error on attempt {attempt+1}/{max_retries+1}: {e} ({type(e).__name__}).")
-            
-            if attempt < max_retries:
-                print(f"➔ [RETRY] 0.5초 후 분류기 재시도 발송... ({attempt+1}/{max_retries})")
-                await asyncio.sleep(retry_delay)
-            else:
-                print(f"[Warning] All classifier retries failed. Falling back to BRONZE.")
-                return "BRONZE", "gpt-5.6-luna", "low"
+                print(f"[Warning] Classifier ({cand_model}) error: {e} ({type(e).__name__}).")
+
+            if cand_idx == 0:
+                print(f"➔ [CLASSIFIER FALLBACK] {cand_model} 응답 불가 ➔ {candidate_models[1]} 모델로 즉시 폴백합니다.", flush=True)
+
+        if not verdict_text:
+            print(f"[Warning] All classifier candidates failed. Falling back to BRONZE fail-safe.", flush=True)
+            classifier_model_used = "fail-safe"
+            verdict_text = "BRONZE"
+
+        cls.last_classifier_status["last_used"] = classifier_model_used
+        cls.last_classifier_status["last_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         verdict = verdict_text.strip().upper()
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -208,7 +220,7 @@ class Router:
 
         mode_tag = "4-TIER SOL ROUTER" if is_4tier_sol_mode else "STANDARD 3-TIER ROUTER"
         sid_tag = f" [sid: {session_id}]" if session_id else ""
-        print(f"[{now_str}]{sid_tag} ➔ [DECISION: {mode_tag}] {final_decision} ({final_model}:{final_effort}) | \"{display_prompt}\"", flush=True)
+        print(f"[{now_str}]{sid_tag} ➔ [DECISION: {mode_tag}] {final_decision} ({final_model}:{final_effort}) [clf: {classifier_model_used}] | \"{display_prompt}\"", flush=True)
 
         # 분류기(Classifier) 자체 소모 토큰 및 비용 트래킹 로깅 (전용 크레딧 산출용)
         clf_in_tok = max(100, int(len(target_eval_prompt) * 0.35)) + 150
@@ -216,6 +228,6 @@ class Router:
         clf_in_price = tier_info.get("input_price", 1.0)
         clf_out_price = tier_info.get("output_price", 3.0)
         clf_cost = (clf_in_tok / 1000000.0) * clf_in_price + (clf_out_tok / 1000000.0) * clf_out_price
-        print(f"[{now_str}]{sid_tag} ➔ [USAGE] CLASSIFIER (gpt-5.6-luna) | input={clf_in_tok} output={clf_out_tok} tokens | loc=0 lines | cost=${clf_cost:.6f} USD", flush=True)
+        print(f"[{now_str}]{sid_tag} ➔ [USAGE] CLASSIFIER ({classifier_model_used}) | input={clf_in_tok} output={clf_out_tok} tokens | loc=0 lines | cost=${clf_cost:.6f} USD", flush=True)
 
         return final_decision, final_model, final_effort

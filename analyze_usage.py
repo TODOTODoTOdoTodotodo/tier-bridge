@@ -471,6 +471,13 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 <span id="gitStatusText">Git Checking...</span>
             </div>
 
+            <!-- Classifier Status Badge -->
+            <div id="classifierStatusBadge" class="hidden md:flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/60 px-2.5 py-1.5 rounded-xl text-slate-300 text-xs font-mono shadow-sm" title="분류기: 1순위 gpt-reserve (1.5x 고속) ➔ 폴백 gpt-5.6-luna">
+                <i class="fa-solid fa-bolt text-amber-400"></i>
+                <span class="text-slate-400">분류기:</span>
+                <span id="classifierStatusText" class="text-emerald-400 font-bold">gpt-reserve</span>
+            </div>
+
             <!-- Interactive Live Sync Control Toolbar -->
             <div class="relative inline-flex items-center bg-slate-800/90 border border-emerald-500/40 rounded-xl shadow-lg p-0.5 gap-1">
                 <!-- Manual Refresh Button -->
@@ -1846,6 +1853,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         const safePrompt = (r.prompt || '(연속 서브스텝 / 툴 액션)').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
                         
                         let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
+                        let decisionText = r.decision;
                         if (r.decision.includes('BRONZE')) {{
                             badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
                         }} else if (r.decision.includes('SILVER')) {{
@@ -1859,7 +1867,18 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         }} else if (r.decision.includes('CHALLENGER') || r.decision.includes('SOL')) {{
                             badgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-extrabold animate-pulse';
                         }} else if (r.decision.includes('CLASSIFIER')) {{
-                            badgeClass = 'bg-purple-950/40 text-purple-300 border-purple-600/40 font-mono';
+                            const isReserve = (r.model && r.model.includes('reserve'));
+                            const isFallback = (r.model && r.model.includes('fallback'));
+                            if (isReserve) {{
+                                badgeClass = 'bg-emerald-950/50 text-emerald-300 border-emerald-500/50 font-mono';
+                                decisionText = `CLASSIFIER <span class="text-[10px] text-emerald-400 font-bold ml-1">⚡reserve</span>`;
+                            }} else if (isFallback) {{
+                                badgeClass = 'bg-amber-950/50 text-amber-300 border-amber-500/50 font-mono';
+                                decisionText = `CLASSIFIER <span class="text-[10px] text-amber-400 font-bold ml-1">luna-fb</span>`;
+                            }} else {{
+                                badgeClass = 'bg-purple-950/40 text-purple-300 border-purple-600/40 font-mono';
+                                decisionText = `CLASSIFIER <span class="text-[10px] text-sky-400 font-bold ml-1">luna</span>`;
+                            }}
                         }}
 
                         turnsHtml += `
@@ -1868,7 +1887,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             <td class="px-3 py-2.5 font-mono text-slate-400 whitespace-nowrap">${{timeStr}}</td>
                             <td class="px-3 py-2.5 text-center">
                                 <span class="px-2 py-0.5 text-xs font-semibold rounded-full border ${{badgeClass}}">
-                                    ${{r.decision}}
+                                    ${{decisionText}}
                                 </span>
                             </td>
                             <td class="px-3 py-2.5 text-slate-200 font-medium max-w-md truncate" title="${{safePrompt}}">${{safePrompt}}</td>
@@ -2359,12 +2378,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         tokens: 0,
                         cost: 0,
                         decision: r.decision,
+                        model: r.model || '',
                         session_id: r.session_id
                     }};
                 }}
                 // CLASSIFIER는 보조 분류 로그이므로 메인 모델 등급(BRONZE, SILVER, GOLD, PLATINUM 등)을 우선 적용
                 if (r.decision !== 'CLASSIFIER' || promptMap[pKey].decision === 'CLASSIFIER') {{
                     promptMap[pKey].decision = r.decision;
+                    promptMap[pKey].model = r.model || '';
                 }}
                 // 메인 턴 기준으로 요청 횟수 카운트
                 if (r.decision !== 'CLASSIFIER') {{
@@ -2391,6 +2412,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const sidShort = (sidFull !== 'N/A' && sidFull.length > 8) ? sidFull.substring(0, 8) : sidFull;
                 
                 let badgeClass = 'bg-slate-800 text-slate-300 border-slate-600/40';
+                let decisionText = p.decision;
                 if (p.decision.includes('BRONZE')) {{
                     badgeClass = 'bg-amber-900/30 text-amber-300 border-amber-600/40';
                 }} else if (p.decision.includes('SILVER')) {{
@@ -2404,7 +2426,18 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }} else if (p.decision.includes('CHALLENGER') || p.decision.includes('SOL')) {{
                     badgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-extrabold animate-pulse';
                 }} else if (p.decision.includes('CLASSIFIER')) {{
-                    badgeClass = 'bg-purple-950/40 text-purple-300 border-purple-600/40 font-mono';
+                    const isReserve = (p.model && p.model.includes('reserve'));
+                    const isFallback = (p.model && p.model.includes('fallback'));
+                    if (isReserve) {{
+                        badgeClass = 'bg-emerald-950/50 text-emerald-300 border-emerald-500/50 font-mono';
+                        decisionText = `CLASSIFIER <span class="text-[10px] text-emerald-400 font-bold ml-1">⚡reserve</span>`;
+                    }} else if (isFallback) {{
+                        badgeClass = 'bg-amber-950/50 text-amber-300 border-amber-500/50 font-mono';
+                        decisionText = `CLASSIFIER <span class="text-[10px] text-amber-400 font-bold ml-1">luna-fb</span>`;
+                    }} else {{
+                        badgeClass = 'bg-purple-950/40 text-purple-300 border-purple-600/40 font-mono';
+                        decisionText = `CLASSIFIER <span class="text-[10px] text-sky-400 font-bold ml-1">luna</span>`;
+                    }}
                 }}
 
                 const safePrompt = p.prompt.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -2420,7 +2453,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     <td class="px-4 py-3 text-right text-emerald-400 font-mono font-bold">${{credits}} Cr</td>
                     <td class="px-4 py-3 text-center">
                         <span class="px-2.5 py-1 text-xs font-semibold rounded-full border ${{badgeClass}}">
-                            ${{p.decision}}
+                            ${{decisionText}}
                         </span>
                     </td>
                 </tr>
@@ -3805,14 +3838,20 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const modal = document.getElementById('gitPullModal');
             if (!modal) return;
             document.getElementById('gitModalBranch').innerText = gs.current_branch || 'main';
-            document.getElementById('gitModalBehind').innerText = gs.needs_pull ? `${{gs.behind_count}}개 커밋 뒤처짐 (Pull 필요)` : '최신 상태 (Up to date)';
+            if (gs.needs_pull) {{
+                document.getElementById('gitModalBehind').innerText = `${{gs.behind_count}}개 커밋 뒤처짐 (git pull && ./deploy.sh 필요)`;
+            }} else if (gs.ahead_count > 0) {{
+                document.getElementById('gitModalBehind').innerText = `${{gs.ahead_count}}개 신규 커밋 대기 (./deploy.sh 필요)`;
+            }} else {{
+                document.getElementById('gitModalBehind').innerText = '최신 상태 (Up to date)';
+            }}
             
             const commitsListEl = document.getElementById('gitModalCommitsList');
             if (commitsListEl) {{
                 if (gs.pending_commits && gs.pending_commits.length > 0) {{
                     commitsListEl.innerHTML = gs.pending_commits.map(c => `
                         <li class="py-1.5 px-2.5 bg-slate-800/60 rounded-lg text-xs font-mono text-slate-300 flex items-center gap-2 border border-slate-700/50">
-                            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                            <span class="w-1.5 h-1.5 rounded-full ${{gs.needs_pull ? 'bg-amber-400' : 'bg-indigo-400'}} shrink-0"></span>
                             <span class="truncate">${{c.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}}</span>
                         </li>
                     `).join('');
@@ -3829,7 +3868,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         }}
 
         function copyGitPullCommand() {{
-            const cmd = "git pull && ./deploy.sh";
+            const cmd = (window.currentGitStatus && window.currentGitStatus.needs_pull) ? "git pull && ./deploy.sh" : "./deploy.sh";
             navigator.clipboard.writeText(cmd).then(() => {{
                 const btn = document.getElementById('copyGitCmdBtn');
                 if (btn) {{
@@ -3869,6 +3908,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }}
                 const data = await res.json();
                 
+                if (data.app_version) {{
+                    const vBadge = document.getElementById('appVersionBadge');
+                    if (vBadge) vBadge.innerText = data.app_version;
+                }}
+
                 if (data.git_status) {{
                     window.currentGitStatus = data.git_status;
                     const gitBadge = document.getElementById('gitStatusBadge');
@@ -3880,6 +3924,13 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             gitBadge.onclick = openGitPullModal;
                         }}
                         if (gitText) gitText.innerHTML = `<i class="fa-solid fa-arrow-down mr-1"></i>${{data.git_status.behind_count}} Pull 필요`;
+                    }} else if (data.git_status.ahead_count > 0) {{
+                        if (gitBadge) {{
+                            gitBadge.classList.remove('hidden');
+                            gitBadge.className = "flex items-center gap-1.5 bg-indigo-950/80 border border-indigo-500/70 px-2.5 py-1.5 rounded-xl shadow-lg text-indigo-300 text-xs font-bold hover:bg-indigo-900/80 transition-all cursor-pointer animate-pulse";
+                            gitBadge.onclick = openGitPullModal;
+                        }}
+                        if (gitText) gitText.innerHTML = `<i class="fa-solid fa-arrow-up mr-1"></i>${{data.git_status.ahead_count}} Deploy 대기`;
                     }} else if (data.git_status.is_git) {{
                         if (gitBadge) {{
                             gitBadge.classList.remove('hidden');
@@ -3887,6 +3938,25 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                             gitBadge.onclick = openGitPullModal;
                         }}
                         if (gitText) gitText.innerHTML = `<i class="fa-solid fa-check text-emerald-400 mr-1"></i>Up to date`;
+                    }}
+                }}
+
+                if (data.classifier_status) {{
+                    const clfBadge = document.getElementById('classifierStatusBadge');
+                    const clfText = document.getElementById('classifierStatusText');
+                    if (clfBadge) clfBadge.classList.remove('hidden');
+                    if (clfText) {{
+                        const lastUsed = data.classifier_status.last_used || 'gpt-reserve';
+                        if (lastUsed.includes('fallback')) {{
+                            clfText.className = "text-amber-400 font-bold";
+                            clfText.innerHTML = `${{lastUsed}} <span class="text-[10px] text-amber-300/80">(폴백)</span>`;
+                        }} else if (lastUsed.includes('reserve')) {{
+                            clfText.className = "text-emerald-400 font-bold";
+                            clfText.innerHTML = `gpt-reserve <span class="text-[10px] text-emerald-300/80">(고속)</span>`;
+                        }} else {{
+                            clfText.className = "text-sky-400 font-bold";
+                            clfText.innerText = lastUsed;
+                        }}
                     }}
                 }}
 
