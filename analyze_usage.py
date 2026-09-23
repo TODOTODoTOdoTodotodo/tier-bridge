@@ -4121,7 +4121,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
     )
     decision_pattern = re.compile(
-        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+)(?:\s+\([^)]+\))?(?:\s+\[clf:[^\]]+\])?\s*\|\s*\"(?P<prompt>.*)\"$'
     )
 
     healing_pattern = re.compile(
@@ -4131,6 +4131,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     all_raw_records = []
     records = []
     prompt_history = []
+    session_prompts = {}
     healing_history = []
     
     with open(log_filepath, "r", encoding="utf-8", errors="ignore") as f:
@@ -4150,12 +4151,16 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
             # DECISION 매칭 수집
             d_match = decision_pattern.search(line)
             if d_match:
+                d_sid = d_match.group("sid") or "N/A"
+                d_prompt = d_match.group("prompt")
                 prompt_history.append({
                     "timestamp": d_match.group("timestamp"),
-                    "sid": d_match.group("sid") or "N/A",
+                    "sid": d_sid,
                     "decision": d_match.group("decision"),
-                    "prompt": d_match.group("prompt")
+                    "prompt": d_prompt
                 })
+                if d_sid != "N/A":
+                    session_prompts[d_sid] = d_prompt
                 continue
                 
             # USAGE 매칭 수집
@@ -4184,12 +4189,21 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                 balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
                 credits_val = real_credit_val if real_credit_val is not None else (cost / 0.20)
 
-                # 가장 최근의 DECISION 프롬프트 연동
+                # 세션 ID 기반 프롬프트 매핑 우선, 없을 시 최신 프롬프트 연동
                 associated_prompt = ""
-                if prompt_history:
-                    associated_prompt = prompt_history[-1]["prompt"]
-                    if sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
-                        sid_str = prompt_history[-1]["sid"]
+                if sid_str != "N/A" and sid_str in session_prompts:
+                    associated_prompt = session_prompts[sid_str]
+                elif prompt_history:
+                    for p in reversed(prompt_history):
+                        if sid_str != "N/A" and p["sid"] == sid_str:
+                            associated_prompt = p["prompt"]
+                            break
+                    if not associated_prompt and sid_str == "N/A":
+                        associated_prompt = prompt_history[-1]["prompt"]
+                        if prompt_history[-1]["sid"] != "N/A":
+                            sid_str = prompt_history[-1]["sid"]
+                    elif not associated_prompt:
+                        associated_prompt = prompt_history[-1]["prompt"]
 
                 if sid_str == "N/A" and associated_prompt:
                     import hashlib

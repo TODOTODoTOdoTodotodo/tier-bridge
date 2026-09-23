@@ -200,13 +200,14 @@ async def get_dashboard_stats():
         log_file = "harness.log"
     records = []
     prompt_history = []
+    session_prompts = {}
     
     if os.path.exists(log_file):
         usage_pattern = re.compile(
             r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
         )
         decision_pattern = re.compile(
-            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+)(?:\s+\([^)]+\))?(?:\s+\[clf:[^\]]+\])?\s*\|\s*\"(?P<prompt>.*)\"$'
         )
         healing_pattern = re.compile(
             r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[(?P<event_type>HEALING|VERSION_SWITCH)\] (?P<details>.*)$'
@@ -225,12 +226,16 @@ async def get_dashboard_stats():
                     continue
                 d_match = decision_pattern.search(line)
                 if d_match:
+                    d_sid = d_match.group("sid") or "N/A"
+                    d_prompt = d_match.group("prompt")
                     prompt_history.append({
                         "timestamp": d_match.group("timestamp"),
-                        "sid": d_match.group("sid") or "N/A",
+                        "sid": d_sid,
                         "decision": d_match.group("decision"),
-                        "prompt": d_match.group("prompt")
+                        "prompt": d_prompt
                     })
+                    if d_sid != "N/A":
+                        session_prompts[d_sid] = d_prompt
                     continue
                 u_match = usage_pattern.search(line)
                 if u_match:
@@ -253,9 +258,20 @@ async def get_dashboard_stats():
                     real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
                     balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
                     
-                    associated_prompt = prompt_history[-1]["prompt"] if prompt_history else ""
-                    if prompt_history and sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
-                        sid_str = prompt_history[-1]["sid"]
+                    associated_prompt = ""
+                    if sid_str != "N/A" and sid_str in session_prompts:
+                        associated_prompt = session_prompts[sid_str]
+                    elif prompt_history:
+                        for p in reversed(prompt_history):
+                            if sid_str != "N/A" and p["sid"] == sid_str:
+                                associated_prompt = p["prompt"]
+                                break
+                        if not associated_prompt and sid_str == "N/A":
+                            associated_prompt = prompt_history[-1]["prompt"]
+                            if prompt_history[-1]["sid"] != "N/A":
+                                sid_str = prompt_history[-1]["sid"]
+                        elif not associated_prompt:
+                            associated_prompt = prompt_history[-1]["prompt"]
 
                     if sid_str == "N/A" and associated_prompt:
                         import hashlib

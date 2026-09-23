@@ -44,5 +44,21 @@ class TestSessionAggregationAndDashboard(unittest.TestCase):
         self.assertIn("allRecords.filter(r => r.session_id === sessionToFilter", content)
         self.assertIn("mSelect.value = 'ALL'", content)
 
+    def test_prompt_matching_accuracy_for_01a0cbe5(self):
+        """ Ensure prompt is not contaminated by previous session's prompt """
+        live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+        if not os.path.exists(live_log):
+            self.skipTest("Live harness.log not found")
+
+        cmd = [
+            os.path.expanduser("~/.tierbridge/live/.venv/bin/python"),
+            "analyze_usage.py",
+            "-s", "01a0cbe5"
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("counter", result.stdout)
+        self.assertIn("산재된 문서", result.stdout)
+
 if __name__ == "__main__":
     unittest.main()
