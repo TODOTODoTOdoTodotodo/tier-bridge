@@ -17,9 +17,20 @@ import json
 from collections import defaultdict
 from datetime import datetime
 
-def parse_args():
+def parse_args(args=None):
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    default_log = os.path.join(script_dir, "harness.log") if os.path.exists(os.path.join(script_dir, "harness.log")) else "harness.log"
+    env_log = os.environ.get("TIERBRIDGE_LOG_PATH")
+    live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+    script_log = os.path.join(script_dir, "harness.log")
+
+    if env_log and os.path.exists(env_log):
+        default_log = env_log
+    elif os.path.exists(live_log):
+        default_log = live_log
+    elif os.path.exists(script_log):
+        default_log = script_log
+    else:
+        default_log = "harness.log"
     
     parser = argparse.ArgumentParser(description="TierBridge 로그 기반 Kibana풍 USAGE 및 힐링팩터 모델 관리 분석기")
     parser.add_argument("log_file", nargs="?", default=default_log, help=f"분석할 로그 파일 경로 (기본: {default_log})")
@@ -29,7 +40,7 @@ def parse_args():
     parser.add_argument("--session", "-s", type=str, help="특정 세션 ID 필터 (예: 5eb61a1e)")
     parser.add_argument("--html", "-w", action="store_true", help="Kibana 스타일 시각화 웹 대시보드(usage_dashboard.html) 생성 및 브라우저 열기")
     parser.add_argument("--no-open", action="store_true", help="HTML 대시보드 생성 후 브라우저 자동 오픈 금지")
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 def show_enterprise_balance():
     import urllib.request
@@ -1513,6 +1524,14 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const select = document.getElementById('sessionSelect');
             if (select) {{
                 select.value = sid;
+                if (select.value !== sid) {{
+                    for (let opt of select.options) {{
+                        if (opt.value && (opt.value === sid || opt.value.includes(sid))) {{
+                            select.value = opt.value;
+                            break;
+                        }}
+                    }}
+                }}
                 onFilterChange();
                 window.scrollTo({{ top: 0, behavior: 'smooth' }});
             }}
@@ -1700,11 +1719,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         function renderDashboard(targetMonth, targetSession) {{
             let filteredRecords = allRecords;
 
-            if (targetMonth && targetMonth !== 'ALL') {{
-                filteredRecords = filteredRecords.filter(r => r.month === targetMonth);
-            }}
-
+            // 1. 세션 선택 시 세션을 전체 allRecords에서 우선 추출하고, 월 선택 충돌 방지
             if (targetSession && targetSession !== 'ALL') {{
+                let sessionToFilter = targetSession;
                 if (targetSession === 'LATEST') {{
                     let latestSid = null;
                     let maxTime = '';
@@ -1715,10 +1732,23 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         }}
                     }});
                     if (latestSid) {{
-                        filteredRecords = filteredRecords.filter(r => r.session_id === latestSid);
+                        sessionToFilter = latestSid;
                     }}
-                }} else {{
-                    filteredRecords = filteredRecords.filter(r => r.session_id === targetSession || r.session_id.includes(targetSession));
+                }}
+                filteredRecords = allRecords.filter(r => r.session_id === sessionToFilter || (r.session_id && r.session_id.includes(sessionToFilter)));
+
+                // 선택된 세션의 월로 monthSelect 드롭다운 자동 동기화 (충돌 방지)
+                if (filteredRecords.length > 0) {{
+                    const sessionMonth = filteredRecords[0].month;
+                    const mSelect = document.getElementById('monthSelect');
+                    if (mSelect && sessionMonth && mSelect.value !== 'ALL' && mSelect.value !== sessionMonth) {{
+                        mSelect.value = 'ALL';
+                    }}
+                }}
+            }} else {{
+                // 전체 세션 조회 시에만 월별 필터 적용
+                if (targetMonth && targetMonth !== 'ALL') {{
+                    filteredRecords = filteredRecords.filter(r => r.month === targetMonth);
                 }}
             }}
 
@@ -1776,11 +1806,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const savedUsd = Math.max(0, simTerraCost - lunaCost);
             const savedCredits = savedUsd / 0.20;
 
-            let displayCredits = (hasRealCredit && totalRealCredits > 0) ? totalRealCredits : totalCredits;
+            let displayCredits = (hasRealCredit && totalRealCredits > 0) ? (totalRealCredits + clfCredits) : totalCredits;
             let creditDisplayHtml = displayCredits.toFixed(2) + ' <span class="text-sm font-normal text-slate-400">Cr</span>';
             let breakdownHtml = `<span class="text-indigo-300 font-bold">🤖 모델: ${{mainCredits.toFixed(2)}} Cr</span> <span class="text-slate-500">|</span> <span class="text-amber-300 font-bold">🔍 분류기: ${{clfCredits.toFixed(2)}} Cr</span>`;
             if (hasRealCredit && totalRealCredits > 0) {{
-                const cacheDiscountPct = totalCredits > 0 ? Math.max(0, Math.round((1 - (totalRealCredits / totalCredits)) * 100)) : 0;
+                const cacheDiscountPct = totalCredits > 0 ? Math.max(0, Math.round((1 - (displayCredits / totalCredits)) * 100)) : 0;
                 breakdownHtml = `<span class="text-emerald-300 font-bold" title="OpenAI 엔터프라이즈 계정 실제 차감">💳 계정 실차감</span> <span class="text-slate-500">|</span> <span class="text-slate-400" title="캐시 미적용 정가 기준">정가: ${{totalCredits.toFixed(2)}} Cr (${{cacheDiscountPct}}% 캐시할인)</span>`;
             }}
 

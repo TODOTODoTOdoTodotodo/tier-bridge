@@ -115,6 +115,8 @@ sleep 2
 
 # 대시보드 HTML 사전 동기화 생성
 MEMORY_DB_PATH="$TIERBRIDGE_MEM_DB" PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$LIVE_DIR/analyze_usage.py" "$LIVE_DIR/harness.log" --html --no-open >/dev/null 2>&1 || true
+cp "$LIVE_DIR/usage_dashboard.html" "$DEV_DIR/usage_dashboard.html" 2>/dev/null || true
+cp "$LIVE_DIR/harness.log" "$DEV_DIR/harness.log" 2>/dev/null || true
 
 # 6. 배포 헬스체크 및 결과 검증
 HEALTH_CHECK=$(curl -s http://localhost:$PORT/v1/models || true)

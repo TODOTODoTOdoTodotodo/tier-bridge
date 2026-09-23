@@ -188,8 +188,16 @@ async def switch_model_version(request: Request):
 
 @app.get("/v1/dashboard/stats")
 async def get_dashboard_stats():
-    """ 대시보드 3초 라이브 자동 갱신(Live Auto-Sync)용 최신 집계 수치, 엔터프라이즈 실시간 잔여량 및 힐링 데이터 반환 """
-    log_file = "harness.log"
+    env_log = os.environ.get("TIERBRIDGE_LOG_PATH")
+    live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+    if env_log and os.path.exists(env_log):
+        log_file = env_log
+    elif os.path.exists("harness.log"):
+        log_file = "harness.log"
+    elif os.path.exists(live_log):
+        log_file = live_log
+    else:
+        log_file = "harness.log"
     records = []
     prompt_history = []
     
