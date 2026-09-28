@@ -12,6 +12,9 @@ class UsageTracker:
         "claude-3-5-haiku": {"input": 0.80, "output": 4.00},
         "gemini-1.5-flash": {"input": 0.075, "output": 0.30},
         "gemini-1.5-pro": {"input": 1.25, "output": 5.00},
+        "gemini-3.8-flash": {"input": 0.15, "output": 0.60},
+        "gemini-3.7-flash": {"input": 0.15, "output": 0.60},
+        "gemini-3": {"input": 0.15, "output": 0.60},
         "unknown": {"input": 1.00, "output": 3.00}
     }
 

@@ -70,6 +70,8 @@ ENTERPRISE_API_URL = os.getenv(
 MOCK_MODE = os.getenv("MOCK_TEST_MODE", "false").lower() == "true" or ENTERPRISE_API_URL in ("mock", "test")
 ROUTING_MODE = os.getenv("ROUTING_MODE", "standard").lower()
 HIGH_POWER_MODE = os.getenv("HIGH_POWER_MODE", "false").lower() == "true" or ROUTING_MODE in ("high_power", "high", "power")
+UPSTREAM_PROVIDER = os.getenv("UPSTREAM_PROVIDER", "auto").lower()  # "auto" (auto-failover), "agy", "gemini", "chatgpt"
+AGY_MODEL = os.getenv("AGY_MODEL", "gemini-3.8-flash-high")
 
 # Mock 모드 활성화 시 로컬 모크 엔드포인트로 우회
 if MOCK_MODE:
@@ -153,7 +155,12 @@ async def get_models():
             {"id": "gpt-5.6-terra", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.6-sol", "object": "model", "owned_by": "openai"},
             {"id": "4tier", "object": "model", "owned_by": "openai"},
-            {"id": "super", "object": "model", "owned_by": "openai"}
+            {"id": "super", "object": "model", "owned_by": "openai"},
+            {"id": "gemini-3.8-flash-high", "object": "model", "owned_by": "google"},
+            {"id": "gemini-3.8-flash-medium", "object": "model", "owned_by": "google"},
+            {"id": "gemini-3.8-flash-low", "object": "model", "owned_by": "google"},
+            {"id": "agy", "object": "model", "owned_by": "google"},
+            {"id": "gemini", "object": "model", "owned_by": "google"}
         ]
     }
 
@@ -613,11 +620,25 @@ async def route_harness(request: Request):
     )
 
     # 6. 타겟 백엔드 벤더 매핑
-    target_vendor = "openai"
-    if "claude" in target_model:
+    req_model_lower = str(requested_model or "").lower()
+    is_agy_target = (
+        UPSTREAM_PROVIDER in ("agy", "gemini")
+        or req_model_lower.startswith("gemini")
+        or req_model_lower in ("agy", "gemini")
+        or "gemini" in str(target_model).lower()
+    )
+
+    if is_agy_target:
+        target_vendor = "agy"
+        if req_model_lower.startswith("gemini-"):
+            target_model = requested_model
+        else:
+            target_model = os.getenv("AGY_MODEL", "gemini-3.8-flash-high")
+        decision = "AGY_BRIDGE"
+    elif "claude" in target_model:
         target_vendor = "anthropic"
-    elif "gemini" in target_model:
-        target_vendor = "gemini"
+    else:
+        target_vendor = "openai"
 
     # 7. 타겟 어댑터 및 자격증명 스왑 해결
     target_adapter = AdapterFactory.get_adapter(target_vendor)
@@ -731,6 +752,81 @@ async def route_harness(request: Request):
     # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
     # 지식 저장소의 문제(Problem)는 항상 사용자의 실제 원본 질문(user_prompt)을 보존
     stored_prompt_text = user_prompt if user_prompt else (substep_prompt or raw_prompt_text)
+
+    # 10-A. Agy (Gemini) 직접 실행 파이프라인
+    if target_vendor == "agy":
+        agy_adapter = AdapterFactory.get_adapter("agy")
+        agy_payload = agy_adapter.from_unified_request(unified_req)
+        agy_prompt = agy_payload.get("prompt") or stored_prompt_text
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sid_tag = f" [sid: {session_id}]" if session_id else ""
+        print(f"[{now_str}]{sid_tag} ➔ [UPSTREAM: AGY GEMINI] Model: {target_model} | Provider: {UPSTREAM_PROVIDER.upper()}", flush=True)
+
+        if unified_req.stream:
+            accumulated_bytes = b""
+            def append_agy_raw(chunk_bytes: bytes):
+                nonlocal accumulated_bytes
+                accumulated_bytes += chunk_bytes
+
+            is_responses_api = "responses" in incoming_path
+            if is_responses_api:
+                gen = agy_adapter.generate_responses_sse_stream(agy_prompt, model=target_model, on_chunk=append_agy_raw)
+            else:
+                gen = agy_adapter.generate_chat_completions_sse_stream(agy_prompt, model=target_model, on_chunk=append_agy_raw)
+
+            async def agy_stream_generator():
+                try:
+                    async for sse_chunk in gen:
+                        yield sse_chunk
+                except (asyncio.CancelledError, GeneratorExit):
+                    return
+                except Exception as e:
+                    print(f"[Error] Agy Stream exception: {e}")
+                    err_msg = json.dumps({"error": {"message": f"Agy stream exception: {str(e)}", "type": "agy_error"}})
+                    yield f"data: {err_msg}\n\n".encode("utf-8")
+                    yield b"data: [DONE]\n\n"
+                    return
+                finally:
+                    resp_text = accumulated_bytes.decode("utf-8", errors="ignore")
+                    in_tok = max(100, int(len(agy_prompt) * 0.35))
+                    out_tok = max(50, int(len(resp_text) * 0.35))
+                    loc = global_tracker.extract_code_lines(resp_text)
+                    global_tracker.track_request(
+                        target_model,
+                        decision,
+                        in_tok,
+                        out_tok,
+                        loc=loc,
+                        session_id=session_id,
+                        auth_token=enterprise_token,
+                        account_id=get_latest_enterprise_account_id(),
+                        prompt_text=stored_prompt_text,
+                        response_text=resp_text
+                    )
+
+            return StreamingResponse(agy_stream_generator(), media_type="text/event-stream")
+        else:
+            res = await agy_adapter.send_request(agy_payload, {}, "")
+            resp_data = res.json()
+            resp_text = resp_data.get("output_text", "")
+            in_tok = max(100, int(len(agy_prompt) * 0.35))
+            out_tok = max(50, int(len(resp_text) * 0.35))
+            loc = global_tracker.extract_code_lines(resp_text)
+            global_tracker.track_request(
+                target_model,
+                decision,
+                in_tok,
+                out_tok,
+                loc=loc,
+                session_id=session_id,
+                auth_token=enterprise_token,
+                account_id=get_latest_enterprise_account_id(),
+                prompt_text=stored_prompt_text,
+                response_text=resp_text
+            )
+            return res
+
     if unified_req.stream:
         is_passthrough = "responses" in incoming_path
         client = httpx.AsyncClient(timeout=180.0)
@@ -751,6 +847,66 @@ async def route_harness(request: Request):
             await client.aclose()
             err_text = error_body.decode('utf-8', errors='ignore')
             print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {err_text}")
+
+            # Auto-Failover to Agy Gemini if upstream credits depleted (429) or server unavailable (503)
+            is_credits_depleted = (
+                upstream_res.status_code in (429, 503)
+                or "usage_limit_reached" in err_text
+                or "credits_depleted" in err_text
+                or "workspace_member_credits_depleted" in err_text
+            )
+            if UPSTREAM_PROVIDER in ("auto", "auto_fallback") and is_credits_depleted:
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                sid_tag = f" [sid: {session_id}]" if session_id else ""
+                fallback_model = os.getenv("AGY_MODEL", "gemini-3.8-flash-high")
+                print(f"[{now_str}]{sid_tag} ➔ [FAILOVER: AGY GEMINI] Upstream {upstream_res.status_code} credits depleted! Transparently failing over to agy ({fallback_model})...", flush=True)
+
+                agy_adapter = AdapterFactory.get_adapter("agy")
+                agy_payload = agy_adapter.from_unified_request(unified_req)
+                agy_prompt = agy_payload.get("prompt") or stored_prompt_text
+
+                accumulated_bytes = b""
+                def append_failover_raw(chunk_bytes: bytes):
+                    nonlocal accumulated_bytes
+                    accumulated_bytes += chunk_bytes
+
+                if is_passthrough:
+                    gen = agy_adapter.generate_responses_sse_stream(agy_prompt, model=fallback_model, on_chunk=append_failover_raw)
+                else:
+                    gen = agy_adapter.generate_chat_completions_sse_stream(agy_prompt, model=fallback_model, on_chunk=append_failover_raw)
+
+                async def failover_stream_generator():
+                    try:
+                        async for sse_chunk in gen:
+                            yield sse_chunk
+                    except (asyncio.CancelledError, GeneratorExit):
+                        return
+                    except Exception as e:
+                        print(f"[Error] Failover Agy Stream exception: {e}")
+                        err_msg = json.dumps({"error": {"message": f"Failover agy exception: {str(e)}", "type": "failover_error"}})
+                        yield f"data: {err_msg}\n\n".encode("utf-8")
+                        yield b"data: [DONE]\n\n"
+                        return
+                    finally:
+                        resp_text = accumulated_bytes.decode("utf-8", errors="ignore")
+                        in_tok = max(100, int(len(agy_prompt) * 0.35))
+                        out_tok = max(50, int(len(resp_text) * 0.35))
+                        loc = global_tracker.extract_code_lines(resp_text)
+                        global_tracker.track_request(
+                            fallback_model,
+                            "GEMINI_FAILOVER",
+                            in_tok,
+                            out_tok,
+                            loc=loc,
+                            session_id=session_id,
+                            auth_token=enterprise_token,
+                            account_id=get_latest_enterprise_account_id(),
+                            prompt_text=stored_prompt_text,
+                            response_text=resp_text
+                        )
+
+                return StreamingResponse(failover_stream_generator(), media_type="text/event-stream")
+
             media_type = upstream_res.headers.get("content-type", "application/json")
             return Response(content=error_body, status_code=upstream_res.status_code, media_type=media_type)
 
