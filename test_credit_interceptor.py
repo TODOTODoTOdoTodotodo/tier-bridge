@@ -2,7 +2,7 @@ import os
 import sys
 import unittest
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Auto-inject src
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -90,6 +90,49 @@ class TestCreditInterceptor(unittest.TestCase):
         self.assertEqual(m_mod.group("real_credit"), "0.1524")
         self.assertEqual(m_mod.group("balance"), "1380.15")
         self.assertIsNone(m_mod.group("cost"))
+
+    def test_workspace_pool_parsing(self):
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_res = MagicMock()
+            mock_res.status_code = 200
+            mock_res.json.return_value = {
+                "credits": {
+                    "has_credits": False,
+                    "balance": "0",
+                    "overage_limit_reached": True
+                },
+                "rate_limit_reached_type": {
+                    "type": "workspace_member_credits_depleted"
+                },
+                "rate_limit_upsell": {
+                    "title": "You've reached your workspace credit limit",
+                    "description": "Your workspace is out of credits. Ask your workspace owner to add more."
+                },
+                "spend_control": {
+                    "individual_limit": {
+                        "limit": "3000",
+                        "used": "462.04",
+                        "remaining": "2537.96",
+                        "reset_at": 1790812800
+                    }
+                }
+            }
+            mock_client.get.return_value = mock_res
+            
+            with patch.object(self.interceptor, "get_client", return_value=mock_client):
+                res = await self.interceptor.fetch_enterprise_usage("mock_token", "mock_acc")
+                self.assertIsNotNone(res)
+                self.assertEqual(res["limit"], 3000.0)
+                self.assertEqual(res["used"], 462.04)
+                self.assertIn("workspace_pool", res)
+                wp = res["workspace_pool"]
+                self.assertTrue(wp["is_depleted"])
+                self.assertEqual(wp["status"], "DEPLETED")
+                self.assertEqual(wp["balance"], 0.0)
+                self.assertEqual(wp["rate_limit_type"], "workspace_member_credits_depleted")
+
+        asyncio.run(run_test())
 
 if __name__ == "__main__":
     unittest.main()

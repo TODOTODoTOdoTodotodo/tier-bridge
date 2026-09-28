@@ -344,7 +344,10 @@ async def get_dashboard_stats():
                     })
 
     try:
-        from src.tierbridge.credit_interceptor import interceptor
+        try:
+            from tierbridge.credit_interceptor import interceptor
+        except ImportError:
+            from src.tierbridge.credit_interceptor import interceptor
         ent_balance = await interceptor.fetch_enterprise_usage()
     except Exception:
         ent_balance = None

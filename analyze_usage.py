@@ -74,6 +74,15 @@ def show_enterprise_balance():
         rem_pct = max(0.0, 100.0 - used_pct) if limit > 0 else 100.0
         reset_at = spend.get("reset_at")
         reset_str = datetime.fromtimestamp(reset_at).strftime("%Y-%m-%d %H:%M:%S") if reset_at else "N/A"
+
+        # 워크스페이스 공용 풀 정보 추출
+        credits_obj = data.get("credits", {})
+        pool_balance = float(credits_obj.get("balance", 0)) if credits_obj.get("balance") is not None else 0.0
+        has_credits = bool(credits_obj.get("has_credits", True))
+        overage_limit_reached = bool(credits_obj.get("overage_limit_reached", False))
+        rl_type = (data.get("rate_limit_reached_type") or {}).get("type", "")
+        is_depleted = (not has_credits) or (pool_balance <= 0) or overage_limit_reached or (rl_type == "workspace_member_credits_depleted")
+        upsell = data.get("rate_limit_upsell") or {}
         
         print("\n" + "=" * 85)
         print("💳 [ChatGPT Enterprise] 실시간 계정 잔여 크레딧 및 지출 한도 조회")
@@ -81,7 +90,16 @@ def show_enterprise_balance():
         print(f"👤 사용자 계정      : {email} (Plan: {plan})")
         print(f"🏢 계정 ID         : {account_id}")
         print("-" * 85)
-        print("📊 크레딧 한도 및 소모 현황 (Monthly Spend Control):")
+        print("🏢 워크스페이스 공용 크레딧 풀 (Workspace Shared Credits):")
+        if is_depleted:
+            print(f"  • 풀 상태 (Status)         : ⚠️ 고갈 (DEPLETED / 잔여 {pool_balance:,.2f} Cr)")
+            print(f"  • 초과 한도 도달 여부       : {overage_limit_reached} (overage_limit_reached)")
+            if upsell.get("description"):
+                print(f"  • 조치 가이드              : \"{upsell.get('description')}\"")
+        else:
+            print(f"  • 풀 상태 (Status)         : 🟢 정상 가동 (ACTIVE / 잔여 {pool_balance:,.2f} Cr)")
+        print("-" * 85)
+        print("📊 개인 크레딧 한도 및 소모 현황 (Monthly Spend Control):")
         print(f"  • 월간 할당 한도 (Limit)     : {limit:,.2f} Credits")
         print(f"  • 실제 누적 소모량 (Used)    : {used:,.2f} Credits ({used_pct:.1f}%)")
         print(f"  • 실제 잔여 크레딧 (Remaining): {remaining:,.2f} Credits ({rem_pct:.1f}%)")
@@ -820,9 +838,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         Enterprise 크레딧
                     </h3>
                     <span id="entPlanBadge" class="text-[10px] px-2 py-0.5 bg-blue-500/15 text-[#4696e5] dark:text-sky-300 rounded-full font-mono font-medium">Business</span>
+                    <span id="entWorkspacePoolBadge" class="text-[10px] px-2 py-0.5 rounded-full font-mono font-medium bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i>공용 풀: 0.00 Cr (고갈)
+                    </span>
                 </div>
                 <p class="text-xs text-slate-500 dark:text-slate-400 mt-1" id="entAccountEmail">
                     계정: <span class="text-slate-700 dark:text-slate-300 font-mono">86lyh@hanatour.com</span> &middot; 리셋: <span id="entResetAt" class="text-emerald-600 dark:text-emerald-400 font-medium">매월 1일</span>
+                </p>
+                <p id="entWorkspaceAlert" class="text-[11px] text-rose-500 dark:text-rose-400 font-medium mt-1 flex items-center gap-1">
+                    <i class="fa-solid fa-circle-exclamation"></i> 사내 워크스페이스 공유 크레딧이 소진되어 프롬프트 처리가 일시 대기 중입니다 (관리자 충전 필요)
                 </p>
             </div>
         </div>
@@ -4280,6 +4304,27 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     if (resetEl && eb.reset_at) {{
                         const d = new Date(eb.reset_at * 1000);
                         resetEl.innerText = `${{d.getFullYear()}}-${{String(d.getMonth()+1).padStart(2,'0')}}-${{String(d.getDate()).padStart(2,'0')}}`;
+                    }}
+
+                    // 워크스페이스 공용 풀 상태 갱신
+                    const wp = eb.workspace_pool;
+                    const wpBadge = document.getElementById('entWorkspacePoolBadge');
+                    const wpAlert = document.getElementById('entWorkspaceAlert');
+                    if (wp && wpBadge) {{
+                        if (wp.is_depleted) {{
+                            wpBadge.className = "text-[10px] px-2 py-0.5 rounded-full font-mono font-medium bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30";
+                            wpBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i>공용 풀: ${{wp.balance.toFixed(2)}} Cr (고갈)`;
+                            if (wpAlert) {{
+                                wpAlert.classList.remove('hidden');
+                                wpAlert.innerHTML = `<i class="fa-solid fa-circle-exclamation mr-1"></i>사내 워크스페이스 공유 크레딧이 소진되어 프롬프트 요청이 일시 대기 중입니다 (관리자 충전 필요)`;
+                            }}
+                        }} else {{
+                            wpBadge.className = "text-[10px] px-2 py-0.5 rounded-full font-mono font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30";
+                            wpBadge.innerHTML = `<i class="fa-solid fa-circle-check mr-1"></i>공용 풀: ${{wp.balance > 0 ? wp.balance.toFixed(2) + ' Cr' : '정상'}}`;
+                            if (wpAlert) {{
+                                wpAlert.classList.add('hidden');
+                            }}
+                        }}
                     }}
                 }}
 
