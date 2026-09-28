@@ -764,8 +764,14 @@ async def route_harness(request: Request):
                         async with client.stream("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0) as upstream_res:
                             if upstream_res.status_code != 200:
                                 error_body = await upstream_res.aread()
-                                print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {error_body.decode('utf-8', errors='ignore')}")
-                                upstream_res.raise_for_status()
+                                err_text = error_body.decode('utf-8', errors='ignore')
+                                print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {err_text}")
+                                if is_passthrough:
+                                    yield error_body
+                                else:
+                                    yield f"data: {err_text}\n\n".encode("utf-8")
+                                    yield b"data: [DONE]\n\n"
+                                return
 
                             if is_passthrough:
                                 # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
@@ -777,12 +783,15 @@ async def route_harness(request: Request):
                                 raw_generator = upstream_res.aiter_bytes()
                                 async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
                                     yield transpiled_chunk
-                    except BaseException as e:
-                        if not isinstance(e, (asyncio.CancelledError, GeneratorExit)):
-                            print(f"[Error] Stream routing exception: {e}")
-                            err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
-                            yield f"data: {err_msg}\n\n".encode("utf-8")
-                        raise
+                    except (asyncio.CancelledError, GeneratorExit):
+                        # 클라이언트 연결 종료/취소 정상 반환
+                        return
+                    except Exception as e:
+                        print(f"[Error] Stream routing exception: {e}")
+                        err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
+                        yield f"data: {err_msg}\n\n".encode("utf-8")
+                        yield b"data: [DONE]\n\n"
+                        return
             finally:
                 # 클라이언트 즉시 연결 해제(CancelledError) 상황에서도 100% 누락 없는 사용량/기억 수집 (Zero-Drop Guarantee)
                 trigger_tracking()
