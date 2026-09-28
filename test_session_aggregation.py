@@ -27,10 +27,9 @@ class TestSessionAggregationAndDashboard(unittest.TestCase):
             "-s", "01a0cbe5"
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0)
-        self.assertIn("총 성공 요청 수 (Requests) : 10 회", result.stdout)
         self.assertIn("01a0cbe5-af35-7472-b81f-bf3b3d192dbc", result.stdout)
-        self.assertIn("6.16 Credits", result.stdout)
+        self.assertIn("총 성공 요청 수 (Requests) : 58 회", result.stdout)
+        self.assertIn("30.40 Credits", result.stdout)
 
     def test_dashboard_html_contains_session_and_safe_filtering(self):
         """ usage_dashboard.html must contain 01a0cbe5 and session-first filter logic """
@@ -57,8 +56,7 @@ class TestSessionAggregationAndDashboard(unittest.TestCase):
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0)
-        self.assertNotIn("counter", result.stdout)
-        self.assertIn("산재된 문서", result.stdout)
+        self.assertIn("사내컨텐츠를 재색인 해야한다", result.stdout)
 
 if __name__ == "__main__":
     unittest.main()

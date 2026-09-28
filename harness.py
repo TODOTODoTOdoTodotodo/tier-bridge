@@ -43,6 +43,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def on_startup():
+    async def run_periodic_pricing_sync():
+        while True:
+            try:
+                try:
+                    from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                except ImportError:
+                    from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                OfficialPricingCrawler.sync_prices(force=False)
+            except Exception as e:
+                log.error(f"Error in periodic pricing sync: {e}")
+            await asyncio.sleep(21600)  # 6시간 주기 자동 갱신
+
+    asyncio.create_task(run_periodic_pricing_sync())
+
 # 싱글톤 세션 사용량 트래커 초기화
 global_tracker = UsageTracker()
 
@@ -130,6 +146,8 @@ async def get_models():
     return {
         "object": "list",
         "data": [
+            {"id": "gpt-6-luna", "object": "model", "owned_by": "openai"},
+            {"id": "gpt-6-sol", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.4-mini", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.6-luna", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.6-terra", "object": "model", "owned_by": "openai"},
@@ -185,6 +203,34 @@ async def switch_model_version(request: Request):
     print(msg, flush=True)
     log.warning(msg)
     return res
+
+try:
+    from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+except ImportError:
+    from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+
+@app.get("/v1/models/pricing")
+async def get_official_pricing():
+    """ OpenAI 공식 수집 단가표 조회 """
+    return OfficialPricingCrawler.load_prices()
+
+@app.post("/v1/models/pricing/sync")
+async def sync_official_pricing():
+    """ OpenAI 공식 단가 원격 강제 동기화 수행 """
+    res = OfficialPricingCrawler.sync_prices(force=True)
+    msg = f"➔ [PRICING_SYNC] Official pricing synced | updated_at={res.get('updated_at')} | success={res.get('success')}"
+    print(msg, flush=True)
+    log.warning(msg)
+    return res
+
+@app.get("/v1/classifier/telemetry")
+async def get_classifier_telemetry():
+    """ 5단계 SOLID 분류 파이프라인 텔레메트리 메트릭 조회 """
+    try:
+        from src.tierbridge.classifier.pipeline import ClassifierPipeline
+    except ImportError:
+        from tierbridge.classifier.pipeline import ClassifierPipeline
+    return ClassifierPipeline().get_telemetry()
 
 @app.get("/v1/dashboard/stats")
 async def get_dashboard_stats():
@@ -341,8 +387,16 @@ async def get_dashboard_stats():
             if clf_records:
                 clf_status["last_used"] = clf_records[-1].get("model", "gpt-reserve")
                 clf_status["last_timestamp"] = clf_records[-1].get("timestamp")
+        try:
+            try:
+                from tierbridge.classifier.pipeline import ClassifierPipeline
+            except ImportError:
+                from src.tierbridge.classifier.pipeline import ClassifierPipeline
+            clf_status["telemetry"] = ClassifierPipeline().get_telemetry()
+        except Exception:
+            clf_status["telemetry"] = {}
     except Exception:
-        clf_status = {"primary": "gpt-reserve", "fallback": "gpt-5.6-luna", "last_used": "gpt-reserve", "last_timestamp": None}
+        clf_status = {"primary": "gpt-reserve", "fallback": "gpt-5.6-luna", "last_used": "gpt-reserve", "last_timestamp": None, "telemetry": {}}
 
     return {
         "app_version": app_version_tag,
