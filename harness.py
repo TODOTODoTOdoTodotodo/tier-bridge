@@ -5,7 +5,7 @@ import asyncio
 import httpx
 from datetime import datetime
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, PlainTextResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse, Response
 from dotenv import load_dotenv
 
 # TierBridge 패키지 임포트
@@ -729,6 +729,28 @@ async def route_harness(request: Request):
     # 지식 저장소의 문제(Problem)는 항상 사용자의 실제 원본 질문(user_prompt)을 보존
     stored_prompt_text = user_prompt if user_prompt else (substep_prompt or raw_prompt_text)
     if unified_req.stream:
+        is_passthrough = "responses" in incoming_path
+        client = httpx.AsyncClient(timeout=180.0)
+        try:
+            req = client.build_request("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0)
+            upstream_res = await client.send(req, stream=True)
+        except Exception as e:
+            await client.aclose()
+            print(f"[Error] Upstream connection failure: {e}")
+            return PlainTextResponse(f"Proxy upstream connection failed: {e}", status_code=502)
+
+        # 업스트림이 429, 401, 5xx 등 오류 응답을 반환한 경우:
+        # StreamingResponse(HTTP 200)로 감싸지 않고 업스트림 상태 코드 및 본문 그대로 반환하여
+        # 클라이언트(Codex/Antigravity)의 SSE 파서 조기 종료 에러를 원천 방지함
+        if upstream_res.status_code != 200:
+            error_body = await upstream_res.aread()
+            await upstream_res.aclose()
+            await client.aclose()
+            err_text = error_body.decode('utf-8', errors='ignore')
+            print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {err_text}")
+            media_type = upstream_res.headers.get("content-type", "application/json")
+            return Response(content=error_body, status_code=upstream_res.status_code, media_type=media_type)
+
         async def stream_generator():
             accumulated_buffer = b""
             has_tracked = False
@@ -753,46 +775,30 @@ async def route_harness(request: Request):
                         )
                     except Exception as e:
                         print(f"[Warning] Tracking trigger error: {e}")
-                
-            # 클라이언트 요청이 /responses 형태인 경우 100% 바이패스(Pass-through) 처리
-            is_passthrough = "responses" in incoming_path
 
             try:
-                async with httpx.AsyncClient(timeout=180.0) as client:
-                    try:
-                        # 백엔드 비동기 스트림 시작
-                        async with client.stream("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0) as upstream_res:
-                            if upstream_res.status_code != 200:
-                                error_body = await upstream_res.aread()
-                                err_text = error_body.decode('utf-8', errors='ignore')
-                                print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {err_text}")
-                                if is_passthrough:
-                                    yield error_body
-                                else:
-                                    yield f"data: {err_text}\n\n".encode("utf-8")
-                                    yield b"data: [DONE]\n\n"
-                                return
-
-                            if is_passthrough:
-                                # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
-                                async for chunk in upstream_res.aiter_bytes():
-                                    accumulated_buffer += chunk
-                                    yield chunk
-                            else:
-                                # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
-                                raw_generator = upstream_res.aiter_bytes()
-                                async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
-                                    yield transpiled_chunk
-                    except (asyncio.CancelledError, GeneratorExit):
-                        # 클라이언트 연결 종료/취소 정상 반환
-                        return
-                    except Exception as e:
-                        print(f"[Error] Stream routing exception: {e}")
-                        err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
-                        yield f"data: {err_msg}\n\n".encode("utf-8")
-                        yield b"data: [DONE]\n\n"
-                        return
+                if is_passthrough:
+                    # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
+                    async for chunk in upstream_res.aiter_bytes():
+                        accumulated_buffer += chunk
+                        yield chunk
+                else:
+                    # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
+                    raw_generator = upstream_res.aiter_bytes()
+                    async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
+                        yield transpiled_chunk
+            except (asyncio.CancelledError, GeneratorExit):
+                # 클라이언트 연결 종료/취소 정상 반환
+                return
+            except Exception as e:
+                print(f"[Error] Stream routing exception: {e}")
+                err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
+                yield f"data: {err_msg}\n\n".encode("utf-8")
+                yield b"data: [DONE]\n\n"
+                return
             finally:
+                await upstream_res.aclose()
+                await client.aclose()
                 # 클라이언트 즉시 연결 해제(CancelledError) 상황에서도 100% 누락 없는 사용량/기억 수집 (Zero-Drop Guarantee)
                 trigger_tracking()
 

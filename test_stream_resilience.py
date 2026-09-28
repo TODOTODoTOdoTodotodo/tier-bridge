@@ -25,16 +25,14 @@ class TestStreamResilience(unittest.IsolatedAsyncioTestCase):
         # Mock upstream 429 response
         mock_res = AsyncMock()
         mock_res.status_code = 429
-        mock_res.aread.return_value = b'{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached"}}'
-        
-        mock_stream_ctx = AsyncMock()
-        mock_stream_ctx.__aenter__.return_value = mock_res
-        mock_stream_ctx.__aexit__.return_value = None
+        mock_res.headers = {"content-type": "application/json"}
+        mock_res.aread = AsyncMock(return_value=b'{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached"}}')
+        mock_res.aclose = AsyncMock()
         
         mock_client = AsyncMock()
-        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
-        mock_client.__aenter__.return_value = mock_client
-        mock_client.__aexit__.return_value = None
+        mock_client.build_request = MagicMock(return_value=MagicMock())
+        mock_client.send = AsyncMock(return_value=mock_res)
+        mock_client.aclose = AsyncMock()
         mock_client_cls.return_value = mock_client
 
         # Send streaming request to proxy
@@ -44,20 +42,21 @@ class TestStreamResilience(unittest.IsolatedAsyncioTestCase):
             "stream": True
         }
         
-        # Should not raise exception or 500 error
+        # Should return 429 directly without stream parse crash
         res = self.client.post("/v1/chat/completions", json=payload)
-        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.status_code, 429)
         content = res.text
         self.assertIn("usage_limit_reached", content)
-        self.assertIn("[DONE]", content)
+        mock_res.aclose.assert_awaited()
+        mock_client.aclose.assert_awaited()
 
     @patch("harness.httpx.AsyncClient")
-    async def test_stream_unexpected_exception_clean_exit(self, mock_client_cls):
+    async def test_stream_connection_error_returns_502(self, mock_client_cls):
         # Mock upstream connection error
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.stream.side_effect = httpx.ConnectError("Connection refused by mock")
+        mock_client = AsyncMock()
+        mock_client.build_request = MagicMock(return_value=MagicMock())
+        mock_client.send.side_effect = httpx.ConnectError("Connection refused by mock")
+        mock_client.aclose = AsyncMock()
         mock_client_cls.return_value = mock_client
 
         payload = {
@@ -66,10 +65,9 @@ class TestStreamResilience(unittest.IsolatedAsyncioTestCase):
             "stream": True
         }
         res = self.client.post("/v1/chat/completions", json=payload)
-        self.assertEqual(res.status_code, 200)
-        content = res.text
-        self.assertIn("Proxy routing exception", content)
-        self.assertIn("[DONE]", content)
+        self.assertEqual(res.status_code, 502)
+        self.assertIn("Proxy upstream connection failed", res.text)
+        mock_client.aclose.assert_awaited()
 
 if __name__ == "__main__":
     unittest.main()
