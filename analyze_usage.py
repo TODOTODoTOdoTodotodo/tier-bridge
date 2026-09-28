@@ -843,7 +843,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     </span>
                 </div>
                 <p class="text-xs text-slate-500 dark:text-slate-400 mt-1" id="entAccountEmail">
-                    계정: <span class="text-slate-700 dark:text-slate-300 font-mono">86lyh@hanatour.com</span> &middot; 리셋: <span id="entResetAt" class="text-emerald-600 dark:text-emerald-400 font-medium">매월 1일</span>
+                    계정: <span id="entEmailValue" class="text-slate-700 dark:text-slate-300 font-mono">Enterprise User</span> &middot; 리셋: <span id="entResetAt" class="text-emerald-600 dark:text-emerald-400 font-medium">매월 1일</span>
                 </p>
                 <p id="entWorkspaceAlert" class="text-[11px] text-rose-500 dark:text-rose-400 font-medium mt-1 flex items-center gap-1">
                     <i class="fa-solid fa-circle-exclamation"></i> 사내 워크스페이스 공유 크레딧이 소진되어 프롬프트 처리가 일시 대기 중입니다 (관리자 충전 필요)
@@ -4304,6 +4304,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     if (resetEl && eb.reset_at) {{
                         const d = new Date(eb.reset_at * 1000);
                         resetEl.innerText = `${{d.getFullYear()}}-${{String(d.getMonth()+1).padStart(2,'0')}}-${{String(d.getDate()).padStart(2,'0')}}`;
+                    }}
+                    if (eb.email && document.getElementById('entEmailValue')) {{
+                        document.getElementById('entEmailValue').innerText = eb.email;
                     }}
 
                     // 워크스페이스 공용 풀 상태 갱신
