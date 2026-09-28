@@ -1,0 +1,44 @@
+{
+  "version": "1.0.0",
+  "fast_path": {
+    "enabled": true,
+    "max_token_length": 150,
+    "simple_patterns": [
+      "^\\s*(git\\s+status|git\\s+log|git\\s+diff|ls|pwd|whoami|date)\\s*$",
+      "^\\s*(안녕|하이|test|ping|어디까지|확인|조회|목록|상태\\s*확인)\\s*$",
+      "^\\s*(오타\\s*수정|단순\\s*조회|파일\\s*읽기|내용\\s*확인)\\s*$"
+    ],
+    "default_tier": "BRONZE"
+  },
+  "context_metrics": {
+    "enabled": true,
+    "large_context_tokens": 32000,
+    "large_context_min_tier": "GOLD",
+    "multi_file_count_threshold": 3,
+    "multi_file_min_tier": "PLATINUM"
+  },
+  "escalation": {
+    "enabled": true,
+    "error_keywords": [
+      "error",
+      "exception",
+      "failed",
+      "traceback",
+      "syntaxerror",
+      "modulenotfounderror",
+      "fail",
+      "오류",
+      "실패",
+      "컴파일 에러",
+      "테스트 실패"
+    ],
+    "max_escalation_steps": 1
+  },
+  "budget_governor": {
+    "enabled": true,
+    "eco_threshold_percent": 20.0,
+    "critical_threshold_percent": 5.0,
+    "eco_tier_ceiling": "GOLD",
+    "critical_tier_ceiling": "BRONZE"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "updated_at": "2026-09-28 17:18:39",
+  "source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+  "prices": {
+    "gpt-6-luna": {
+      "input_price": 0.1,
+      "output_price": 0.5
+    },
+    "gpt-6-sol": {
+      "input_price": 2.0,
+      "output_price": 10.0
+    },
+    "gpt-6-astra": {
+      "input_price": 10.0,
+      "output_price": 50.0
+    },
+    "gpt-5.6-luna": {
+      "input_price": 0.2,
+      "output_price": 1.2
+    },
+    "gpt-5.6-terra": {
+      "input_price": 2.0,
+      "output_price": 12.0
+    },
+    "gpt-5.6-sol": {
+      "input_price": 4.0,
+      "output_price": 20.0
+    },
+    "gpt-5.5": {
+      "input_price": 5.0,
+      "output_price": 30.0
+    },
+    "gpt-5.4-mini": {
+      "input_price": 0.75,
+      "output_price": 4.5
+    }
+  }
+}

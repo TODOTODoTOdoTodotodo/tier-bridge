@@ -72,13 +72,32 @@ class CreditInterceptor:
                 # 관리자(Admin)가 조정한 유동적 limit을 기준으로 실시간 비율 산출
                 used_pct = (used_val / limit_val * 100.0) if limit_val > 0 else 0.0
                 rem_pct = max(0.0, 100.0 - used_pct) if limit_val > 0 else 100.0
+
+                # 워크스페이스 공용 풀 정보 추출
+                credits_obj = data.get("credits", {})
+                pool_balance = float(credits_obj.get("balance", 0)) if credits_obj.get("balance") is not None else 0.0
+                has_credits = bool(credits_obj.get("has_credits", True))
+                overage_limit_reached = bool(credits_obj.get("overage_limit_reached", False))
+                rl_type = (data.get("rate_limit_reached_type") or {}).get("type", "")
+                is_depleted = (not has_credits) or (pool_balance <= 0) or overage_limit_reached or (rl_type == "workspace_member_credits_depleted")
+                upsell = data.get("rate_limit_upsell") or {}
+
                 return {
                     "limit": limit_val,
                     "used": used_val,
                     "remaining": rem_val,
                     "used_percent": round(used_pct, 1),
                     "remaining_percent": round(rem_pct, 1),
-                    "reset_at": spend.get("reset_at")
+                    "reset_at": spend.get("reset_at"),
+                    "workspace_pool": {
+                        "has_credits": has_credits,
+                        "balance": pool_balance,
+                        "is_depleted": is_depleted,
+                        "status": "DEPLETED" if is_depleted else "ACTIVE",
+                        "rate_limit_type": rl_type,
+                        "title": upsell.get("title", ""),
+                        "description": upsell.get("description", "")
+                    }
                 }
         except Exception:
             pass
@@ -125,22 +144,21 @@ class CreditInterceptor:
                 self.last_known_used = curr_used
                 self.last_known_remaining = curr_remaining
 
-                # 실제 크레딧 델타 및 실시간 잔여량 태그를 포함한 USAGE 로그 출력
+                # 실제 크레딧 델타 및 실시간 잔여량 태그를 포함한 불변 물리량 USAGE 로그 출력 (가변적 USD 생략)
                 print(
                     f"[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | "
                     f"input={in_tok} output={out_tok} tokens | "
                     f"real_credit={delta_credit:.4f} | balance={curr_remaining:.2f} | "
-                    f"loc={loc} lines | cost=${est_cost:.6f} USD",
+                    f"loc={loc} lines",
                     flush=True
                 )
                 return
 
         # 백엔드 조회 실패 시 안전 폴백(Fallback) 로깅
-        est_credits = est_cost / 0.20
         print(
             f"[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | "
             f"input={in_tok} output={out_tok} tokens | "
-            f"loc={loc} lines | cost=${est_cost:.6f} USD",
+            f"loc={loc} lines",
             flush=True
         )
 

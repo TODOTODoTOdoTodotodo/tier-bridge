@@ -5,7 +5,7 @@ import asyncio
 import httpx
 from datetime import datetime
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, PlainTextResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse, Response
 from dotenv import load_dotenv
 
 # TierBridge 패키지 임포트
@@ -42,6 +42,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def on_startup():
+    async def run_periodic_pricing_sync():
+        while True:
+            try:
+                try:
+                    from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                except ImportError:
+                    from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                OfficialPricingCrawler.sync_prices(force=False)
+            except Exception as e:
+                log.error(f"Error in periodic pricing sync: {e}")
+            await asyncio.sleep(21600)  # 6시간 주기 자동 갱신
+
+    asyncio.create_task(run_periodic_pricing_sync())
 
 # 싱글톤 세션 사용량 트래커 초기화
 global_tracker = UsageTracker()
@@ -130,6 +146,8 @@ async def get_models():
     return {
         "object": "list",
         "data": [
+            {"id": "gpt-6-luna", "object": "model", "owned_by": "openai"},
+            {"id": "gpt-6-sol", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.4-mini", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.6-luna", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.6-terra", "object": "model", "owned_by": "openai"},
@@ -186,19 +204,56 @@ async def switch_model_version(request: Request):
     log.warning(msg)
     return res
 
+try:
+    from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+except ImportError:
+    from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+
+@app.get("/v1/models/pricing")
+async def get_official_pricing():
+    """ OpenAI 공식 수집 단가표 조회 """
+    return OfficialPricingCrawler.load_prices()
+
+@app.post("/v1/models/pricing/sync")
+async def sync_official_pricing():
+    """ OpenAI 공식 단가 원격 강제 동기화 수행 """
+    res = OfficialPricingCrawler.sync_prices(force=True)
+    msg = f"➔ [PRICING_SYNC] Official pricing synced | updated_at={res.get('updated_at')} | success={res.get('success')}"
+    print(msg, flush=True)
+    log.warning(msg)
+    return res
+
+@app.get("/v1/classifier/telemetry")
+async def get_classifier_telemetry():
+    """ 5단계 SOLID 분류 파이프라인 텔레메트리 메트릭 조회 """
+    try:
+        from src.tierbridge.classifier.pipeline import ClassifierPipeline
+    except ImportError:
+        from tierbridge.classifier.pipeline import ClassifierPipeline
+    return ClassifierPipeline().get_telemetry()
+
 @app.get("/v1/dashboard/stats")
 async def get_dashboard_stats():
-    """ 대시보드 3초 라이브 자동 갱신(Live Auto-Sync)용 최신 집계 수치, 엔터프라이즈 실시간 잔여량 및 힐링 데이터 반환 """
-    log_file = "harness.log"
+    env_log = os.environ.get("TIERBRIDGE_LOG_PATH")
+    live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+    if env_log and os.path.exists(env_log):
+        log_file = env_log
+    elif os.path.exists("harness.log"):
+        log_file = "harness.log"
+    elif os.path.exists(live_log):
+        log_file = live_log
+    else:
+        log_file = "harness.log"
     records = []
     prompt_history = []
+    session_prompts = {}
     
     if os.path.exists(log_file):
         usage_pattern = re.compile(
             r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
         )
         decision_pattern = re.compile(
-            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+) \([^)]+\) \| "(?P<prompt>[^"]*)"'
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+)(?:\s+\([^)]+\))?(?:\s+\[clf:[^\]]+\])?\s*\|\s*\"(?P<prompt>.*)\"$'
         )
         healing_pattern = re.compile(
             r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[(?P<event_type>HEALING|VERSION_SWITCH)\] (?P<details>.*)$'
@@ -217,12 +272,16 @@ async def get_dashboard_stats():
                     continue
                 d_match = decision_pattern.search(line)
                 if d_match:
+                    d_sid = d_match.group("sid") or "N/A"
+                    d_prompt = d_match.group("prompt")
                     prompt_history.append({
                         "timestamp": d_match.group("timestamp"),
-                        "sid": d_match.group("sid") or "N/A",
+                        "sid": d_sid,
                         "decision": d_match.group("decision"),
-                        "prompt": d_match.group("prompt")
+                        "prompt": d_prompt
                     })
+                    if d_sid != "N/A":
+                        session_prompts[d_sid] = d_prompt
                     continue
                 u_match = usage_pattern.search(line)
                 if u_match:
@@ -245,9 +304,20 @@ async def get_dashboard_stats():
                     real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
                     balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
                     
-                    associated_prompt = prompt_history[-1]["prompt"] if prompt_history else ""
-                    if prompt_history and sid_str == "N/A" and prompt_history[-1]["sid"] != "N/A":
-                        sid_str = prompt_history[-1]["sid"]
+                    associated_prompt = ""
+                    if sid_str != "N/A" and sid_str in session_prompts:
+                        associated_prompt = session_prompts[sid_str]
+                    elif prompt_history:
+                        for p in reversed(prompt_history):
+                            if sid_str != "N/A" and p["sid"] == sid_str:
+                                associated_prompt = p["prompt"]
+                                break
+                        if not associated_prompt and sid_str == "N/A":
+                            associated_prompt = prompt_history[-1]["prompt"]
+                            if prompt_history[-1]["sid"] != "N/A":
+                                sid_str = prompt_history[-1]["sid"]
+                        elif not associated_prompt:
+                            associated_prompt = prompt_history[-1]["prompt"]
 
                     if sid_str == "N/A" and associated_prompt:
                         import hashlib
@@ -274,7 +344,10 @@ async def get_dashboard_stats():
                     })
 
     try:
-        from src.tierbridge.credit_interceptor import interceptor
+        try:
+            from tierbridge.credit_interceptor import interceptor
+        except ImportError:
+            from src.tierbridge.credit_interceptor import interceptor
         ent_balance = await interceptor.fetch_enterprise_usage()
     except Exception:
         ent_balance = None
@@ -317,8 +390,16 @@ async def get_dashboard_stats():
             if clf_records:
                 clf_status["last_used"] = clf_records[-1].get("model", "gpt-reserve")
                 clf_status["last_timestamp"] = clf_records[-1].get("timestamp")
+        try:
+            try:
+                from tierbridge.classifier.pipeline import ClassifierPipeline
+            except ImportError:
+                from src.tierbridge.classifier.pipeline import ClassifierPipeline
+            clf_status["telemetry"] = ClassifierPipeline().get_telemetry()
+        except Exception:
+            clf_status["telemetry"] = {}
     except Exception:
-        clf_status = {"primary": "gpt-reserve", "fallback": "gpt-5.6-luna", "last_used": "gpt-reserve", "last_timestamp": None}
+        clf_status = {"primary": "gpt-reserve", "fallback": "gpt-5.6-luna", "last_used": "gpt-reserve", "last_timestamp": None, "telemetry": {}}
 
     return {
         "app_version": app_version_tag,
@@ -651,6 +732,28 @@ async def route_harness(request: Request):
     # 지식 저장소의 문제(Problem)는 항상 사용자의 실제 원본 질문(user_prompt)을 보존
     stored_prompt_text = user_prompt if user_prompt else (substep_prompt or raw_prompt_text)
     if unified_req.stream:
+        is_passthrough = "responses" in incoming_path
+        client = httpx.AsyncClient(timeout=180.0)
+        try:
+            req = client.build_request("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0)
+            upstream_res = await client.send(req, stream=True)
+        except Exception as e:
+            await client.aclose()
+            print(f"[Error] Upstream connection failure: {e}")
+            return PlainTextResponse(f"Proxy upstream connection failed: {e}", status_code=502)
+
+        # 업스트림이 429, 401, 5xx 등 오류 응답을 반환한 경우:
+        # StreamingResponse(HTTP 200)로 감싸지 않고 업스트림 상태 코드 및 본문 그대로 반환하여
+        # 클라이언트(Codex/Antigravity)의 SSE 파서 조기 종료 에러를 원천 방지함
+        if upstream_res.status_code != 200:
+            error_body = await upstream_res.aread()
+            await upstream_res.aclose()
+            await client.aclose()
+            err_text = error_body.decode('utf-8', errors='ignore')
+            print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {err_text}")
+            media_type = upstream_res.headers.get("content-type", "application/json")
+            return Response(content=error_body, status_code=upstream_res.status_code, media_type=media_type)
+
         async def stream_generator():
             accumulated_buffer = b""
             has_tracked = False
@@ -675,37 +778,30 @@ async def route_harness(request: Request):
                         )
                     except Exception as e:
                         print(f"[Warning] Tracking trigger error: {e}")
-                
-            # 클라이언트 요청이 /responses 형태인 경우 100% 바이패스(Pass-through) 처리
-            is_passthrough = "responses" in incoming_path
 
             try:
-                async with httpx.AsyncClient(timeout=180.0) as client:
-                    try:
-                        # 백엔드 비동기 스트림 시작
-                        async with client.stream("POST", upstream_url, json=final_payload, headers=target_headers, timeout=180.0) as upstream_res:
-                            if upstream_res.status_code != 200:
-                                error_body = await upstream_res.aread()
-                                print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {error_body.decode('utf-8', errors='ignore')}")
-                                upstream_res.raise_for_status()
-
-                            if is_passthrough:
-                                # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
-                                async for chunk in upstream_res.aiter_bytes():
-                                    accumulated_buffer += chunk
-                                    yield chunk
-                            else:
-                                # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
-                                raw_generator = upstream_res.aiter_bytes()
-                                async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
-                                    yield transpiled_chunk
-                    except BaseException as e:
-                        if not isinstance(e, (asyncio.CancelledError, GeneratorExit)):
-                            print(f"[Error] Stream routing exception: {e}")
-                            err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
-                            yield f"data: {err_msg}\n\n".encode("utf-8")
-                        raise
+                if is_passthrough:
+                    # master 브랜치처럼 백엔드가 주는 바이너리 청크 그대로 통과시킴
+                    async for chunk in upstream_res.aiter_bytes():
+                        accumulated_buffer += chunk
+                        yield chunk
+                else:
+                    # 실시간 트랜스파일링을 물려서 데이터 방출 (원본 수집 콜백 전달)
+                    raw_generator = upstream_res.aiter_bytes()
+                    async for transpiled_chunk in StreamTranspiler.transpile_stream(raw_generator, source_adapter, target_adapter, on_raw_chunk=append_raw):
+                        yield transpiled_chunk
+            except (asyncio.CancelledError, GeneratorExit):
+                # 클라이언트 연결 종료/취소 정상 반환
+                return
+            except Exception as e:
+                print(f"[Error] Stream routing exception: {e}")
+                err_msg = json.dumps({"error": {"message": f"Proxy routing exception: {str(e)}", "type": "proxy_error"}})
+                yield f"data: {err_msg}\n\n".encode("utf-8")
+                yield b"data: [DONE]\n\n"
+                return
             finally:
+                await upstream_res.aclose()
+                await client.aclose()
                 # 클라이언트 즉시 연결 해제(CancelledError) 상황에서도 100% 누락 없는 사용량/기억 수집 (Zero-Drop Guarantee)
                 trigger_tracking()
 

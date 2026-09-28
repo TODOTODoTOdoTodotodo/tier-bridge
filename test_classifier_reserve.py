@@ -42,7 +42,7 @@ class TestClassifierReserveFallback(unittest.TestCase):
 
         req = UnifiedRequest(
             model="gpt-5.6-luna",
-            messages=[Message(role="user", content="단순 오타 수정해줘")]
+            messages=[Message(role="user", content="비즈니스 로직 단위 구현 및 회원가입 인증 모듈 개발")]
         )
 
         import asyncio
