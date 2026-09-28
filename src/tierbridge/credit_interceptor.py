@@ -125,22 +125,21 @@ class CreditInterceptor:
                 self.last_known_used = curr_used
                 self.last_known_remaining = curr_remaining
 
-                # 실제 크레딧 델타 및 실시간 잔여량 태그를 포함한 USAGE 로그 출력
+                # 실제 크레딧 델타 및 실시간 잔여량 태그를 포함한 불변 물리량 USAGE 로그 출력 (가변적 USD 생략)
                 print(
                     f"[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | "
                     f"input={in_tok} output={out_tok} tokens | "
                     f"real_credit={delta_credit:.4f} | balance={curr_remaining:.2f} | "
-                    f"loc={loc} lines | cost=${est_cost:.6f} USD",
+                    f"loc={loc} lines",
                     flush=True
                 )
                 return
 
         # 백엔드 조회 실패 시 안전 폴백(Fallback) 로깅
-        est_credits = est_cost / 0.20
         print(
             f"[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | "
             f"input={in_tok} output={out_tok} tokens | "
-            f"loc={loc} lines | cost=${est_cost:.6f} USD",
+            f"loc={loc} lines",
             flush=True
         )
 

@@ -68,23 +68,28 @@ class TestCreditInterceptor(unittest.TestCase):
         asyncio.run(run_test())
 
     def test_log_regex_parsing(self):
-        sample_log_line = "[2026-08-18 16:45:00] [sid: sess_test1] ➔ [USAGE: GOLD] (gpt-5.6-terra) | input=2500 output=450 tokens | real_credit=0.1524 | balance=1380.15 | loc=35 lines | cost=$0.030480 USD"
+        # 1. Legacy format with cost=$... USD
+        legacy_log_line = "[2026-08-18 16:45:00] [sid: sess_test1] ➔ [USAGE: GOLD] (gpt-5.6-terra) | input=2500 output=450 tokens | real_credit=0.1524 | balance=1380.15 | loc=35 lines | cost=$0.030480 USD"
         
         usage_pattern = analyze_usage.re.compile(
-            r"^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD"
+            r"^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)?(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?"
         )
         
-        m = usage_pattern.search(sample_log_line)
-        self.assertIsNotNone(m)
-        self.assertEqual(m.group("sid"), "sess_test1")
-        self.assertEqual(m.group("decision_opt"), "GOLD")
-        self.assertEqual(m.group("model"), "gpt-5.6-terra")
-        self.assertEqual(m.group("in_tok"), "2500")
-        self.assertEqual(m.group("out_tok"), "450")
-        self.assertEqual(m.group("real_credit"), "0.1524")
-        self.assertEqual(m.group("balance"), "1380.15")
-        self.assertEqual(m.group("loc"), "35")
-        self.assertEqual(m.group("cost"), "0.030480")
+        m_leg = usage_pattern.search(legacy_log_line)
+        self.assertIsNotNone(m_leg)
+        self.assertEqual(m_leg.group("sid"), "sess_test1")
+        self.assertEqual(m_leg.group("decision_opt"), "GOLD")
+        self.assertEqual(m_leg.group("cost"), "0.030480")
+
+        # 2. Modern credit-first format without cost=$... USD
+        modern_log_line = "[2026-08-18 16:45:00] [sid: sess_test1] ➔ [USAGE: GOLD] (gpt-5.6-terra) | input=2500 output=450 tokens | real_credit=0.1524 | balance=1380.15 | loc=35 lines"
+        m_mod = usage_pattern.search(modern_log_line)
+        self.assertIsNotNone(m_mod)
+        self.assertEqual(m_mod.group("sid"), "sess_test1")
+        self.assertEqual(m_mod.group("decision_opt"), "GOLD")
+        self.assertEqual(m_mod.group("real_credit"), "0.1524")
+        self.assertEqual(m_mod.group("balance"), "1380.15")
+        self.assertIsNone(m_mod.group("cost"))
 
 if __name__ == "__main__":
     unittest.main()

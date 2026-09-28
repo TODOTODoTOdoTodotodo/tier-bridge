@@ -1,6 +1,7 @@
 import os
 import json
 import httpx
+from datetime import datetime
 from typing import Tuple
 from tierbridge.models import UnifiedRequest
 
@@ -81,153 +82,96 @@ class Router:
         # 평가 대상 프롬프트: 턴의 첫 요청은 user_prompt, 내부 릴레이 서브 스텝은 substep_prompt 사용
         target_eval_prompt = user_prompt if is_new_user_turn else substep_prompt
         if not target_eval_prompt:
-            return "BRONZE", "gpt-5.6-luna", "low"
-            
-        headers = {
-            "Authorization": auth_token,
-            "Content-Type": "application/json",
-            "Accept": "text/event-stream",
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        if account_id:
-            headers["chatgpt-account-id"] = account_id
-
-        # 지능형 라우터 프롬프트 설정 (서브 스텝 자동 강하 지침 포함)
-        payload = {
-            "model": "gpt-reserve",
-            "store": False,
-            "stream": True,
-            "reasoning": {"effort": "low"},
-            "instructions": (
-                "너는 비용 절감용 라우터다. 유저 요청 및 에이전트 서브 스텝을 가장 적절한 게이밍 랭크 티어로 정확하게 분류해라.\n"
-                "반드시 아래 규칙을 지켜라.\n"
-                "1) 명확한 근거가 없으면 더 낮은 랭크 등급(BRONZE)을 선택한다.\n"
-                "2) 단순 오타, 가벼운 수정, 파일 읽기/조회, 단순 서브 스텝 및 단순 설명은 BRONZE로 분류한다.\n"
-                "3) 표준적인 비즈니스 로직 단위 구현 및 단일 파일 리팩토링은 SILVER로 분류한다.\n"
-                "4) 중간 이상의 복잡도, 아키텍처 변경, 복수 파일/컴포넌트 연동 수정은 GOLD로 승격한다.\n"
-                "5) 다중 모듈 알고리즘 작성 및 하이레벨 아키텍처 설계는 PLATINUM으로 분류한다.\n"
-                "6) 심층 최적화, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅은 CHALLENGER 또는 DIAMOND로 분류한다.\n"
-                "7) 오직 한 단어만 출력한다. (BRONZE, SILVER, GOLD, PLATINUM, DIAMOND, CHALLENGER). 다른 설명은 절대 금지한다.\n\n"
-                "- BRONZE : 단순 문법, 간단한 오타 수정, 명령어 상식 가이드, 단순 스크립트 작성, 서브 스텝 툴 액션\n"
-                "- SILVER : 일반적인 비즈니스 로직 단위 업무 구현, 표준적인 리팩토링, 단일 파일 디버깅\n"
-                "- GOLD : 중간 수준 아키텍처 변경, 복수 컴포넌트 간 연동 수정, 중간 난이도 디버깅\n"
-                "- PLATINUM : 복잡한 알고리즘 작성, 다중 컴포넌트 아키텍처 분석 및 시스템 설계\n"
-                "- DIAMOND / CHALLENGER : 고성능 튜닝 및 성능 분석, 메모리 누수 탐지, 교착상태(Deadlock) 디버깅 (최고 난이도)"
-            ),
-            "input": [
-                {
-                    "type": "message",
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": target_eval_prompt
-                        }
-                    ]
-                }
-            ]
-        }
-
-        import asyncio
-        from datetime import datetime
-
-        candidate_models = ["gpt-reserve", "gpt-5.6-luna"]
-        classifier_model_used = None
-        verdict_text = ""
-
-        for cand_idx, cand_model in enumerate(candidate_models):
-            payload["model"] = cand_model
-            verdict_accumulated = ""
             try:
-                client = cls.get_client()
-                async with client.stream("POST", enterprise_api_url, headers=headers, json=payload) as response:
-                    if response.status_code == 200:
-                        async for line in response.aiter_lines():
-                            if line.startswith("data: "):
-                                data_str = line[6:].strip()
-                                if data_str == "[DONE]":
-                                    break
-                                try:
-                                    data_json = json.loads(data_str)
-                                    if data_json.get("choices"):
-                                        choice = data_json["choices"][0]
-                                        content = choice.get("delta", {}).get("content", "")
-                                        if content.strip():
-                                            verdict_accumulated += content
-                                        if choice.get("finish_reason") is not None:
-                                            break
-                                    elif data_json.get("type") == "response.output_text.done":
-                                        verdict_accumulated = data_json.get("text", "")
-                                        break
-                                    elif data_json.get("type") == "response.output_text.delta":
-                                        delta_text = data_json.get("delta")
-                                        if isinstance(delta_text, str):
-                                            verdict_accumulated += delta_text
-                                except Exception:
-                                    pass
-                        if verdict_accumulated.strip():
-                            verdict_text = verdict_accumulated.strip()
-                            classifier_model_used = cand_model if cand_idx == 0 else f"{cand_model}-fallback"
-                            break
-                        else:
-                            print(f"[Warning] Classifier ({cand_model}) HTTP 200 with empty body.")
-                    else:
-                        print(f"[Warning] Classifier ({cand_model}) HTTP status {response.status_code}.")
-            except Exception as e:
-                print(f"[Warning] Classifier ({cand_model}) error: {e} ({type(e).__name__}).")
+                from tierbridge.model_registry import registry
+            except ImportError:
+                from src.tierbridge.model_registry import registry
+            active_mapping = registry.get_active_mapping()
+            tier_info = active_mapping.get("BRONZE", {"model": "gpt-6-luna", "effort": "low"})
+            return "BRONZE", tier_info.get("model", "gpt-6-luna"), tier_info.get("effort", "low")
 
-            if cand_idx == 0:
-                print(f"➔ [CLASSIFIER FALLBACK] {cand_model} 응답 불가 ➔ {candidate_models[1]} 모델로 즉시 폴백합니다.", flush=True)
+        # 5단계 SOLID 분류 파이프라인 컨텍스트 구성
+        total_tokens = sum([max(1, len(m.content) // 4) for m in unified_request.messages if m.content])
 
-        if not verdict_text:
-            print(f"[Warning] All classifier candidates failed. Falling back to BRONZE fail-safe.", flush=True)
-            classifier_model_used = "fail-safe"
-            verdict_text = "BRONZE"
+        try:
+            from src.tierbridge.classifier.interfaces import ClassificationContext
+            from src.tierbridge.classifier.pipeline import ClassifierPipeline
+        except ImportError:
+            from tierbridge.classifier.interfaces import ClassificationContext
+            from tierbridge.classifier.pipeline import ClassifierPipeline
 
-        cls.last_classifier_status["last_used"] = classifier_model_used
-        cls.last_classifier_status["last_timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ctx = ClassificationContext(
+            unified_request=unified_request,
+            user_prompt=user_prompt,
+            is_new_user_turn=is_new_user_turn,
+            substep_prompt=substep_prompt,
+            target_eval_prompt=target_eval_prompt,
+            total_input_tokens=total_tokens,
+            session_id=session_id,
+            requested_model=requested_model,
+            auth_token=auth_token,
+            enterprise_api_url=enterprise_api_url,
+            account_id=account_id,
+            is_4tier_sol_mode=is_4tier_sol_mode
+        )
 
-        verdict = verdict_text.strip().upper()
+        pipeline = ClassifierPipeline()
+        verdict, classifier_model_used, meta = await pipeline.classify(ctx)
+
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cls.last_classifier_status["last_used"] = classifier_model_used
+        cls.last_classifier_status["last_timestamp"] = now_str
+        cls.last_classifier_status["telemetry"] = pipeline.get_telemetry()
 
         if is_new_user_turn and user_prompt:
             display_prompt = user_prompt.replace("\n", " ").strip()
         else:
             display_prompt = f"[Substep] {target_eval_prompt.replace('\n', ' ').strip()}"
 
-        # 등급 판정 및 라우터 모드(3-Tier vs 4-Tier Sol)에 따른 매핑 (ModelRegistry 핫패치 수신)
-        from src.tierbridge.model_registry import registry
+        try:
+            from tierbridge.model_registry import registry
+        except ImportError:
+            from src.tierbridge.model_registry import registry
         active_mapping = registry.get_active_mapping()
 
-        if "CHALLENGER" in verdict or "CHALLENGER" in verdict or ("EXTRA_HIGH" in verdict and is_4tier_sol_mode):
-            tier_info = active_mapping.get("CHALLENGER", active_mapping.get("CHALLENGER", {"model": "gpt-5.6-sol", "effort": "xhigh"}))
-            final_decision, final_model, final_effort = "CHALLENGER", tier_info.get("model", "gpt-5.6-sol"), tier_info.get("effort", "xhigh")
-        elif "DIAMOND" in verdict or "DIAMOND" in verdict:
-            tier_info = active_mapping.get("DIAMOND", active_mapping.get("PLATINUM", {"model": "gpt-5.6-terra", "effort": "high"}))
-            final_decision, final_model, final_effort = "DIAMOND", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
-        elif "PLATINUM" in verdict or "PLATINUM" in verdict or "HIGH" in verdict:
-            tier_info = active_mapping.get("PLATINUM", active_mapping.get("PLATINUM", {"model": "gpt-5.6-terra", "effort": "high"}))
-            final_decision, final_model, final_effort = "PLATINUM", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "high")
-        elif "GOLD" in verdict or "GOLD" in verdict or "TERRA" in verdict:
-            tier_info = active_mapping.get("GOLD", active_mapping.get("GOLD", {"model": "gpt-5.6-terra", "effort": "medium"}))
-            final_decision, final_model, final_effort = "GOLD", tier_info.get("model", "gpt-5.6-terra"), tier_info.get("effort", "medium")
-        elif "SILVER" in verdict or "SILVER" in verdict:
-            tier_info = active_mapping.get("SILVER", active_mapping.get("SILVER", {"model": "gpt-5.6-luna", "effort": "medium"}))
-            final_decision, final_model, final_effort = "SILVER", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "medium")
+        if "CHALLENGER" in verdict or ("EXTRA_HIGH" in verdict and is_4tier_sol_mode):
+            tier_info = active_mapping.get("CHALLENGER", {"model": "gpt-6-sol", "effort": "xhigh"})
+            final_decision, final_model, final_effort = "CHALLENGER", tier_info.get("model", "gpt-6-sol"), tier_info.get("effort", "xhigh")
+        elif "DIAMOND" in verdict:
+            tier_info = active_mapping.get("DIAMOND", active_mapping.get("PLATINUM", {"model": "gpt-6-sol", "effort": "high"}))
+            final_decision, final_model, final_effort = "DIAMOND", tier_info.get("model", "gpt-6-sol"), tier_info.get("effort", "high")
+        elif "PLATINUM" in verdict or "HIGH" in verdict:
+            tier_info = active_mapping.get("PLATINUM", {"model": "gpt-6-sol", "effort": "medium"})
+            final_decision, final_model, final_effort = "PLATINUM", tier_info.get("model", "gpt-6-sol"), tier_info.get("effort", "medium")
+        elif "GOLD" in verdict or "TERRA" in verdict:
+            tier_info = active_mapping.get("GOLD", {"model": "gpt-6-sol", "effort": "low"})
+            final_decision, final_model, final_effort = "GOLD", tier_info.get("model", "gpt-6-sol"), tier_info.get("effort", "low")
+        elif "SILVER" in verdict:
+            tier_info = active_mapping.get("SILVER", {"model": "gpt-6-luna", "effort": "medium"})
+            final_decision, final_model, final_effort = "SILVER", tier_info.get("model", "gpt-6-luna"), tier_info.get("effort", "medium")
         else:
-            tier_info = active_mapping.get("BRONZE", active_mapping.get("BRONZE", {"model": "gpt-5.6-luna", "effort": "low"}))
-            final_decision, final_model, final_effort = "BRONZE", tier_info.get("model", "gpt-5.6-luna"), tier_info.get("effort", "low")
+            tier_info = active_mapping.get("BRONZE", {"model": "gpt-6-luna", "effort": "low"})
+            final_decision, final_model, final_effort = "BRONZE", tier_info.get("model", "gpt-6-luna"), tier_info.get("effort", "low")
 
         mode_tag = "4-TIER SOL ROUTER" if is_4tier_sol_mode else "STANDARD 3-TIER ROUTER"
         sid_tag = f" [sid: {session_id}]" if session_id else ""
         print(f"[{now_str}]{sid_tag} ➔ [DECISION: {mode_tag}] {final_decision} ({final_model}:{final_effort}) [clf: {classifier_model_used}] | \"{display_prompt}\"", flush=True)
 
-        # 분류기(Classifier) 자체 소모 토큰 및 비용 트래킹 로깅 (전용 크레딧 산출용)
-        clf_in_tok = max(100, int(len(target_eval_prompt) * 0.35)) + 150
-        clf_out_tok = max(5, int(len(verdict_text) * 0.5))
-        clf_in_price = tier_info.get("input_price", 1.0)
-        clf_out_price = tier_info.get("output_price", 3.0)
-        clf_cost = (clf_in_tok / 1000000.0) * clf_in_price + (clf_out_tok / 1000000.0) * clf_out_price
-        print(f"[{now_str}]{sid_tag} ➔ [USAGE] CLASSIFIER ({classifier_model_used}) | input={clf_in_tok} output={clf_out_tok} tokens | loc=0 lines | cost=${clf_cost:.6f} USD", flush=True)
+        # 에스컬레이션 또는 예산 조정 발생 시 상세 로깅
+        if meta.get("escalated"):
+            print(f"[{now_str}]{sid_tag} ➔ [CLASSIFIER ESCALATION] {meta.get('escalated_from')} ➔ {final_decision} ({meta.get('escalation_reason')})", flush=True)
+        if meta.get("context_floor_applied"):
+            print(f"[{now_str}]{sid_tag} ➔ [CONTEXT METRICS FLOOR] {meta.get('context_floor_applied')} ({meta.get('context_reason')})", flush=True)
+        if meta.get("governor_clamped"):
+            print(f"[{now_str}]{sid_tag} ➔ [BUDGET GOVERNOR] Clamped {meta.get('clamped_from')} ➔ {final_decision} ({meta.get('clamp_reason')})", flush=True)
+
+        # 분류기 자체 소모 토큰 로깅 (Fast-path는 0, LLM 호출 시에만 산출, 가변 USD 생략)
+        if classifier_model_used == "fast-path-regex":
+            clf_in_tok, clf_out_tok = 0, 0
+        else:
+            clf_in_tok = max(100, int(len(target_eval_prompt) * 0.35)) + 150
+            clf_out_tok = max(5, int(len(verdict) * 0.5))
+
+        print(f"[{now_str}]{sid_tag} ➔ [USAGE] CLASSIFIER ({classifier_model_used}) | input={clf_in_tok} output={clf_out_tok} tokens | loc=0 lines", flush=True)
 
         return final_decision, final_model, final_effort

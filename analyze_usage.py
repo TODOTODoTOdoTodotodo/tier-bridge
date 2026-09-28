@@ -32,13 +32,13 @@ def parse_args(args=None):
     else:
         default_log = "harness.log"
     
-    parser = argparse.ArgumentParser(description="TierBridge 로그 기반 Kibana풍 USAGE 및 힐링팩터 모델 관리 분석기")
+    parser = argparse.ArgumentParser(description="TierBridge AI 사용량 및 모델 라우팅 분석기")
     parser.add_argument("log_file", nargs="?", default=default_log, help=f"분석할 로그 파일 경로 (기본: {default_log})")
     parser.add_argument("--balance", "-b", action="store_true", help="ChatGPT Enterprise 백엔드 실시간 계정 잔여 크레딧 및 지출 한도 조회")
     parser.add_argument("--date", "-d", type=str, help="특정 날짜 필터 (형식: YYYY-MM-DD)")
     parser.add_argument("--month", "-m", type=str, help="특정 월 필터 (형식: YYYY-MM)")
     parser.add_argument("--session", "-s", type=str, help="특정 세션 ID 필터 (예: 5eb61a1e)")
-    parser.add_argument("--html", "-w", action="store_true", help="Kibana 스타일 시각화 웹 대시보드(usage_dashboard.html) 생성 및 브라우저 열기")
+    parser.add_argument("--html", "-w", action="store_true", help="웹 대시보드(usage_dashboard.html) 생성 및 브라우저 열기")
     parser.add_argument("--no-open", action="store_true", help="HTML 대시보드 생성 후 브라우저 자동 오픈 금지")
     return parser.parse_args(args)
 
@@ -235,7 +235,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     banner_hidden_class = "" if has_healing_banner else "hidden"
 
     html_content = f"""<!DOCTYPE html>
-<html lang="ko" class="dark">
+<html lang="ko" class="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -253,68 +253,219 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.15.4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body {{ font-family: 'Inter', sans-serif; transition: background-color 0.25s ease, color 0.25s ease; }}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
         
-        /* Dark Theme Default */
-        html.dark body {{ background-color: #0b0f19; color: #f1f5f9; }}
-        html.dark .glass-card {{ background: rgba(15, 23, 42, 0.78); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.5); }}
+        :root {{
+            --font-display: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-mono: 'JetBrains Mono', "Courier New", monospace;
+            --fractal-blue: #4696e5;
+            --fractal-blue-dark: #3089e2;
+            --fractal-blue-light: #5ca3e8;
+            --fractal-subtext: #d1e5f9;
+        }}
         
-        /* Light Theme Adaptation */
-        html.light body {{ background-color: #f8fafc !important; color: #0f172a !important; }}
-        html.light .glass-card {{ 
-            background: rgba(255, 255, 255, 0.96) !important; 
+        body {{ 
+            font-family: var(--font-body); 
+            transition: background-color 0.25s ease, color 0.25s ease; 
+            -webkit-font-smoothing: antialiased;
+        }}
+        
+        /* ==============================================================
+           HTML5 UP FRACTAL SIGNATURE THEME (Clean, Light, Airy & Elegant)
+           ============================================================== */
+        html.light body {{ 
+            background-color: #f7f9fc;
+            background-image: radial-gradient(circle at 50% 0%, rgba(70, 150, 229, 0.05) 0%, transparent 40%);
+            color: #334155; 
+        }}
+
+        html.dark body {{ 
+            background-color: #151821; 
+            background-image: radial-gradient(circle at 50% 0%, rgba(70, 150, 229, 0.08) 0%, transparent 45%);
+            color: #f1f5f9; 
+        }}
+        
+        /* Fractal Signature Header Banner */
+        .fractal-header {{
+            background-color: #4696e5;
+            background-image: 
+                radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.22) 0%, transparent 45%),
+                radial-gradient(circle at 10% 85%, rgba(255, 255, 255, 0.12) 0%, transparent 40%),
+                linear-gradient(135deg, #4696e5 0%, #3089e2 100%);
+            color: #d1e5f9;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            box-shadow: 0 10px 30px -5px rgba(70, 150, 229, 0.35);
+        }}
+
+        /* Fractal Cards (Pure Light & Slate Dark) */
+        html.light .glass-card, html.light .fractal-card {{ 
+            background: #ffffff !important; 
             border: 1px solid #e2e8f0 !important; 
-            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important; 
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+            border-radius: 14px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }}
-        html.light header {{ border-color: #e2e8f0 !important; }}
+        html.light .glass-card:hover, html.light .fractal-card:hover {{
+            border-color: #bfdbfe !important;
+            box-shadow: 0 8px 24px -4px rgba(70, 150, 229, 0.12) !important;
+            transform: translateY(-1px);
+        }}
+
+        html.dark .glass-card, html.dark .fractal-card {{ 
+            background: #1c212d !important; 
+            border: 1px solid rgba(255, 255, 255, 0.08) !important; 
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+            border-radius: 14px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }}
+        html.dark .glass-card:hover, html.dark .fractal-card:hover {{
+            border-color: rgba(70, 150, 229, 0.35) !important;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45) !important;
+            transform: translateY(-1px);
+        }}
+
+        /* Fractal Circular Icons */
+        .fractal-icon-circle {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            flex-shrink: 0;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }}
+        .fractal-icon-circle.lg {{ width: 50px; height: 50px; font-size: 1.35rem; }}
+        .fractal-icon-circle.md {{ width: 42px; height: 42px; font-size: 1.15rem; }}
+        .fractal-icon-circle.sm {{ width: 36px; height: 36px; font-size: 0.95rem; }}
+
+        /* Fractal Buttons */
+        .fractal-btn {{
+            appearance: none;
+            transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, transform 0.15s ease;
+            border-radius: 6px;
+            border: 0;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            font-weight: 700;
+            font-size: 0.78rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            padding: 0.5rem 1.15rem;
+            text-decoration: none;
+            white-space: nowrap;
+        }}
+        .fractal-btn-header-primary {{
+            background-color: #ffffff;
+            color: #4696e5 !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+        }}
+        .fractal-btn-header-primary:hover {{
+            background-color: #f0f7ff;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+            transform: translateY(-1px);
+        }}
+        .fractal-btn-header-alt {{
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #ffffff !important;
+            box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.35);
+        }}
+        .fractal-btn-header-alt:hover {{
+            background-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }}
+        .fractal-btn-primary {{
+            background-color: #4696e5;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(70, 150, 229, 0.3);
+        }}
+        .fractal-btn-primary:hover {{
+            background-color: #5ca3e8;
+            box-shadow: 0 4px 14px rgba(70, 150, 229, 0.4);
+            transform: translateY(-1px);
+        }}
+        .fractal-btn-alt {{
+            background-color: transparent;
+            color: #64748b !important;
+            box-shadow: inset 0 0 0 1.5px #cbd5e1;
+        }}
+        .fractal-btn-alt:hover {{
+            background-color: #f1f5f9;
+            color: #1e293b !important;
+        }}
+
+        /* Fractal Tables */
+        html.light table thead tr {{
+            background-color: #f8fafc;
+            border-bottom: 2px solid #e2e8f0;
+        }}
+        html.light table thead th {{
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #475569;
+        }}
+        html.light table tbody tr {{
+            border-bottom: 1px solid #f1f5f9;
+            transition: background-color 0.15s ease;
+        }}
+        html.light table tbody tr:nth-child(even) {{
+            background-color: #fafbfc;
+        }}
+        html.light table tbody tr:hover {{
+            background-color: #f0f7ff !important;
+        }}
+        html.light table td {{
+            color: #334155;
+        }}
+
+        html.dark table thead tr {{
+            background-color: #161b24;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+        }}
+        html.dark table thead th {{
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #94a3b8;
+        }}
+        html.dark table tbody tr {{
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            transition: background-color 0.15s ease;
+        }}
+        html.dark table tbody tr:hover {{
+            background-color: rgba(70, 150, 229, 0.08) !important;
+        }}
+
+        /* Light Mode Specific Overrides */
+        html.light header.border-b {{ border-color: #e2e8f0 !important; }}
         html.light p.text-slate-400, html.light .text-slate-400 {{ color: #64748b !important; }}
-        html.light h1, html.light h2, html.light h3 {{ color: #0f172a !important; }}
-        html.light table thead tr, html.light tr[class*="bg-slate-800"], html.light tr[class*="bg-slate-900"] {{ 
-            background-color: #f1f5f9 !important; 
-            border-color: #e2e8f0 !important; 
-            color: #475569 !important; 
+        html.light h1, html.light h2, html.light h3 {{ color: #1e293b !important; }}
+        html.light .text-slate-100, html.light .text-slate-200 {{ color: #1e293b !important; }}
+        html.light .text-slate-300 {{ color: #334155 !important; }}
+        html.light [class*="border-white/10"], html.light [class*="border-white/5"] {{ border-color: #e2e8f0 !important; }}
+        html.light .bg-slate-950, html.light .bg-slate-900, html.light .bg-slate-800 {{
+            background-color: #f8fafc !important;
+            border-color: #e2e8f0 !important;
         }}
-        html.light table th {{ color: #475569 !important; }}
-        html.light table tbody tr {{ border-color: #f1f5f9 !important; }}
-        html.light table tbody tr:hover {{ background-color: rgba(241, 245, 249, 0.9) !important; }}
-        html.light table td {{ color: #1e293b !important; }}
-        
-        /* Form Controls & Fields in Light Mode */
-        html.light input[type="text"], html.light input, html.light select {{ 
-            background-color: #ffffff !important; 
-            color: #0f172a !important; 
-            border-color: #cbd5e1 !important; 
+        html.light input[type="text"], html.light input, html.light select {{
+            background-color: #ffffff !important;
+            color: #1e293b !important;
+            border-color: #cbd5e1 !important;
         }}
         html.light select option {{
             background-color: #ffffff !important;
-            color: #0f172a !important;
+            color: #1e293b !important;
         }}
         html.light input::placeholder {{
             color: #94a3b8 !important;
         }}
-        
-        /* Container and Field Backgrounds in Light Mode */
-        html.light .bg-slate-900, html.light .bg-slate-950, html.light .bg-slate-800,
-        html.light [class*="bg-slate-900"], html.light [class*="bg-slate-950"], html.light [class*="bg-slate-800"] {{ 
-            background-color: #ffffff !important; 
-            border-color: #cbd5e1 !important; 
-        }}
-        
-        /* Segmented Tab Bars and Pill Containers in Light Mode */
-        html.light .inline-flex[class*="bg-slate-900"] {{
-            background-color: #e2e8f0 !important;
-            border-color: #cbd5e1 !important;
-        }}
-        html.light .border-slate-800, html.light .border-slate-700, html.light [class*="border-slate-700"] {{ 
-            border-color: #e2e8f0 !important; 
-        }}
-        html.light .divide-slate-800 > :not([hidden]) ~ :not([hidden]) {{
-            border-color: #e2e8f0 !important;
-        }}
-        html.light .text-slate-100, html.light .text-slate-200 {{ color: #0f172a !important; }}
-        html.light .text-slate-300 {{ color: #334155 !important; }}
-        
+
         /* Memory View Card Background Gradient Adaptation */
         html.light [class*="from-slate-900"], html.light [class*="via-slate-900"], html.light [class*="via-slate-950"], html.light [class*="to-purple-950"] {{
             background: #ffffff !important;
@@ -406,330 +557,399 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         }}
     </style>
 </head>
-<body class="text-slate-100 min-h-screen p-6 md:p-10">
+<body class="text-slate-800 dark:text-slate-100 min-h-screen p-4 sm:p-6 md:p-8">
 
-    <!-- Header -->
-    <header class="flex flex-col md:flex-row md:items-center md:justify-between mb-8 pb-6 border-b border-slate-800 gap-4">
-        <div>
-            <div class="flex items-center gap-3 mb-1">
-                <span class="p-2.5 bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-xl">
-                    <i class="fa-solid fa-chart-line text-xl"></i>
-                </span>
-                <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-sky-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent flex items-center gap-2.5">
-                    <span>TierBridge Dashboard</span>
-                    <span id="appVersionBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono font-bold align-middle shadow-sm">{app_version_tag}</span>
-                </h1>
+    <!-- Fractal Signature Header -->
+    <header id="header" class="fractal-header mb-8 p-5 sm:p-6 md:p-8 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6 shadow-md">
+        <div class="flex items-center gap-4">
+            <div class="fractal-icon-circle lg bg-white/20 border-2 border-white/35 text-white shadow-sm">
+                <i class="fa-solid fa-layer-group"></i>
             </div>
-            <p class="text-slate-400 text-sm pl-12">
-                Codex Enterprise AI 사용량, 토큰 소모 및 모델 관리 대시보드
-            </p>
+            <div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+                    <span>TierBridge</span>
+                    <span id="appVersionBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-white/20 text-white border border-white/30 font-mono font-medium align-middle">{app_version_tag}</span>
+                </h1>
+                <p class="text-[#d1e5f9] text-xs md:text-sm mt-0.5 font-medium">
+                    AI 사용량 및 모델 라우팅 현황
+                </p>
+            </div>
         </div>
         
         <!-- Controls: Dynamic Month, Session, Model Version, Theme Switcher & Live Indicator -->
-        <div class="flex flex-wrap items-center gap-2.5">
-            <!-- 🎨 3-Segment Theme Switcher (Dark / Light / System) -->
-            <div class="inline-flex p-1 bg-slate-900/90 border border-slate-700/60 rounded-xl shadow-lg gap-0.5">
-                <button id="themeBtnDark" onclick="setTheme('dark')" title="어두운 테마 (Dark)"
-                        class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
+        <div class="flex flex-wrap items-center gap-2">
+            <!-- Theme Switcher -->
+            <div class="inline-flex p-0.5 bg-black/20 backdrop-blur-md border border-white/25 rounded-lg shadow-sm gap-0.5">
+                <button id="themeBtnLight" onclick="setTheme('light')" title="밝은 테마"
+                        class="px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-white/80 hover:text-white">
+                    <i class="fa-solid fa-sun text-xs text-amber-300"></i>
+                    <span class="hidden sm:inline">밝은</span>
+                </button>
+                <button id="themeBtnDark" onclick="setTheme('dark')" title="어두운 테마"
+                        class="px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-white/80 hover:text-white">
                     <i class="fa-solid fa-moon text-xs"></i>
                     <span class="hidden sm:inline">어두운</span>
                 </button>
-                <button id="themeBtnLight" onclick="setTheme('light')" title="밝은 테마 (Light)"
-                        class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
-                    <i class="fa-solid fa-sun text-xs text-amber-500"></i>
-                    <span class="hidden sm:inline">밝은</span>
-                </button>
-                <button id="themeBtnSystem" onclick="setTheme('system')" title="시스템 기본 (System OS)"
-                        class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
-                    <i class="fa-solid fa-laptop text-xs text-sky-400"></i>
+                <button id="themeBtnSystem" onclick="setTheme('system')" title="시스템 기본"
+                        class="px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-white/80 hover:text-white">
+                    <i class="fa-solid fa-laptop text-xs"></i>
                     <span class="hidden sm:inline">기본</span>
                 </button>
             </div>
 
-            <!-- Dynamic Month Dropdown Selector -->
-            <div class="flex items-center gap-2 bg-slate-800/90 border border-indigo-500/40 px-3 py-1.5 rounded-xl shadow-lg">
-                <i class="fa-solid fa-calendar-check text-indigo-400 text-sm"></i>
-                <span class="text-xs font-semibold text-slate-300">월:</span>
+            <!-- Month Dropdown -->
+            <div class="flex items-center gap-1.5 bg-black/20 backdrop-blur-md border border-white/25 px-2.5 py-1 rounded-lg text-xs">
+                <i class="fa-solid fa-calendar-check text-[#d1e5f9] text-xs"></i>
+                <span class="text-white/80 font-medium">월:</span>
                 <select id="monthSelect" onchange="onFilterChange()" 
-                        class="bg-slate-900 text-emerald-400 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-indigo-400 cursor-pointer">
+                        class="bg-transparent text-white font-mono font-semibold focus:outline-none cursor-pointer">
                     {month_options_html}
                 </select>
             </div>
 
-            <!-- Dynamic Session ID Dropdown Selector -->
-            <div class="flex items-center gap-2 bg-slate-800/90 border border-purple-500/40 px-3 py-1.5 rounded-xl shadow-lg">
-                <i class="fa-solid fa-network-wired text-purple-400 text-sm"></i>
-                <span class="text-xs font-semibold text-slate-300">세션:</span>
+            <!-- Session ID Dropdown -->
+            <div class="flex items-center gap-1.5 bg-black/20 backdrop-blur-md border border-white/25 px-2.5 py-1 rounded-lg text-xs">
+                <i class="fa-solid fa-network-wired text-[#d1e5f9] text-xs"></i>
+                <span class="text-white/80 font-medium">세션:</span>
                 <select id="sessionSelect" onchange="onFilterChange()" 
-                        class="bg-slate-900 text-purple-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-purple-400 cursor-pointer max-w-[240px] md:max-w-[320px] truncate">
+                        class="bg-transparent text-white font-mono font-semibold focus:outline-none cursor-pointer max-w-[160px] md:max-w-[220px] truncate">
                     {session_options_html}
                 </select>
             </div>
 
             <!-- Model Version Selector -->
-            <div class="flex items-center gap-2 bg-slate-800/90 border border-sky-500/40 px-3 py-1.5 rounded-xl shadow-lg">
-                <i class="fa-solid fa-code-branch text-sky-400 text-sm"></i>
-                <span class="text-xs font-semibold text-slate-300">버전:</span>
+            <div class="flex items-center gap-1.5 bg-black/20 backdrop-blur-md border border-white/25 px-2.5 py-1 rounded-lg text-xs">
+                <i class="fa-solid fa-code-branch text-[#d1e5f9] text-xs"></i>
+                <span class="text-white/80 font-medium">버전:</span>
                 <select id="versionSelect" onchange="switchModelVersion(this.value)"
-                        class="bg-slate-900 text-sky-300 font-mono text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-none focus:border-sky-400 cursor-pointer">
+                        class="bg-transparent text-white font-mono font-semibold focus:outline-none cursor-pointer">
                     {version_options_html}
                 </select>
             </div>
 
-            <!-- Git Pull / Version Sync Badge -->
-            <div id="gitStatusBadge" class="hidden md:flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/60 px-2.5 py-1.5 rounded-xl text-slate-400 text-xs font-mono cursor-pointer hover:bg-slate-700/60 transition-all" onclick="openGitPullModal()" title="Git 원격 동기화 상태 확인">
-                <i class="fa-solid fa-code-pull-request text-indigo-400"></i>
-                <span id="gitStatusText">Git Checking...</span>
+            <!-- Git Status Badge -->
+            <div id="gitStatusBadge" class="hidden md:flex items-center gap-1.5 bg-black/20 backdrop-blur-md border border-white/25 px-2.5 py-1 rounded-lg text-white/90 text-xs font-mono cursor-pointer hover:bg-white/10 transition-all" onclick="openGitPullModal()" title="Git 동기화 상태">
+                <i class="fa-solid fa-code-pull-request text-[#d1e5f9]"></i>
+                <span id="gitStatusText">Git</span>
             </div>
 
             <!-- Classifier Status Badge -->
-            <div id="classifierStatusBadge" class="hidden md:flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/60 px-2.5 py-1.5 rounded-xl text-slate-300 text-xs font-mono shadow-sm" title="분류기: 1순위 gpt-reserve (1.5x 고속) ➔ 폴백 gpt-5.6-luna">
-                <i class="fa-solid fa-bolt text-amber-400"></i>
-                <span class="text-slate-400">분류기:</span>
-                <span id="classifierStatusText" class="text-emerald-400 font-bold">gpt-reserve</span>
+            <div id="classifierStatusBadge" class="hidden md:flex items-center gap-1.5 bg-black/20 backdrop-blur-md border border-white/25 px-2.5 py-1 rounded-lg text-white text-xs font-mono" title="분류기: 1순위 gpt-reserve ➔ 폴백 gpt-5.6-luna">
+                <i class="fa-solid fa-bolt text-amber-300"></i>
+                <span class="text-white/80">분류기:</span>
+                <span id="classifierStatusText" class="text-emerald-300 font-bold">gpt-reserve</span>
             </div>
 
-            <!-- Interactive Live Sync Control Toolbar -->
-            <div class="relative inline-flex items-center bg-slate-800/90 border border-emerald-500/40 rounded-xl shadow-lg p-0.5 gap-1">
-                <!-- Manual Refresh Button -->
-                <button onclick="triggerManualRefresh()" id="manualRefreshBtn" title="지금 즉시 데이터 갱신"
-                        class="p-1.5 px-2 hover:bg-slate-700/80 rounded-lg text-emerald-400 hover:text-emerald-300 transition-all cursor-pointer">
+            <!-- Live Polling Toolbar -->
+            <div class="relative inline-flex items-center bg-black/20 backdrop-blur-md border border-white/25 rounded-lg p-0.5 gap-1">
+                <button onclick="triggerManualRefresh()" id="manualRefreshBtn" title="새로고침"
+                        class="p-1 px-1.5 hover:bg-white/15 rounded text-white transition-all cursor-pointer">
                     <i id="manualRefreshIcon" class="fa-solid fa-rotate-right text-xs"></i>
                 </button>
-                <!-- Live Polling Badge / Dropdown Trigger -->
                 <div id="liveSyncBadge" onclick="togglePollDropdown(event)" 
-                     class="flex items-center gap-1.5 bg-emerald-950/70 border border-emerald-500/50 px-2.5 py-1 rounded-lg text-emerald-400 text-xs font-bold cursor-pointer hover:bg-emerald-900/60 transition-all">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span id="liveSyncBadgeText">5s Live</span>
-                    <i class="fa-solid fa-chevron-down text-[10px] text-emerald-400/70 ml-0.5"></i>
+                     class="flex items-center gap-1.5 bg-white/20 border border-white/30 px-2 py-0.5 rounded text-white text-xs font-medium cursor-pointer hover:bg-white/30 transition-all">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse"></span>
+                    <span id="liveSyncBadgeText">5초</span>
+                    <i class="fa-solid fa-chevron-down text-[8px] text-white/70 ml-0.5"></i>
                 </div>
-                <!-- Pause/Play Quick Toggle -->
-                <button onclick="toggleLivePolling()" id="pollToggleBtn" title="자동 갱신 일시정지 / 재개"
-                        class="p-1.5 px-2 hover:bg-slate-700/80 rounded-lg text-slate-400 hover:text-amber-300 transition-all cursor-pointer">
+                <button onclick="toggleLivePolling()" id="pollToggleBtn" title="자동 갱신 일시정지"
+                        class="p-1 px-1.5 hover:bg-white/15 rounded text-white/80 hover:text-white transition-all cursor-pointer">
                     <i id="pollToggleIcon" class="fa-solid fa-pause text-xs"></i>
                 </button>
 
                 <!-- Polling Interval Dropdown Popover -->
-                <div id="pollIntervalDropdown" class="hidden absolute top-full right-0 mt-2 z-50 w-56 p-2 rounded-2xl bg-slate-900/95 border border-slate-700 shadow-2xl backdrop-blur-xl text-xs space-y-1">
-                    <div class="px-2.5 py-1.5 font-bold text-slate-300 border-b border-slate-800 flex items-center justify-between">
-                        <span>⏱️ 자동 갱신 주기</span>
-                        <span class="text-[10px] text-slate-500 font-mono">localStorage 저장</span>
+                <div id="pollIntervalDropdown" class="hidden absolute top-full right-0 mt-2 z-50 w-52 p-2 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl backdrop-blur-xl text-xs space-y-1">
+                    <div class="px-2 py-1 font-medium text-slate-300 border-b border-slate-800 flex items-center justify-between">
+                        <span>갱신 주기</span>
                     </div>
-                    <button onclick="setPollInterval(3)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-slate-200">
-                        <span>⚡ 3초 (고속 동기화)</span>
+                    <button onclick="setPollInterval(3)" class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-800 flex items-center justify-between text-slate-200">
+                        <span>3초 (빠름)</span>
                         <span id="pollCheck3" class="text-emerald-400 text-xs font-bold hidden">✓</span>
                     </button>
-                    <button onclick="setPollInterval(5)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-slate-200">
-                        <span>🎯 5초 (기본 권장)</span>
+                    <button onclick="setPollInterval(5)" class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-800 flex items-center justify-between text-slate-200">
+                        <span>5초 (기본)</span>
                         <span id="pollCheck5" class="text-emerald-400 text-xs font-bold hidden">✓</span>
                     </button>
-                    <button onclick="setPollInterval(10)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-slate-200">
-                        <span>🌱 10초 (저부하 모드)</span>
+                    <button onclick="setPollInterval(10)" class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-800 flex items-center justify-between text-slate-200">
+                        <span>10초</span>
                         <span id="pollCheck10" class="text-emerald-400 text-xs font-bold hidden">✓</span>
                     </button>
-                    <button onclick="setPollInterval(30)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-slate-200">
-                        <span>🌙 30초 (백그라운드)</span>
+                    <button onclick="setPollInterval(30)" class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-800 flex items-center justify-between text-slate-200">
+                        <span>30초</span>
                         <span id="pollCheck30" class="text-emerald-400 text-xs font-bold hidden">✓</span>
                     </button>
-                    <button onclick="setPollInterval(0)" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800/80 flex items-center justify-between text-amber-300">
-                        <span>⏸️ 수동 갱신 (중지)</span>
+                    <button onclick="setPollInterval(0)" class="w-full text-left px-2 py-1.5 rounded hover:bg-slate-800 flex items-center justify-between text-amber-300">
+                        <span>수동 갱신</span>
                         <span id="pollCheck0" class="text-amber-400 text-xs font-bold hidden">✓</span>
                     </button>
                     <div class="pt-1.5 mt-1 border-t border-slate-800 px-1 flex items-center gap-1.5">
-                        <span class="text-[11px] text-slate-400 whitespace-nowrap">직접 입력:</span>
+                        <span class="text-[11px] text-slate-400 whitespace-nowrap">직접:</span>
                         <input id="customPollInput" type="number" min="1" max="3600" placeholder="초"
                                class="w-14 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-center font-mono text-emerald-400 text-xs focus:outline-none focus:border-emerald-500"
                                onkeydown="if(event.key==='Enter') applyCustomPollInterval()">
-                        <button onclick="applyCustomPollInterval()" class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-bold">적용</button>
+                        <button onclick="applyCustomPollInterval()" class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-medium">적용</button>
                     </div>
                 </div>
             </div>
 
-            <!-- Healing Factor Demo Sample Test Button -->
+            <!-- Demo Test Button -->
             <button onclick="openHealingModal()"
-                    class="px-3 py-1.5 bg-gradient-to-r from-purple-600/30 to-indigo-600/30 border border-purple-400/50 text-purple-200 text-xs font-bold rounded-xl shadow-lg hover:bg-purple-600/40 transition-all flex items-center gap-1.5">
-                <i class="fa-solid fa-vial-circle-check text-purple-300"></i>
-                <span>🧪 힐링 데모</span>
+                    class="fractal-btn fractal-btn-header-alt text-xs py-1 px-3">
+                <i class="fa-solid fa-vial-circle-check"></i>
+                <span>데모 테스트</span>
             </button>
 
             <!-- Healing Notice Button -->
             <button id="healingNoticeBtn" onclick="openHealingModal()"
-                    class="{banner_hidden_class} px-3 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold rounded-xl shadow-lg hover:bg-emerald-500/30 transition-all flex items-center gap-1.5">
-                <i class="fa-solid fa-kit-medical text-emerald-400"></i>
-                <span>💡 신규 모델!</span>
+                    class="{banner_hidden_class} fractal-btn fractal-btn-header-primary text-xs py-1 px-3">
+                <i class="fa-solid fa-kit-medical"></i>
+                <span>신규 모델</span>
             </button>
         </div>
     </header>
 
-    <!-- Modern Segmented Pill Tab Bar (Shadcn / Vercel Premium Style) -->
-    <div class="flex items-center justify-between mb-8 pb-2">
-        <div class="inline-flex p-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-inner backdrop-blur-md gap-1.5">
+    <!-- Tab Navigation -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-2 gap-4">
+        <div class="inline-flex p-1 bg-slate-200/80 dark:bg-slate-900/80 border border-slate-300/80 dark:border-white/10 rounded-xl shadow-sm gap-1">
             <button id="tabBtnUsage" onclick="switchDashboardTab('usage')"
-                    class="px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2.5 cursor-pointer bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25 border border-indigo-400/30">
-                <i class="fa-solid fa-chart-line text-sm"></i>
-                <span>📊 AI 사용량 & 크레딧 관제</span>
+                    class="px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer bg-[#4696e5] text-white shadow-sm">
+                <i class="fa-solid fa-chart-line text-xs"></i>
+                <span>사용량 &amp; 크레딧</span>
             </button>
             <button id="tabBtnMemory" onclick="switchDashboardTab('memory')"
-                    class="px-5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 flex items-center gap-2.5 cursor-pointer text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent">
-                <i class="fa-solid fa-brain text-sm text-purple-400"></i>
-                <span>🧠 Giyeok 장기 기억저장소 & 생각나무</span>
-                <span id="memTabCountBadge" class="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-mono font-bold border border-purple-500/30">0건</span>
+                    class="px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
+                <i class="fa-solid fa-brain text-xs text-purple-500"></i>
+                <span>기억 저장소</span>
+                <span id="memTabCountBadge" class="text-[9px] px-2 py-0.5 bg-purple-500/15 text-purple-600 dark:text-purple-300 rounded-full font-mono font-medium border border-purple-500/30">0건</span>
             </button>
-        </div>
-        <div class="hidden md:flex items-center gap-2 text-xs text-slate-400 font-mono">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Direct SQLite ✕ In-process Live Graph</span>
         </div>
     </div>
 
     <!-- Tab 1: AI Usage & Credit Analytics View -->
     <div id="usageView">
-    <div id="healingBanner" class="{banner_hidden_class} mb-8 p-4 rounded-2xl glass-card border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div id="healingBanner" class="{banner_hidden_class} mb-8 p-4 rounded-xl glass-card border border-emerald-500/30 bg-emerald-950/20 flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-3">
-            <span class="p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 rounded-xl text-xl">
-                <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span class="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg text-lg">
+                <i class="fa-solid fa-sparkles"></i>
             </span>
             <div>
-                <h3 class="text-sm font-bold text-emerald-300 flex items-center gap-2">
-                    Real Upstream Model Released! <span class="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full font-mono">Cost Saver</span>
+                <h3 class="text-sm font-semibold text-emerald-300 flex items-center gap-2">
+                    신규 모델 발견 <span class="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full font-mono">업스트림</span>
                 </h3>
-                <p class="text-xs text-slate-300 mt-0.5" id="healingBannerDesc">
-                    실제 업스트림 API에서 신규 릴리즈 모델 및 단가 절약 패치가 감지되었습니다. 원클릭 핫패치를 적용하세요.
+                <p class="text-xs text-slate-400 mt-0.5" id="healingBannerDesc">
+                    업스트림 API에서 신규 모델 및 단가 절약 매핑이 감지되었습니다.
                 </p>
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <button onclick="openHealingModal()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-1.5">
-                <i class="fa-solid fa-code-compare"></i> 단가 비교 및 핫패치 적용
+            <button onclick="openHealingModal()" class="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5">
+                <i class="fa-solid fa-code-compare"></i> 단가 비교 및 적용
             </button>
         </div>
     </div>
 
-    <!-- Enterprise Live Balance Bar -->
-    <div id="enterpriseBalanceWidget" class="mb-8 p-5 rounded-2xl glass-card border border-sky-500/40 bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950/40 flex flex-col lg:flex-row items-center justify-between gap-6">
-        <div class="flex items-center gap-4">
-            <span class="p-3.5 bg-sky-500/20 border border-sky-500/40 text-sky-400 rounded-2xl text-2xl">
+    <!-- Classifier Telemetry Card -->
+    <div id="classifierTelemetryCard" class="mb-8 p-5 rounded-2xl glass-card border border-slate-200 dark:border-white/10 relative overflow-hidden">
+        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+            <!-- Header Section -->
+            <div class="flex items-center gap-3.5">
+                <div class="fractal-icon-circle md bg-blue-500/15 border border-blue-500/30 text-[#4696e5]">
+                    <i class="fa-solid fa-microchip"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-bold tracking-wider uppercase text-[#4696e5]">분류기</span>
+                        <span id="clfGovernorBadge" class="text-[10px] px-2 py-0.5 rounded-full font-mono font-medium bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
+                            BALANCED
+                        </span>
+                    </div>
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+                        모델 분류기 상태
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        규칙 기반 고속 처리(Fast-Path) 및 에러 감지 자동 승격 현황
+                    </p>
+                </div>
+            </div>
+
+            <!-- Telemetry Metrics Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto">
+                <div class="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/5 rounded-xl p-3 min-w-[130px]">
+                    <div class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Fast-Path 비율</div>
+                    <div class="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 flex items-baseline gap-1 mt-0.5">
+                        <span id="clfFastPathRatio">0.0%</span>
+                        <span class="text-[10px] text-slate-400 font-normal">0ms / $0</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/5 rounded-xl p-3 min-w-[130px]">
+                    <div class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">심층 판정 (LLM)</div>
+                    <div class="text-base font-bold font-mono text-blue-600 dark:text-indigo-300 flex items-baseline gap-1 mt-0.5">
+                        <span id="clfDeepPathHits">0회</span>
+                        <span class="text-[10px] text-slate-400 font-normal">gpt-reserve</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/5 rounded-xl p-3 min-w-[130px]">
+                    <div class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">에러 자동 승격</div>
+                    <div class="text-base font-bold font-mono text-amber-600 dark:text-amber-300 flex items-baseline gap-1 mt-0.5">
+                        <span id="clfEscalationHits">0회</span>
+                        <span class="text-[10px] text-slate-400 font-normal">재시도</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/5 rounded-xl p-3 min-w-[130px]">
+                    <div class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">최근 분류 모델</div>
+                    <div class="text-base font-bold font-mono text-slate-700 dark:text-sky-300 flex items-baseline gap-1 mt-0.5">
+                        <span id="clfLastModelText" class="truncate max-w-[100px]">gpt-reserve</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enterprise Balance Bar -->
+    <div id="enterpriseBalanceWidget" class="mb-8 p-5 rounded-2xl glass-card border border-slate-200 dark:border-white/10 flex flex-col lg:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-3.5">
+            <div class="fractal-icon-circle md bg-blue-500/15 border border-blue-500/30 text-[#4696e5]">
                 <i class="fa-solid fa-building-columns"></i>
-            </span>
+            </div>
             <div>
                 <div class="flex items-center gap-2">
-                    <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
-                        ChatGPT Enterprise Live Spend Control
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">
+                        Enterprise 크레딧
                     </h3>
-                    <span id="entPlanBadge" class="text-xs px-2.5 py-0.5 bg-sky-500/20 text-sky-300 rounded-full font-mono font-bold">Business Plan</span>
+                    <span id="entPlanBadge" class="text-[10px] px-2 py-0.5 bg-blue-500/15 text-[#4696e5] dark:text-sky-300 rounded-full font-mono font-medium">Business</span>
                 </div>
-                <p class="text-xs text-slate-400 mt-1" id="entAccountEmail">
-                    계정: <span class="text-slate-300 font-mono">86lyh@hanatour.com</span> | 리셋 주기: <span id="entResetAt" class="text-emerald-400 font-bold">매월 1일</span>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1" id="entAccountEmail">
+                    계정: <span class="text-slate-700 dark:text-slate-300 font-mono">86lyh@hanatour.com</span> &middot; 리셋: <span id="entResetAt" class="text-emerald-600 dark:text-emerald-400 font-medium">매월 1일</span>
                 </p>
             </div>
         </div>
 
         <div class="flex-1 max-w-xl w-full">
-            <div class="flex justify-between text-xs font-semibold mb-1.5">
-                <span class="text-slate-300">실제 소모: <span id="entUsedCredits" class="text-indigo-400 font-mono font-bold">- Cr</span></span>
-                <span class="text-slate-300">실제 잔여: <span id="entRemainingCredits" class="text-emerald-400 font-mono font-bold">- Cr</span> / <span id="entLimitCredits" class="text-slate-400 font-mono">- Cr</span></span>
+            <div class="flex justify-between text-xs font-medium mb-1.5">
+                <span class="text-slate-500 dark:text-slate-400">소모: <span id="entUsedCredits" class="text-[#4696e5] dark:text-indigo-300 font-mono font-bold">- Cr</span></span>
+                <span class="text-slate-500 dark:text-slate-400">잔여: <span id="entRemainingCredits" class="text-emerald-600 dark:text-emerald-400 font-mono font-bold">- Cr</span> / <span id="entLimitCredits" class="text-slate-500 dark:text-slate-400 font-mono">- Cr</span></span>
             </div>
-            <div class="w-full bg-slate-800 rounded-full h-3.5 p-0.5 border border-slate-700 overflow-hidden">
-                <div id="entProgressBar" class="bg-gradient-to-r from-emerald-500 via-sky-400 to-indigo-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%;"></div>
+            <div class="w-full bg-slate-200 dark:bg-slate-900 rounded-full h-2.5 p-0.5 border border-slate-300 dark:border-white/10 overflow-hidden">
+                <div id="entProgressBar" class="bg-gradient-to-r from-emerald-500 via-[#4696e5] to-indigo-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%;"></div>
             </div>
         </div>
     </div>
 
     <!-- KPI Metric Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <!-- Card 1: Total Credits -->
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
-            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Total Consumed Credits</div>
-            <div class="text-3xl font-extrabold text-emerald-400 font-mono mb-1" id="kpiCredits">0.00 <span class="text-sm font-normal text-slate-400">Cr</span></div>
-            <div class="text-xs font-mono" id="kpiCreditBreakdown"><span class="text-indigo-300 font-bold">🤖 모델: 0.00 Cr</span> <span class="text-slate-500">|</span> <span class="text-amber-300 font-bold">🔍 분류기: 0.00 Cr</span></div>
-            <div class="absolute -right-3 -bottom-3 text-emerald-500/10 text-6xl"><i class="fa-solid fa-credit-card"></i></div>
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border border-slate-200 dark:border-white/10">
+            <div class="flex items-center justify-between mb-3">
+                <div class="fractal-icon-circle sm bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                    <i class="fa-solid fa-credit-card"></i>
+                </div>
+                <span class="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">총 소모 크레딧</span>
+            </div>
+            <div class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono mb-1 tracking-tight" id="kpiCredits">0.00 <span class="text-xs font-normal text-slate-400 font-sans">Cr</span></div>
+            <div class="text-xs font-mono text-slate-500 dark:text-slate-400" id="kpiCreditBreakdown"><span class="text-blue-600 dark:text-indigo-300">모델: 0.00 Cr</span> <span class="text-slate-400">|</span> <span class="text-amber-600 dark:text-amber-300">분류기: 0.00 Cr</span></div>
         </div>
 
         <!-- Card 2: Total Cost -->
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
-            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Estimated Value</div>
-            <div class="text-3xl font-extrabold text-indigo-300 font-mono mb-1" id="kpiCost">$0.0000</div>
-            <div class="text-xs text-slate-400" id="kpiRequests">총 0회 성사 요청</div>
-            <div class="absolute -right-3 -bottom-3 text-indigo-500/10 text-6xl"><i class="fa-solid fa-dollar-sign"></i></div>
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border border-slate-200 dark:border-white/10">
+            <div class="flex items-center justify-between mb-3">
+                <div class="fractal-icon-circle sm bg-blue-500/15 border border-blue-500/30 text-[#4696e5]">
+                    <i class="fa-solid fa-dollar-sign"></i>
+                </div>
+                <span class="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">추정 비용 (USD)</span>
+            </div>
+            <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 font-mono mb-1 tracking-tight" id="kpiCost">$0.0000</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400" id="kpiRequests">총 0회 완료</div>
         </div>
 
         <!-- Card 3: Total Tokens -->
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
-            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Total Tokens</div>
-            <div class="text-3xl font-extrabold text-sky-400 font-mono mb-1" id="kpiTokens">0</div>
-            <div class="text-xs text-slate-400" id="kpiInTokens">Input: 0</div>
-            <div class="absolute -right-3 -bottom-3 text-sky-500/10 text-6xl"><i class="fa-solid fa-cubes"></i></div>
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border border-slate-200 dark:border-white/10">
+            <div class="flex items-center justify-between mb-3">
+                <div class="fractal-icon-circle sm bg-cyan-500/15 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400">
+                    <i class="fa-solid fa-cubes"></i>
+                </div>
+                <span class="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">소모 토큰</span>
+            </div>
+            <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 font-mono mb-1 tracking-tight" id="kpiTokens">0</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400" id="kpiInTokens">Input: 0</div>
         </div>
 
         <!-- Card 4: Total Sessions -->
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
-            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Unique Sessions</div>
-            <div class="text-3xl font-extrabold text-purple-400 font-mono mb-1" id="kpiSessions">0 <span class="text-sm font-normal text-slate-400">sessions</span></div>
-            <div class="text-xs text-slate-400">식별된 대화 세션 ID 수</div>
-            <div class="absolute -right-3 -bottom-3 text-purple-500/10 text-6xl"><i class="fa-solid fa-layer-group"></i></div>
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border border-slate-200 dark:border-white/10">
+            <div class="flex items-center justify-between mb-3">
+                <div class="fractal-icon-circle sm bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-400">
+                    <i class="fa-solid fa-layer-group"></i>
+                </div>
+                <span class="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">식별 세션</span>
+            </div>
+            <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 font-mono mb-1 tracking-tight" id="kpiSessions">0 <span class="text-xs font-normal text-slate-400 font-sans">개</span></div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">고유 세션 ID 수</div>
         </div>
 
         <!-- Card 5: Savings -->
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden border-emerald-500/30 bg-emerald-950/20">
-            <div class="flex items-center justify-between mb-2">
-                <div class="text-xs font-semibold uppercase tracking-wider text-emerald-400">다운스케일링 누적 절감액</div>
-                <button onclick="openSavingsInfoModal()" class="text-emerald-400/80 hover:text-emerald-200 transition-colors p-1 rounded-lg hover:bg-emerald-500/20 flex items-center justify-center cursor-pointer" title="절감액 산출 기준 및 수식 안내">
-                    <i class="fa-solid fa-circle-info text-sm"></i>
-                </button>
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border border-emerald-500/25 bg-emerald-50/40 dark:bg-emerald-950/20">
+            <div class="flex items-center justify-between mb-3">
+                <div class="fractal-icon-circle sm bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs text-emerald-700 dark:text-emerald-400 font-semibold uppercase tracking-wider">비용 절감액</span>
+                    <button onclick="openSavingsInfoModal()" class="text-emerald-600/70 hover:text-emerald-800 dark:text-emerald-400/80 dark:hover:text-emerald-200 transition-colors p-0.5 rounded cursor-pointer" title="절감액 산출 기준">
+                        <i class="fa-solid fa-circle-info text-xs"></i>
+                    </button>
+                </div>
             </div>
-            <div class="text-3xl font-extrabold text-emerald-300 font-mono mb-1" id="kpiSavingsUsd">$0.00</div>
-            <div class="text-xs text-emerald-400/80" id="kpiSavingsCredits">약 0.0 Cr 크레딧 아낌</div>
-            <div class="absolute -right-3 -bottom-3 text-emerald-400/10 text-6xl pointer-events-none"><i class="fa-solid fa-shield-halved"></i></div>
+            <div class="text-3xl font-extrabold text-emerald-700 dark:text-emerald-300 font-mono mb-1 tracking-tight" id="kpiSavingsUsd">$0.00</div>
+            <div class="text-xs text-emerald-600 dark:text-emerald-400/80" id="kpiSavingsCredits">약 0.0 Cr 절감</div>
         </div>
     </div>
 
     <!-- Charts Row -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <!-- Daily Trend Line Chart -->
         <div class="lg:col-span-2 glass-card p-6 rounded-2xl flex flex-col justify-between">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div>
-                    <h2 id="timelineChartTitle" class="text-base font-semibold text-slate-200 flex items-center gap-2">
-                        <i id="timelineChartIcon" class="fa-solid fa-chart-area text-sky-400"></i> <span id="timelineChartTitleText">선택 기간 일자별 추이 (Daily Trend)</span>
+                    <h2 id="timelineChartTitle" class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <i id="timelineChartIcon" class="fa-solid fa-chart-area text-sky-400"></i> <span id="timelineChartTitleText">일자별 추이</span>
                     </h2>
-                    <span id="timelineChartSubText" class="text-xs text-slate-400 font-mono">Kibana Live Timeline</span>
                 </div>
 
-                <!-- Interactive Chart Control Toolbars -->
+                <!-- Chart Control Toolbars -->
                 <div class="flex items-center gap-2 flex-wrap">
-                    <!-- Metric Focus Switcher (Dual / Credits / Tokens / Cumulative) -->
-                    <div id="chartMetricFocusGroup" class="inline-flex p-1 bg-slate-900/90 border border-slate-700/70 rounded-xl shadow-inner gap-0.5 text-xs">
+                    <div id="chartMetricFocusGroup" class="inline-flex p-0.5 bg-slate-950/80 border border-white/10 rounded-lg gap-0.5 text-xs">
                         <button id="chartFocusDual" onclick="setChartMetricFocus('dual')" 
-                                class="px-2.5 py-1 rounded-lg font-bold transition-all bg-indigo-600 text-white shadow-sm cursor-pointer" title="크레딧과 토큰 함께 보기">
-                            ✨ 듀얼 뷰
+                                class="px-2.5 py-1 rounded text-xs font-medium transition-all bg-indigo-600 text-white cursor-pointer" title="크레딧과 토큰 함께 보기">
+                            듀얼
                         </button>
                         <button id="chartFocusCredit" onclick="setChartMetricFocus('credit')" 
-                                class="px-2.5 py-1 rounded-lg font-semibold text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="크레딧 소모량만 집중 보기">
-                            💳 크레딧만
+                                class="px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="크레딧만 보기">
+                            크레딧
                         </button>
                         <button id="chartFocusToken" onclick="setChartMetricFocus('token')" 
-                                class="px-2.5 py-1 rounded-lg font-semibold text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="토큰 소모량만 집중 보기">
-                            📦 토큰만
+                                class="px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="토큰만 보기">
+                            토큰
                         </button>
                         <button id="chartFocusCumulative" onclick="setChartMetricFocus('cumulative')" 
-                                class="px-2.5 py-1 rounded-lg font-semibold text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="누적 소모 곡선 보기">
-                            📈 누적 추이
+                                class="px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="누적 곡선 보기">
+                            누적
                         </button>
                     </div>
 
-                    <!-- Single Session Filter Mode (Pairing vs Model Only vs Raw All) -->
-                    <div id="sessionTurnFilterGroup" class="hidden inline-flex p-1 bg-slate-900/90 border border-purple-500/40 rounded-xl shadow-inner gap-0.5 text-xs">
+                    <div id="sessionTurnFilterGroup" class="hidden inline-flex p-0.5 bg-slate-950/80 border border-purple-500/30 rounded-lg gap-0.5 text-xs">
                         <button id="turnFilterMerged" onclick="setSessionTurnFilter('merged')" 
-                                class="px-2.5 py-1 rounded-lg font-bold transition-all bg-purple-600 text-white shadow-sm cursor-pointer" title="1턴 단위 통합 (분류기+모델 페어링으로 파동 제거)">
-                            🎯 1턴 통합
+                                class="px-2.5 py-1 rounded text-xs font-medium transition-all bg-purple-600 text-white cursor-pointer" title="1턴 단위 통합">
+                            1턴 통합
                         </button>
                         <button id="turnFilterModel" onclick="setSessionTurnFilter('model')" 
-                                class="px-2.5 py-1 rounded-lg font-semibold text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="메인 에이전트 모델 턴만 보기">
-                            🤖 모델만
+                                class="px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="모델 턴만 보기">
+                            모델만
                         </button>
                         <button id="turnFilterAll" onclick="setSessionTurnFilter('all')" 
-                                class="px-2.5 py-1 rounded-lg font-semibold text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="분류기 포함 원시 턴 전체 보기">
-                            🔍 원시 전체
+                                class="px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all cursor-pointer" title="원시 턴 전체 보기">
+                            전체
                         </button>
                     </div>
                 </div>
@@ -740,12 +960,12 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
 
         <!-- Decision Grade Doughnut Chart -->
-        <div class="glass-card p-6 rounded-2xl">
+        <div class="glass-card p-6 rounded-2xl flex flex-col justify-between">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold text-slate-200 flex items-center gap-2">
-                    <i class="fa-solid fa-chart-pie text-purple-400"></i> 모델 라우팅 등급 분포 (Decision Share)
+                <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-pie text-purple-400"></i> 등급별 분포
                 </h2>
-                <span class="text-xs text-slate-400">Credit Share</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono border border-purple-500/30">Credit Share</span>
             </div>
             <div class="h-64 flex items-center justify-center">
                 <canvas id="decisionChart"></canvas>
@@ -753,24 +973,21 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         </div>
     </div>
 
-    <!-- Session Turn-by-Turn Live Stream (Visible ONLY when specific session is selected) -->
-    <div id="sessionTurnsSection" class="hidden glass-card p-6 rounded-2xl mb-8 border border-purple-500/40 bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/20">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-800">
+    <!-- Session Turn-by-Turn Live Stream -->
+    <div id="sessionTurnsSection" class="hidden glass-card p-6 rounded-2xl mb-8 border border-purple-500/30">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-3 border-b border-white/10">
             <div>
                 <div class="flex items-center gap-2">
-                    <span class="p-2 bg-purple-500/20 text-purple-400 rounded-xl text-lg">
-                        <i class="fa-solid fa-list-ol"></i>
-                    </span>
-                    <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-                        선택 세션 턴별 프롬프트 실시간 타임라인
-                        <span id="sessionTurnsBadge" class="text-xs px-2.5 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-mono font-bold">0 턴</span>
+                    <h2 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                        세션 턴별 상세
+                        <span id="sessionTurnsBadge" class="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full font-mono">0 턴</span>
                     </h2>
                 </div>
-                <p class="text-xs text-slate-400 mt-1" id="sessionTurnsDesc">
-                    세션 내 발생한 모든 질의 턴과 에이전트 서브스텝 프롬프트, 모델 라우팅 등급 및 소모 수치를 시간순으로 실시간 표시합니다.
+                <p class="text-xs text-slate-400 mt-0.5" id="sessionTurnsDesc">
+                    선택한 세션의 턴별 프롬프트와 모델 라우팅 상세 내역입니다.
                 </p>
             </div>
-            <div class="text-xs font-mono text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
+            <div class="text-xs font-mono text-slate-400 bg-slate-950/80 px-3 py-1 rounded-lg border border-white/10">
                 세션 ID: <span id="sessionTurnsSid" class="text-purple-300 font-bold">-</span>
             </div>
         </div>
@@ -778,17 +995,17 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         <div class="overflow-x-auto max-h-96 overflow-y-auto pr-1">
             <table class="w-full text-left border-collapse" id="sessionTurnsTable">
                 <thead class="sticky top-0 bg-slate-900/95 backdrop-blur-md z-10">
-                    <tr class="text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
-                        <th class="px-3 py-2.5 rounded-tl-lg font-mono">Turn</th>
-                        <th class="px-3 py-2.5">발생 시각</th>
-                        <th class="px-3 py-2.5 text-center">라우팅 등급</th>
-                        <th class="px-3 py-2.5">프롬프트 전문 / 서브스텝 요약</th>
-                        <th class="px-3 py-2.5 text-right">In / Out 토큰</th>
-                        <th class="px-3 py-2.5 text-right">소모 토큰</th>
-                        <th class="px-3 py-2.5 text-right rounded-tr-lg">소모 크레딧</th>
+                    <tr class="text-slate-400 text-xs border-b border-white/10">
+                        <th class="px-3 py-2 rounded-tl-lg font-mono">Turn</th>
+                        <th class="px-3 py-2">시각</th>
+                        <th class="px-3 py-2 text-center">등급</th>
+                        <th class="px-3 py-2">프롬프트 요약</th>
+                        <th class="px-3 py-2 text-right">In / Out 토큰</th>
+                        <th class="px-3 py-2 text-right">소모 토큰</th>
+                        <th class="px-3 py-2 text-right rounded-tr-lg">소모 크레딧</th>
                     </tr>
                 </thead>
-                <tbody id="sessionTurnsTableBody" class="divide-y divide-slate-800 text-xs">
+                <tbody id="sessionTurnsTableBody" class="divide-y divide-white/5 text-xs">
                     <!-- Populated dynamically via JS -->
                 </tbody>
             </table>
@@ -797,48 +1014,48 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
     <!-- Top Consuming Prompts Table -->
     <div class="glass-card p-6 rounded-2xl mb-8">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
             <div>
-                <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-fire text-amber-400"></i> Top 크레딧 소모 프롬프트 턴 & 세션 인사이트
+                <h2 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-fire text-amber-400"></i> 소모 상위 프롬프트
                 </h2>
-                <p class="text-xs text-slate-400 mt-1" id="promptTableSubTitle">
-                    기본 Top 15 표시 • 세션 검색 시 해당 세션 내 전용 랭킹 및 프롬프트 턴을 표시합니다.
+                <p class="text-xs text-slate-400 mt-0.5" id="promptTableSubTitle">
+                    크레딧 소모가 많은 상위 프롬프트 목록입니다.
                 </p>
             </div>
             <div class="relative">
-                <input type="text" id="searchInput" placeholder="프롬프트/풀 세션ID/축약ID 검색..." onkeyup="filterTable()" 
-                       class="bg-slate-900/80 border border-slate-700 text-slate-200 text-xs rounded-xl px-4 py-2 pl-9 focus:outline-none focus:border-indigo-500 w-72">
-                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+                <input type="text" id="searchInput" placeholder="프롬프트 / 세션ID 검색..." onkeyup="filterTable()" 
+                       class="bg-slate-950/80 border border-white/10 text-slate-200 text-xs rounded-lg px-3 py-1.5 pl-8 focus:outline-none focus:border-indigo-400 w-64 transition-colors">
+                <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-slate-500 text-xs"></i>
             </div>
         </div>
 
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse" id="promptTable">
                 <thead>
-                    <tr class="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
-                        <th class="px-4 py-3 rounded-tl-xl" id="rankColHeader">Rank</th>
-                        <th class="px-4 py-3">Session ID</th>
-                        <th class="px-4 py-3">Prompt Content / Step Context</th>
-                        <th class="px-4 py-3 text-right">요청 횟수</th>
-                        <th class="px-4 py-3 text-right">총 토큰</th>
-                        <th class="px-4 py-3 text-right">소모 달러 ($)</th>
-                        <th class="px-4 py-3 text-right">소모 크레딧</th>
-                        <th class="px-4 py-3 text-center rounded-tr-xl">최종 라우팅 등급</th>
+                    <tr class="bg-slate-950/60 text-slate-400 text-xs border-b border-white/10">
+                        <th class="px-4 py-2.5 rounded-tl-xl font-mono" id="rankColHeader">순위</th>
+                        <th class="px-4 py-2.5">세션 ID</th>
+                        <th class="px-4 py-2.5">프롬프트 요약</th>
+                        <th class="px-4 py-2.5 text-right">요청 수</th>
+                        <th class="px-4 py-2.5 text-right">총 토큰</th>
+                        <th class="px-4 py-2.5 text-right">비용 ($)</th>
+                        <th class="px-4 py-2.5 text-right">소모 크레딧</th>
+                        <th class="px-4 py-2.5 text-center rounded-tr-xl">등급</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800" id="promptTableBody">
+                <tbody class="divide-y divide-white/5" id="promptTableBody">
                     <!-- Dynamic JavaScript Table Insertion -->
                 </tbody>
             </table>
         </div>
 
         <!-- Load More Button -->
-        <div class="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between">
-            <span class="text-xs text-slate-400" id="promptDisplayCountInfo">표시 중: Top 15개 턴</span>
+        <div class="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
+            <span class="text-xs text-slate-400" id="promptDisplayCountInfo">표시 중: 상위 15개</span>
             <button id="loadMoreBtn" onclick="loadMorePrompts()"
-                    class="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5">
-                <i class="fa-solid fa-chevron-down text-xs"></i> 🔽 더보기 (15개 더 로드)
+                    class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-chevron-down text-xs"></i> <span>더보기</span>
             </button>
         </div>
     </div>
@@ -847,25 +1064,25 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     <div class="glass-card p-6 rounded-2xl mb-8">
         <div class="flex items-center justify-between mb-4">
             <div>
-                <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i> 모델 핫패치 & 버전 전환 이력 (Hot-Patch & Version Audit History)
+                <h2 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i> 모델 버전 및 패치 이력
                 </h2>
-                <p class="text-xs text-slate-400 mt-1">
-                    하네스 무중단 핫패칭 및 원클릭 버전 스위칭 이벤트 실시간 기록
+                <p class="text-xs text-slate-400 mt-0.5">
+                    모델 버전 변경 및 핫패치 적용 기록입니다.
                 </p>
             </div>
-            <span class="text-xs px-2.5 py-1 bg-emerald-500/20 text-emerald-300 font-mono rounded-lg border border-emerald-500/30">Live Audit Log</span>
+            <span class="text-[10px] px-2.5 py-0.5 bg-emerald-500/15 text-emerald-300 font-mono rounded-full border border-emerald-500/30">Audit Log</span>
         </div>
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs border-collapse">
                 <thead>
-                    <tr class="bg-slate-800/80 text-slate-400 uppercase border-b border-slate-700">
-                        <th class="px-4 py-3">타임스탬프</th>
-                        <th class="px-4 py-3">이벤트 유형</th>
-                        <th class="px-4 py-3">상세 기록 / 적용 내역</th>
+                    <tr class="bg-slate-950/60 text-slate-400 border-b border-white/10">
+                        <th class="px-4 py-2.5">일시</th>
+                        <th class="px-4 py-2.5">이벤트</th>
+                        <th class="px-4 py-2.5">내용</th>
                     </tr>
                 </thead>
-                <tbody id="healingHistoryTableBody" class="divide-y divide-slate-800">
+                <tbody id="healingHistoryTableBody" class="divide-y divide-white/5">
                     <!-- Populated dynamically via JS -->
                 </tbody>
             </table>
@@ -876,41 +1093,41 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     <!-- Tab 2: Giyeok Long-term Memory Explorer View -->
     <div id="memoryView" class="hidden">
         <!-- Memory KPI Cards Row -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div class="glass-card p-6 rounded-2xl border border-purple-500/30">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-semibold text-purple-300">누적 지식 에피소드</span>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="glass-card p-5 rounded-2xl border border-purple-500/20 group">
+                <div class="text-xs text-purple-300 font-medium mb-1.5 flex items-center justify-between">
+                    <span>저장된 기억</span>
                     <i class="fa-solid fa-boxes-stacked text-purple-400"></i>
                 </div>
-                <div class="text-2xl font-bold text-slate-100 font-mono" id="kpiMemTotal">0 <span class="text-sm font-normal text-slate-400">Episodes</span></div>
-                <p class="text-xs text-slate-400 mt-2">Problem-Solution 3단 구조화 보존</p>
+                <div class="text-2xl font-bold text-slate-100 font-mono tracking-tight" id="kpiMemTotal">0 <span class="text-xs font-normal text-slate-400 font-sans">건</span></div>
+                <p class="text-xs text-slate-400 mt-1">구조화된 에피소드 수</p>
             </div>
 
-            <div class="glass-card p-6 rounded-2xl border border-emerald-500/30">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-semibold text-emerald-300">기억 회수 적중 (Recall Hits)</span>
+            <div class="glass-card p-5 rounded-2xl border border-emerald-500/20 group">
+                <div class="text-xs text-emerald-300 font-medium mb-1.5 flex items-center justify-between">
+                    <span>기억 회수 적중</span>
                     <i class="fa-solid fa-bolt text-emerald-400"></i>
                 </div>
-                <div class="text-2xl font-bold text-emerald-400 font-mono" id="kpiMemRecallHits">0 <span class="text-sm font-normal text-slate-400">Hits</span></div>
-                <p class="text-xs text-slate-400 mt-2">초고속 50ms 샌드박스 사전 회수</p>
+                <div class="text-2xl font-bold text-emerald-400 font-mono tracking-tight" id="kpiMemRecallHits">0 <span class="text-xs font-normal text-slate-400 font-sans">회</span></div>
+                <p class="text-xs text-slate-400 mt-1">사전 회수 성공 횟수</p>
             </div>
 
-            <div class="glass-card p-6 rounded-2xl border border-sky-500/30">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-semibold text-sky-300">기억 주입 절감 크레딧</span>
+            <div class="glass-card p-5 rounded-2xl border border-sky-500/20 group">
+                <div class="text-xs text-sky-300 font-medium mb-1.5 flex items-center justify-between">
+                    <span>절감 크레딧</span>
                     <i class="fa-solid fa-piggy-bank text-sky-400"></i>
                 </div>
-                <div class="text-2xl font-bold text-sky-300 font-mono" id="kpiMemSavedCredits">0.00 <span class="text-sm font-normal text-slate-400">Cr</span></div>
-                <p class="text-xs text-slate-400 mt-2">다운스케일 기억 보조 ROI 누적</p>
+                <div class="text-2xl font-bold text-sky-300 font-mono tracking-tight" id="kpiMemSavedCredits">0.00 <span class="text-xs font-normal text-slate-400 font-sans">Cr</span></div>
+                <p class="text-xs text-slate-400 mt-1">기억 보조로 절감된 크레딧</p>
             </div>
 
-            <div class="glass-card p-6 rounded-2xl border border-amber-500/30">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-semibold text-amber-300">최고 엣지 강화 가중치</span>
+            <div class="glass-card p-5 rounded-2xl border border-amber-500/20 group">
+                <div class="text-xs text-amber-300 font-medium mb-1.5 flex items-center justify-between">
+                    <span>최고 가중치</span>
                     <i class="fa-solid fa-fire text-amber-400"></i>
                 </div>
-                <div class="text-2xl font-bold text-amber-300 font-mono" id="kpiMemMaxWeight">1.00 <span class="text-sm font-normal text-slate-400">x</span></div>
-                <p class="text-xs text-slate-400 mt-2">비용/난이도/LOC 승격 최대 배수</p>
+                <div class="text-2xl font-bold text-amber-300 font-mono tracking-tight" id="kpiMemMaxWeight">1.00 <span class="text-xs font-normal text-slate-400 font-sans">x</span></div>
+                <p class="text-xs text-slate-400 mt-1">승격 최대 가중치 배수</p>
             </div>
         </div>
 
@@ -918,15 +1135,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 items-start">
             
             <!-- Left Column: Semantic Memory Search (Recall Explorer) -->
-            <div class="lg:col-span-7 glass-card p-6 rounded-2xl border border-purple-500/40 bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/20 flex flex-col h-[520px]">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
+            <div class="lg:col-span-7 glass-card p-6 rounded-2xl border border-purple-500/30 flex flex-col h-[520px]">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-white/10">
                     <div>
-                        <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                        <h2 class="text-sm font-bold text-slate-100 flex items-center gap-2">
                             <i class="fa-solid fa-magnifying-glass-location text-purple-400"></i>
-                            연관 기억 실시간 시맨틱 검색기 (Recall Explorer)
+                            기억 검색
                         </h2>
                         <p class="text-xs text-slate-400 mt-0.5">
-                            검색 카드를 클릭하면 우측 생각나무 노드로 자동 포커스 이동합니다.
+                            검색 결과 클릭 시 우측 그래프에서 해당 위치로 이동합니다.
                         </p>
                     </div>
                 </div>
@@ -1856,9 +2073,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const titleTextEl = document.getElementById('timelineChartTitleText');
                 const subTextEl = document.getElementById('timelineChartSubText');
                 const iconEl = document.getElementById('timelineChartIcon');
-                if (titleTextEl) titleTextEl.innerText = '세션 턴별 정밀 실차감 추이 (Session Turn Timeline)';
+                if (titleTextEl) titleTextEl.innerText = '세션 턴별 추이';
                 if (subTextEl) subTextEl.innerText = `세션 ID: ${{targetSession.length > 18 ? targetSession.substring(0, 18) + '...' : targetSession}}`;
-                if (iconEl) iconEl.className = 'fa-solid fa-clock-rotate-left text-emerald-400';
+                if (iconEl) iconEl.className = 'fa-solid fa-clock-rotate-left text-[#4696e5]';
 
                 // 세션 내 시간순 정렬
                 const sessionRecords = [...filteredRecords].sort((a, b) => {{
@@ -2130,9 +2347,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 const titleTextEl = document.getElementById('timelineChartTitleText');
                 const subTextEl = document.getElementById('timelineChartSubText');
                 const iconEl = document.getElementById('timelineChartIcon');
-                if (titleTextEl) titleTextEl.innerText = '선택 기간 일자별 추이 (Daily Trend)';
-                if (subTextEl) subTextEl.innerText = 'Kibana Live Timeline';
-                if (iconEl) iconEl.className = 'fa-solid fa-chart-area text-sky-400';
+                if (titleTextEl) titleTextEl.innerText = '일자별 추이';
+                if (subTextEl) subTextEl.innerText = '';
+                if (iconEl) iconEl.className = 'fa-solid fa-chart-area text-[#4696e5]';
 
                 const dailyMap = {{}};
                 filteredRecords.forEach(r => {{
@@ -2551,7 +2768,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         let memoryNetwork = null;
         let isPhysicsEnabled = true;
 
-        let currentTheme = localStorage.getItem('tb_theme') || 'dark';
+        let currentTheme = localStorage.getItem('tb_theme') || 'light';
 
         function formatGraphNodesForTheme(rawNodes, isDark) {{
             const fontColor = isDark ? '#f8fafc' : '#0f172a';
@@ -2590,14 +2807,32 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const btnLight = document.getElementById('themeBtnLight');
             const btnSystem = document.getElementById('themeBtnSystem');
 
-            const activeBtnClass = 'px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer bg-indigo-600 text-white shadow-md border border-indigo-400/40';
-            const inactiveBtnClass = 'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200 border border-transparent';
+            const activeBtnClass = 'px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer bg-white text-[#4696e5] shadow-sm';
+            const inactiveBtnClass = 'px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer text-white/80 hover:text-white border border-transparent';
 
             if (btnDark) btnDark.className = (theme === 'dark') ? activeBtnClass : inactiveBtnClass;
             if (btnLight) btnLight.className = (theme === 'light') ? activeBtnClass : inactiveBtnClass;
             if (btnSystem) {{
                 btnSystem.className = (theme === 'system') ? activeBtnClass : inactiveBtnClass;
                 btnSystem.title = `시스템 기본 (현재 OS: ${{isOsDark ? '어두운' : '밝은'}} 모드)`;
+            }}
+
+            // Chart.js 테마 동기화 (그리드 및 축 라벨 색상)
+            if (dailyChart && dailyChart.options && dailyChart.options.scales) {{
+                const gridColor = isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(226, 232, 240, 0.8)';
+                const tickColor = isDark ? '#94a3b8' : '#64748b';
+                if (dailyChart.options.scales.x) {{
+                    dailyChart.options.scales.x.grid.color = gridColor;
+                    dailyChart.options.scales.x.ticks.color = tickColor;
+                }}
+                if (dailyChart.options.scales.y) {{
+                    dailyChart.options.scales.y.grid.color = gridColor;
+                    dailyChart.options.scales.y.ticks.color = isDark ? '#34d399' : '#059669';
+                }}
+                if (dailyChart.options.scales.y1) {{
+                    dailyChart.options.scales.y1.ticks.color = isDark ? '#38bdf8' : '#0284c7';
+                }}
+                dailyChart.update('none');
             }}
 
             // 테마 변경 시 생각나무(성단 네트워크 & 마인드맵) 뷰포트 즉시 리렌더링
@@ -2627,16 +2862,19 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             const viewUsage = document.getElementById('usageView');
             const viewMemory = document.getElementById('memoryView');
 
+            const activeTabClass = 'px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer bg-[#4696e5] text-white shadow-sm border border-[#4696e5]';
+            const inactiveTabClass = 'px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent';
+
             if (tab === 'usage') {{
                 if (viewUsage) viewUsage.classList.remove('hidden');
                 if (viewMemory) viewMemory.classList.add('hidden');
-                if (btnUsage) btnUsage.className = 'px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2.5 cursor-pointer bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25 border border-indigo-400/30';
-                if (btnMemory) btnMemory.className = 'px-5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 flex items-center gap-2.5 cursor-pointer text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent';
+                if (btnUsage) btnUsage.className = activeTabClass;
+                if (btnMemory) btnMemory.className = inactiveTabClass;
             }} else {{
                 if (viewUsage) viewUsage.classList.add('hidden');
                 if (viewMemory) viewMemory.classList.remove('hidden');
-                if (btnMemory) btnMemory.className = 'px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2.5 cursor-pointer bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/25 border border-purple-400/30';
-                if (btnUsage) btnUsage.className = 'px-5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 flex items-center gap-2.5 cursor-pointer text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent';
+                if (btnMemory) btnMemory.className = activeTabClass;
+                if (btnUsage) btnUsage.className = inactiveTabClass;
                 renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
                 setTimeout(() => {{
                     initMemoryGraph(currentGraphData);
@@ -3972,12 +4210,16 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }}
 
                 if (data.classifier_status) {{
+                    const clf = data.classifier_status;
                     const clfBadge = document.getElementById('classifierStatusBadge');
                     const clfText = document.getElementById('classifierStatusText');
                     if (clfBadge) clfBadge.classList.remove('hidden');
                     if (clfText) {{
-                        const lastUsed = data.classifier_status.last_used || 'gpt-reserve';
-                        if (lastUsed.includes('fallback')) {{
+                        const lastUsed = clf.last_used || 'gpt-reserve';
+                        if (lastUsed.includes('fast-path')) {{
+                            clfText.className = "text-emerald-400 font-bold";
+                            clfText.innerHTML = `fast-path <span class="text-[10px] text-emerald-300/80">(0ms)</span>`;
+                        }} else if (lastUsed.includes('fallback')) {{
                             clfText.className = "text-amber-400 font-bold";
                             clfText.innerHTML = `${{lastUsed}} <span class="text-[10px] text-amber-300/80">(폴백)</span>`;
                         }} else if (lastUsed.includes('reserve')) {{
@@ -3986,6 +4228,33 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         }} else {{
                             clfText.className = "text-sky-400 font-bold";
                             clfText.innerText = lastUsed;
+                        }}
+                    }}
+
+                    // HTML5 UP Telemetry Card Elements
+                    const telem = clf.telemetry || {{}};
+                    const fpRatioEl = document.getElementById('clfFastPathRatio');
+                    if (fpRatioEl) fpRatioEl.innerText = `${{telem.fast_path_ratio_percent || 0.0}}%`;
+
+                    const dpHitsEl = document.getElementById('clfDeepPathHits');
+                    if (dpHitsEl) dpHitsEl.innerText = `${{telem.deep_path_hits || 0}}회`;
+
+                    const escHitsEl = document.getElementById('clfEscalationHits');
+                    if (escHitsEl) escHitsEl.innerText = `${{telem.escalation_hits || 0}}회`;
+
+                    const lastModelEl = document.getElementById('clfLastModelText');
+                    if (lastModelEl) lastModelEl.innerText = clf.last_used || 'gpt-reserve';
+
+                    const govBadge = document.getElementById('clfGovernorBadge');
+                    if (govBadge) {{
+                        const mode = telem.current_governor_mode || 'BALANCED';
+                        govBadge.innerText = `${{mode}} MODE`;
+                        if (mode === 'CRITICAL') {{
+                            govBadge.className = "text-[10px] px-2.5 py-0.5 rounded-full font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse";
+                        }} else if (mode === 'ECO') {{
+                            govBadge.className = "text-[10px] px-2.5 py-0.5 rounded-full font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30";
+                        }} else {{
+                            govBadge.className = "text-[10px] px-2.5 py-0.5 rounded-full font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
                         }}
                     }}
                 }}
@@ -4109,7 +4378,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     with open(html_filename, "w", encoding="utf-8") as f:
         f.write(html_content)
     
-    print(f"✅ [Kibana Real-time Live Dashboard] 성공적으로 생성되었습니다: {os.path.abspath(html_filename)}")
+    print(f"✅ [TierBridge Dashboard] 성공적으로 생성되었습니다: {os.path.abspath(html_filename)}")
     return html_filename
 
 def analyze(log_filepath, target_date=None, target_month=None, target_session=None, generate_html=False, open_browser=True):
@@ -4118,7 +4387,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         sys.exit(1)
 
     usage_pattern = re.compile(
-        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)?(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?'
     )
     decision_pattern = re.compile(
         r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+)(?:\s+\([^)]+\))?(?:\s+\[clf:[^\]]+\])?\s*\|\s*\"(?P<prompt>.*)\"$'
@@ -4184,7 +4453,21 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                 in_tok = int(u_match.group("in_tok"))
                 out_tok = int(u_match.group("out_tok"))
                 loc_val = int(u_match.group("loc")) if u_match.group("loc") else 0
-                cost = float(u_match.group("cost"))
+                cost_str = u_match.group("cost")
+                if cost_str:
+                    cost = float(cost_str)
+                else:
+                    # 동적 단가 산출 (On-the-fly Dynamic Pricing)
+                    in_p, out_p = 1.0, 3.0
+                    m_lower = model.lower()
+                    if "sol" in m_lower or decision_str == "CHALLENGER":
+                        in_p, out_p = 5.0, 20.0
+                    elif "terra" in m_lower or decision_str in ("GOLD", "PLATINUM", "DIAMOND"):
+                        in_p, out_p = 2.5, 10.0
+                    elif "luna" in m_lower or "reserve" in m_lower or decision_str in ("BRONZE", "SILVER", "CLASSIFIER"):
+                        in_p, out_p = 1.0, 3.0
+                    cost = (in_tok / 1000000.0) * in_p + (out_tok / 1000000.0) * out_p
+
                 real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
                 balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
                 credits_val = real_credit_val if real_credit_val is not None else (cost / 0.20)
@@ -4234,11 +4517,11 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                 all_raw_records.append(item)
 
                 # 날짜/월/세션 필터링 적용 (CLI용)
-                if target_date and date_key != target_date:
+                if target_date and target_date.upper() != "ALL" and date_key != target_date:
                     continue
-                if target_month and month_key != target_month:
+                if target_month and target_month.upper() != "ALL" and month_key != target_month:
                     continue
-                if target_session and target_session.lower() not in sid_str.lower():
+                if target_session and target_session.upper() != "ALL" and target_session.lower() not in sid_str.lower():
                     continue
 
                 records.append(item)
@@ -4339,6 +4622,15 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
         prompt_stats[p_key]["prompt"] = p_key
         prompt_stats[p_key]["session_id"] = s_key
 
+    # 다운스케일링 누적 절감액 (Saved USD & Saved Credits) 계산
+    luna_records = [r for r in records if any(k in r["decision"] for k in ("BRONZE", "SILVER", "LUNA"))]
+    luna_in = sum(r["input_tokens"] for r in luna_records)
+    luna_out = sum(r["output_tokens"] for r in luna_records)
+    luna_cost = sum(r["cost"] for r in luna_records)
+    sim_terra_cost = (luna_in / 1000000.0) * 2.50 + (luna_out / 1000000.0) * 10.00
+    saved_usd = max(0.0, sim_terra_cost - luna_cost)
+    saved_credits = saved_usd / 0.20
+
     print("====================================================================================================")
     print("📊 [TierBridge Dashboard] AI 사용량, 크레딧 & 모델 관리 보고서")
     print("====================================================================================================")
@@ -4353,6 +4645,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     print(f"💻 총 작성/생성 코드 (LOC)    : {total_loc:,} lines")
     print(f"💰 총 추정 소모 비용         : ${total_cost:.6f} USD")
     print(f"💳 총 추정 소모 크레딧       : {total_credits:.2f} Credits (1 Credit = $0.20 USD)")
+    print(f"🛡️  다운스케일링 누적 절감액   : ${saved_usd:.2f} USD (약 {saved_credits:.1f} Credits 아낌, 경량화 {len(luna_records):,}회)")
     print("----------------------------------------------------------------------------------------------------")
 
     print("\n[1] 🎯 등급(Decision)별 소모 분포")
@@ -4361,6 +4654,8 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     for dec, s in sorted(decision_stats.items(), key=lambda x: x[1]["cost"], reverse=True):
         credits = s.get('credits', s['cost'] / 0.20)
         print(f"{dec:<18} | {s['count']:<8,} | {s['in_tok']:<12,} | {s['out_tok']:<12,} | {s['loc']:<10,} | ${s['cost']:.6f}   | {credits:.2f} Credits")
+    print("-" * 105)
+    print(f"💡 [스마트 라우팅 절감 성과] LUNA 경량화 턴: {len(luna_records):,}회 | 기준 모델 대비 절감액: ${saved_usd:.2f} USD ({saved_credits:.1f} Cr)")
 
     print("\n[2] 🗓️  일자(Daily)별 소모 요약")
     print(f"{'날짜':<12} | {'요청 수':<8} | {'Input 토큰':<12} | {'Output 토큰':<12} | {'코드 (LOC)':<10} | {'비용 (USD)':<12} | {'예상 크레딧 (Credits)':<20}")

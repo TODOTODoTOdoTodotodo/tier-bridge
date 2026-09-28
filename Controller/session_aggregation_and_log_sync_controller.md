@@ -75,6 +75,21 @@
    - `session_prompts = {}` 매핑 테이블을 운용하여 `[DECISION]` 발생 시 `session_prompts[sid] = prompt`로 기록.
    - `[USAGE]` 매칭 시 해당 세션 ID의 최신 프롬프트를 1순위로 바인딩하여 세션 간 프롬프트 오염 원천 방지.
 
+### 3.6 크레딧 중심 로깅(Credit-First Logging) 및 하위 호환 듀얼 파서 규격
+1. **가변적 USD 로깅 제거 및 불변 물리량 중심 기록**:
+   - 달러 단가는 OpenAI 정책, 캐시 할인, 모델 힐링에 따라 수시로 변동하므로 로그 라인에 고정 박제하지 않음.
+   - 메인 모델 로그 규격:
+     `[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | input={in_tok} output={out_tok} tokens | real_credit={delta_credit:.4f} | balance={curr_remaining:.2f} | loc={loc} lines`
+   - 분류기 로그 규격:
+     `[{now_str}]{sid_tag} ➔ [USAGE] CLASSIFIER ({classifier_model_used}) | input={clf_in_tok} output={clf_out_tok} tokens | loc=0 lines`
+   - 백엔드 조회 실패 시 폴백 규격:
+     `[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | input={in_tok} output={out_tok} tokens | loc={loc} lines`
+2. **하위 호환 듀얼 파서 (Tolerant / Backward-compatible Parser)**:
+   - `analyze_usage.py`의 `usage_pattern`은 과거 로그의 `cost=$... USD` 존재 여부를 Optional(`(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?`)로 수용함.
+   - 신규 로그처럼 `cost` 문자열이 없는 경우, 기록된 `input_tokens` 및 `output_tokens`에 해당 모델의 최신 단가표([`config/model_versions.json`](file:///Users/HH191_1/Documents/agent-cli/config/model_versions.json))를 적용하여 집계 시점에 동적으로 USD 비용과 크레딧을 산출함.
+3. **지표 표출 우선순위**:
+   - CLI와 대시보드 모두 **크레딧(Credits)**을 제1 메인 지표로 삼고, USD는 참고용 환산 보조 지표로 표시함.
+
 ---
 
 ## 4. 검증 시나리오 (Verification Scenarios)
@@ -85,3 +100,6 @@
    - `sessionSelect`에서 `01a0cbe5` 선택 시 10턴 타임라인, KPI 카드(6.16 Cr, $0.5873, 10회 성사)가 정상 렌더링되는지 확인.
 3. **충돌 방지 검증**:
    - `monthSelect`가 `2026-08`로 선택된 상태에서 `sessionSelect`를 `01a0cbe5`로 변경해도 데이터가 0건으로 사라지지 않고 정상 표출되는지 확인.
+4. **크레딧 중심 신규 로그 파싱 검증**:
+   - `cost=$... USD`가 생략된 신규 규격 로그 라인이 인입되어도 `analyze_usage.py`가 토큰 및 `real_credit` 기반으로 정확한 크레딧과 추정 비용을 누락 없이 집계하는지 검증.
+
