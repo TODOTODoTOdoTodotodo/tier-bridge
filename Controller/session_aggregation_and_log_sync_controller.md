@@ -41,8 +41,8 @@
 
 ## 3. 상세 설계 및 해결 명세 (Detailed Architecture & Specifications)
 
-### 3.1 로그 파일 탐색 우선순위 규격 (`analyze_usage.py`)
-`analyze_usage.py`는 `ModelRegistry` 및 `MemoryHandler`와 동일하게 라이브 런타임 로그를 최우선 탐색하도록 개편합니다.
+### 3.1 로그 파일 탐색 우선순위 규격 (`analyze_usage.py` & `harness.py`)
+`analyze_usage.py`와 `harness.py`의 실시간 대시보드 API(`/v1/dashboard/stats`)는 `ModelRegistry` 및 `MemoryHandler`와 동일하게 라이브 런타임 로그를 최우선 탐색하도록 일원화합니다.
 
 ```
 [로그 탐색 우선순위 (Priority Waterfall)]
@@ -75,7 +75,7 @@
    - `session_prompts = {}` 매핑 테이블을 운용하여 `[DECISION]` 발생 시 `session_prompts[sid] = prompt`로 기록.
    - `[USAGE]` 매칭 시 해당 세션 ID의 최신 프롬프트를 1순위로 바인딩하여 세션 간 프롬프트 오염 원천 방지.
 
-### 3.6 크레딧 중심 로깅(Credit-First Logging) 및 하위 호환 듀얼 파서 규격
+### 3.6 크레딧 중심 로깅(Credit-First Logging) 및 하위 호환 듀얼 파서 규격 (`analyze_usage.py` & `harness.py`)
 1. **가변적 USD 로깅 제거 및 불변 물리량 중심 기록**:
    - 달러 단가는 OpenAI 정책, 캐시 할인, 모델 힐링에 따라 수시로 변동하므로 로그 라인에 고정 박제하지 않음.
    - 메인 모델 로그 규격:
@@ -85,8 +85,9 @@
    - 백엔드 조회 실패 시 폴백 규격:
      `[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | input={in_tok} output={out_tok} tokens | loc={loc} lines`
 2. **하위 호환 듀얼 파서 (Tolerant / Backward-compatible Parser)**:
-   - `analyze_usage.py`의 `usage_pattern`은 과거 로그의 `cost=$... USD` 존재 여부를 Optional(`(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?`)로 수용함.
-   - 신규 로그처럼 `cost` 문자열이 없는 경우, 기록된 `input_tokens` 및 `output_tokens`에 해당 모델의 최신 단가표([`config/model_versions.json`](file:///Users/HH191_1/Documents/agent-cli/config/model_versions.json))를 적용하여 집계 시점에 동적으로 USD 비용과 크레딧을 산출함.
+   - `analyze_usage.py` 및 `harness.py`(`/v1/dashboard/stats`)의 `usage_pattern`은 과거 로그의 `cost=$... USD` 존재 여부를 Optional(`(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?`)로 수용함.
+   - 신규 로그처럼 `cost` 문자열이 없는 경우, 기록된 `input_tokens` 및 `output_tokens`에 `OfficialPricingCrawler.get_price(model)`의 최신 공식 단가를 동적 적용하여 USD 비용과 크레딧을 산출함.
+   - 이를 통해 매월 1일 월 롤오버(예: 2026-10) 및 신규 세션 인입 시에도 데이터 누락 없이 실시간 대시보드와 정적 HTML에 100% 즉시 반영됨.
 3. **지표 표출 우선순위**:
    - CLI와 대시보드 모두 **크레딧(Credits)**을 제1 메인 지표로 삼고, USD는 참고용 환산 보조 지표로 표시함.
 

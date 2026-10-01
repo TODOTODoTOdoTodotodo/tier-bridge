@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-01 10:15:13",
+  "updated_at": "2026-10-01 14:50:46",
   "source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
   "prices": {
     "gpt-6-luna": {

@@ -244,12 +244,16 @@ async def get_classifier_telemetry():
 async def get_dashboard_stats():
     env_log = os.environ.get("TIERBRIDGE_LOG_PATH")
     live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+    dev_dir = os.environ.get("TIERBRIDGE_DEV_DIR")
+    dev_log = os.path.join(dev_dir, "harness.log") if dev_dir else None
     if env_log and os.path.exists(env_log):
         log_file = env_log
-    elif os.path.exists("harness.log"):
-        log_file = "harness.log"
     elif os.path.exists(live_log):
         log_file = live_log
+    elif dev_log and os.path.exists(dev_log):
+        log_file = dev_log
+    elif os.path.exists("harness.log"):
+        log_file = "harness.log"
     else:
         log_file = "harness.log"
     records = []
@@ -258,7 +262,7 @@ async def get_dashboard_stats():
     
     if os.path.exists(log_file):
         usage_pattern = re.compile(
-            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)?(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?'
         )
         decision_pattern = re.compile(
             r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+)(?:\s+\([^)]+\))?(?:\s+\[clf:[^\]]+\])?\s*\|\s*\"(?P<prompt>.*)\"$'
@@ -305,10 +309,23 @@ async def get_dashboard_stats():
                         except ValueError:
                             pass
                     decision_str = u_match.group("decision_opt") or u_match.group("decision_legacy") or "UNKNOWN"
+                    model_val = u_match.group("model")
                     in_tok = int(u_match.group("in_tok"))
                     out_tok = int(u_match.group("out_tok"))
                     loc_val = int(u_match.group("loc")) if u_match.group("loc") else 0
-                    cost = float(u_match.group("cost"))
+                    cost_str = u_match.group("cost")
+                    if cost_str:
+                        cost = float(cost_str)
+                    else:
+                        try:
+                            try:
+                                from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                            except ImportError:
+                                from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                            in_p, out_p = OfficialPricingCrawler.get_price(model_val, fallback_in=1.0, fallback_out=3.0)
+                        except Exception:
+                            in_p, out_p = 1.0, 3.0
+                        cost = (in_tok / 1_000_000.0) * in_p + (out_tok / 1_000_000.0) * out_p
                     real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
                     balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
                     

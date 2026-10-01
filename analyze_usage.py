@@ -4505,16 +4505,23 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                 if cost_str:
                     cost = float(cost_str)
                 else:
-                    # 동적 단가 산출 (On-the-fly Dynamic Pricing)
-                    in_p, out_p = 1.0, 3.0
-                    m_lower = model.lower()
-                    if "sol" in m_lower or decision_str == "CHALLENGER":
-                        in_p, out_p = 5.0, 20.0
-                    elif "terra" in m_lower or decision_str in ("GOLD", "PLATINUM", "DIAMOND"):
-                        in_p, out_p = 2.5, 10.0
-                    elif "luna" in m_lower or "reserve" in m_lower or decision_str in ("BRONZE", "SILVER", "CLASSIFIER"):
+                    # 공식 단가 동적 산출 (On-the-fly Dynamic Pricing via OfficialPricingCrawler)
+                    try:
+                        try:
+                            from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                        except ImportError:
+                            from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                        in_p, out_p = OfficialPricingCrawler.get_price(model, fallback_in=1.0, fallback_out=3.0)
+                    except Exception:
                         in_p, out_p = 1.0, 3.0
-                    cost = (in_tok / 1000000.0) * in_p + (out_tok / 1000000.0) * out_p
+                        m_lower = model.lower()
+                        if "sol" in m_lower or decision_str == "CHALLENGER":
+                            in_p, out_p = 2.0, 10.0
+                        elif "terra" in m_lower or decision_str in ("GOLD", "PLATINUM", "DIAMOND"):
+                            in_p, out_p = 2.5, 10.0
+                        elif "luna" in m_lower or "reserve" in m_lower or decision_str in ("BRONZE", "SILVER", "CLASSIFIER"):
+                            in_p, out_p = 0.1, 0.5
+                    cost = (in_tok / 1_000_000.0) * in_p + (out_tok / 1_000_000.0) * out_p
 
                 real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
                 balance_val = float(u_match.group("balance")) if u_match.group("balance") else None

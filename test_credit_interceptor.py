@@ -134,5 +134,51 @@ class TestCreditInterceptor(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    def test_harness_dashboard_stats_modern_log(self):
+        import tempfile
+        from fastapi.testclient import TestClient
+        import harness
+
+        client = TestClient(harness.app)
+        with tempfile.NamedTemporaryFile("w+", delete=False, encoding="utf-8") as f:
+            temp_path = f.name
+            f.write(
+                "[2026-10-01 11:46:20] [sid: 01a0f4da-0ea0-7691-a1cb-fac895418797] ➔ [DECISION: STANDARD 3-TIER ROUTER] PLATINUM (gpt-6-sol:medium) [clf: gpt-reserve] | \"프롬프트 테스트\"\n"
+                "[2026-10-01 11:46:20] [sid: 01a0f4da-0ea0-7691-a1cb-fac895418797] ➔ [USAGE] CLASSIFIER (gpt-reserve) | input=250 output=5 tokens | loc=0 lines\n"
+                "[2026-10-01 11:46:40] [sid: 01a0f4da-0ea0-7691-a1cb-fac895418797] ➔ [USAGE: PLATINUM] (gpt-6-sol) | input=66884 output=339 tokens | real_credit=0.5576 | balance=2994.15 | loc=12 lines\n"
+            )
+
+        try:
+            os.environ["TIERBRIDGE_LOG_PATH"] = temp_path
+            resp = client.get("/v1/dashboard/stats")
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertIn("records", data)
+            records = data["records"]
+            self.assertEqual(len(records), 2)
+            
+            # 10월 CLASSIFIER 레코드 검증
+            clf_rec = records[0]
+            self.assertEqual(clf_rec["month"], "2026-10")
+            self.assertEqual(clf_rec["decision"], "CLASSIFIER")
+            self.assertEqual(clf_rec["model"], "gpt-reserve")
+            self.assertGreater(clf_rec["cost"], 0.0)
+
+            # 10월 Main PLATINUM 레코드 검증
+            main_rec = records[1]
+            self.assertEqual(main_rec["month"], "2026-10")
+            self.assertEqual(main_rec["session_id"], "01a0f4da-0ea0-7691-a1cb-fac895418797")
+            self.assertEqual(main_rec["decision"], "PLATINUM")
+            self.assertEqual(main_rec["model"], "gpt-6-sol")
+            self.assertEqual(main_rec["real_credit"], 0.5576)
+            self.assertEqual(main_rec["balance"], 2994.15)
+            self.assertEqual(main_rec["loc"], 12)
+            self.assertGreater(main_rec["cost"], 0.0)
+        finally:
+            if "TIERBRIDGE_LOG_PATH" in os.environ:
+                del os.environ["TIERBRIDGE_LOG_PATH"]
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
 if __name__ == "__main__":
     unittest.main()
