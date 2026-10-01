@@ -47,6 +47,28 @@ class TestHealingEngineUpstream(unittest.TestCase):
         )
         self.assertFalse(rec["has_new_healing"])
 
+    def test_dynamic_recommendation_gpt61_detected(self):
+        mock_upstream_models = [
+            {"slug": "gpt-6.1-sol", "display_name": "GPT-6.1-Sol"},
+            {"slug": "gpt-6-luna", "display_name": "GPT-6-Luna"}
+        ]
+        active_mapping_gpt6 = {
+            "BRONZE": {"model": "gpt-6-luna", "effort": "low", "input_price": 0.1, "output_price": 0.5},
+            "SILVER": {"model": "gpt-6-luna", "effort": "medium", "input_price": 0.1, "output_price": 0.5},
+            "GOLD": {"model": "gpt-6-sol", "effort": "low", "input_price": 2.0, "output_price": 10.0},
+            "PLATINUM": {"model": "gpt-6-sol", "effort": "medium", "input_price": 2.0, "output_price": 10.0},
+            "DIAMOND": {"model": "gpt-6-sol", "effort": "high", "input_price": 2.0, "output_price": 10.0},
+            "CHALLENGER": {"model": "gpt-6-sol", "effort": "xhigh", "input_price": 2.0, "output_price": 10.0}
+        }
+        rec = HealingEngine.get_dynamic_recommendation(
+            upstream_models=mock_upstream_models,
+            active_mapping=active_mapping_gpt6,
+            active_vid="v2.0.0-gpt6-hotpatch"
+        )
+        self.assertTrue(rec["has_new_healing"])
+        self.assertEqual(rec["version_id"], "v2.1.0-gpt61-hotpatch")
+        self.assertEqual(rec["mapping"]["CHALLENGER"]["model"], "gpt-6.1-sol")
+
     def test_get_healing_status_structure(self):
         status = HealingEngine.get_healing_status()
         self.assertIn("has_new_healing", status)

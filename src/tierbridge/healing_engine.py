@@ -109,11 +109,13 @@ class HealingEngine:
         upstream_slugs = {m.get("slug"): m for m in upstream_models if m.get("slug")}
         
         # 업스트림 가용 모델 세대 확인
+        has_upstream_gpt61 = any("gpt-6.1" in slug for slug in upstream_slugs)
         has_upstream_gpt6 = any("gpt-6" in slug for slug in upstream_slugs)
         has_upstream_gpt56 = any("gpt-5.6" in slug for slug in upstream_slugs)
         
         # 현재 활성 버전 모델 세대 확인
         active_model_names = [m.get("model", "") for m in active_mapping.values()]
+        is_active_gpt61 = any("gpt-6.1" in m for m in active_model_names) or "gpt61" in active_vid.lower() or "6.1" in active_vid.lower()
         is_active_gpt6 = any("gpt-6" in m for m in active_model_names) or "gpt6" in active_vid.lower()
         is_legacy = (
             any(m in ["gpt-5.4-mini", "gpt-5.5"] for m in active_model_names)
@@ -121,8 +123,29 @@ class HealingEngine:
             or "legacy" in active_vid.lower()
         )
 
-        # 1. 업스트림에 GPT-6가 존재하고, 현재 활성 버전이 GPT-6가 아닌 경우 -> GPT-6 핫패치 제안!
-        if has_upstream_gpt6 and not is_active_gpt6:
+        # 1. 업스트림에 GPT-6.1이 존재하고, 현재 활성 버전이 GPT-6.1이 아닌 경우 -> GPT-6.1 핫패치 제안!
+        if has_upstream_gpt61 and not is_active_gpt61:
+            has_new_healing = True
+            rec_vid = "v2.1.0-gpt61-hotpatch"
+            rec_name = "GPT-6.1 Lineup (Dynamic Upstream Hot-Patch Release v2.1.0)"
+            rec_desc = "실제 OpenAI 업스트림 백엔드 감지 및 공식 단가 기반 GPT-6.1 Sol(1.05M Context) 무중단 핫패치 릴리즈"
+            
+            luna_model = "gpt-6-luna" if "gpt-6-luna" in upstream_slugs else "gpt-5.6-luna"
+            sol_model = "gpt-6.1-sol" if "gpt-6.1-sol" in upstream_slugs else ("gpt-6-sol" if "gpt-6-sol" in upstream_slugs else "gpt-5.6-sol")
+
+            luna_in, luna_out = OfficialPricingCrawler.get_price(luna_model, 0.10, 0.50)
+            sol_in, sol_out = OfficialPricingCrawler.get_price(sol_model, 2.00, 10.00)
+
+            rec_mapping = {
+                "BRONZE": {"model": luna_model, "effort": "low", "input_price": luna_in, "output_price": luna_out},
+                "SILVER": {"model": luna_model, "effort": "medium", "input_price": luna_in, "output_price": luna_out},
+                "GOLD": {"model": sol_model, "effort": "low", "input_price": sol_in, "output_price": sol_out},
+                "PLATINUM": {"model": sol_model, "effort": "medium", "input_price": sol_in, "output_price": sol_out},
+                "DIAMOND": {"model": sol_model, "effort": "high", "input_price": sol_in, "output_price": sol_out},
+                "CHALLENGER": {"model": sol_model, "effort": "xhigh", "input_price": sol_in, "output_price": sol_out}
+            }
+        # 2. 업스트림에 GPT-6가 존재하고, 현재 활성 버전이 GPT-6가 아닌 경우 -> GPT-6 핫패치 제안!
+        elif has_upstream_gpt6 and not is_active_gpt6:
             has_new_healing = True
             rec_vid = "v2.0.0-gpt6-hotpatch"
             rec_name = "GPT-6 Lineup (Dynamic Upstream Hot-Patch Release v2.0.0)"

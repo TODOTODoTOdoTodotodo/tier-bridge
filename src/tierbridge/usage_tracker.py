@@ -5,9 +5,14 @@ from datetime import datetime
 class UsageTracker:
     # 100만 토큰당 가격 (USD)
     PRICE_CATALOG = {
+        "gpt-6.1-sol": {"input": 2.00, "output": 10.00},
+        "gpt-6-sol": {"input": 2.00, "output": 10.00},
+        "gpt-6-luna": {"input": 0.10, "output": 0.50},
+        "gpt-5.6-sol": {"input": 5.00, "output": 20.00},
+        "gpt-5.6-terra": {"input": 2.50, "output": 10.00},
+        "gpt-5.6-luna": {"input": 1.00, "output": 3.00},
         "gpt-4o-mini": {"input": 0.15, "output": 0.60},
         "gpt-4o": {"input": 5.00, "output": 15.00},
-        "gpt-5.6-terra": {"input": 2.50, "output": 10.00},  # 임의 설정 단가
         "claude-3-5-sonnet": {"input": 3.00, "output": 15.00},
         "claude-3-5-haiku": {"input": 0.80, "output": 4.00},
         "gemini-1.5-flash": {"input": 0.075, "output": 0.30},

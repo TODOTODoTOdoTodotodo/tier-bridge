@@ -17,6 +17,7 @@ class OfficialPricingCrawler:
     TTL_SECONDS = 21600.0  # 6시간 (초 단위)
 
     DEFAULT_OFFICIAL_PRICES = {
+        "gpt-6.1-sol": {"input_price": 2.00, "output_price": 10.00},
         "gpt-6-luna": {"input_price": 0.10, "output_price": 0.50},
         "gpt-6-sol": {"input_price": 2.00, "output_price": 10.00},
         "gpt-6-astra": {"input_price": 10.00, "output_price": 50.00},
@@ -109,7 +110,7 @@ class OfficialPricingCrawler:
                     raw_data = json.loads(resp.read().decode("utf-8"))
                     
                     target_models = [
-                        "gpt-6-luna", "gpt-6-sol", "gpt-6-astra", 
+                        "gpt-6.1-sol", "gpt-6-luna", "gpt-6-sol", "gpt-6-astra", 
                         "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", 
                         "gpt-5.5", "gpt-5.4-mini"
                     ]

@@ -148,6 +148,7 @@ async def get_models():
     return {
         "object": "list",
         "data": [
+            {"id": "gpt-6.1-sol", "object": "model", "owned_by": "openai"},
             {"id": "gpt-6-luna", "object": "model", "owned_by": "openai"},
             {"id": "gpt-6-sol", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.4-mini", "object": "model", "owned_by": "openai"},

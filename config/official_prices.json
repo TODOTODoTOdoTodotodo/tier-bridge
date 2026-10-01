@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-28 17:18:39",
+  "updated_at": "2026-10-01 10:15:13",
   "source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
   "prices": {
     "gpt-6-luna": {
@@ -33,6 +33,10 @@
     "gpt-5.4-mini": {
       "input_price": 0.75,
       "output_price": 4.5
+    },
+    "gpt-6.1-sol": {
+      "input_price": 2.0,
+      "output_price": 10.0
     }
   }
 }
