@@ -96,3 +96,5 @@ Harnex 오케스트레이터의 신호 기반 비동기 멀티에이전트 태�
 1. **타입 안전성 가드**: `stats.orchestrator`가 누락되거나 `null`이어도 기존 탭들이 깨지지 않도록 `const orch = stats.orchestrator || { enabled: false, tasks: [] };` 방어적 기본값 주입.
 2. **XSS 방어**: 지시문 및 워커 로그 렌더링 시 반드시 `escapeHtml()` 함수를 거쳐 DOM에 삽입.
 3. **Mermaid 렌더러 안전 가드**: 노드 제목에 괄호, 따옴표, 특수문자가 포함될 경우 Mermaid 구문 오류가 발생하므로 라벨을 항상 큰따옴표로 이스케이프(`id["Label"]`).
+4. **인라인 `<script>` 태그 조기 종료 방어 (`_safe_json_embed`)**: 사용자 프롬프트 또는 메모리 기록에 `</script>` 문자열이 포함될 경우 브라우저 HTML 토크나이저가 인라인 `<script>` 태그를 중간에 강제 종료하는 표준 브라우저 취약점 방어. `json.dumps()` 후 `<`, `>`, `&`를 `\u003c`, `\u003e`, `\u0026`로 유니코드 이스케이프 변환하여 삽입.
+5. **글로벌 스코프 함수 바인딩 (`window.*`)**: WebKit/Safari 환경(cmux 등)에서 인라인 `onclick` 핸들러 호출 누락을 방어하기 위해 `window.switchDashboardTab`, `window.switchTab`, `window.renderTasksView`를 전역 객체에 명시적 등록.

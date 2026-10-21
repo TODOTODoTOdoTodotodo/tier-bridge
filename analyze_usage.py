@@ -337,8 +337,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             ]
         }
 
-    healing_status_json = json.dumps(healing_status)
-    healing_history_json = json.dumps(list(reversed(healing_history)) if healing_history else [])
+    def _safe_json_embed(obj):
+        return json.dumps(obj).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+    healing_status_json = _safe_json_embed(healing_status)
+    healing_history_json = _safe_json_embed(list(reversed(healing_history)) if healing_history else [])
 
     # 동적 월 선택 드롭다운 옵션 구성 (전체 원본 레코드 기준)
     available_months = sorted(list(set(r["month"] for r in all_raw_records if r["month"] != "Unknown Month")), reverse=True)
@@ -422,7 +425,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             "real_credit": r.get("real_credit"),
             "credits": r.get("credits", r["cost"] / 0.20)
         })
-    client_records_json = json.dumps(client_records)
+    client_records_json = _safe_json_embed(client_records)
 
     try:
         try:
@@ -439,10 +442,20 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         initial_graph_data = {"nodes": [], "edges": []}
         initial_top_edges = []
 
-    client_memories_json = json.dumps(initial_memories)
-    client_mem_stats_json = json.dumps(initial_mem_stats)
-    client_graph_data_json = json.dumps(initial_graph_data)
-    client_top_edges_json = json.dumps(initial_top_edges)
+    client_memories_json = _safe_json_embed(initial_memories)
+    client_mem_stats_json = _safe_json_embed(initial_mem_stats)
+    client_graph_data_json = _safe_json_embed(initial_graph_data)
+    client_top_edges_json = _safe_json_embed(initial_top_edges)
+
+    try:
+        try:
+            from harnex.orchestrator.api import get_orchestrator_summary
+        except ImportError:
+            from src.harnex.orchestrator.api import get_orchestrator_summary
+        client_orch_stats = get_orchestrator_summary()
+    except Exception:
+        client_orch_stats = {"enabled": True, "active_tasks_count": 0, "completed_tasks_count": 0, "failed_tasks_count": 0, "tasks": []}
+    client_orch_stats_json = _safe_json_embed(client_orch_stats)
     
     has_healing_banner = healing_status.get("has_new_healing", False)
     banner_hidden_class = "" if has_healing_banner else "hidden"
@@ -3061,7 +3074,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         let currentGraphData = {client_graph_data_json};
         let currentTopEdges = {client_top_edges_json};
         let currentDashboardTab = 'usage';
-        let orchestratorData = {{"enabled": true, "active_tasks_count": 0, "completed_tasks_count": 0, "failed_tasks_count": 0, "tasks": []}};
+        let orchestratorData = {client_orch_stats_json};
         let currentModalViewMode = 'network';
         let markmapInstance = null;
         let markmapTransformer = null;
@@ -3386,10 +3399,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         function switchTab(tabName) {{
             switchDashboardTab(tabName);
         }}
-                    focusSessionInGraph(curSid);
-                }}, 50);
-            }}
-        }}
+        window.switchDashboardTab = switchDashboardTab;
+        window.switchTab = switchTab;
+        window.renderTasksView = renderTasksView;
 
         let memoryMiniNetwork = null;
         let memoryExpandedNetwork = null;

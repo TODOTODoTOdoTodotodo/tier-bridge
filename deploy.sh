@@ -44,7 +44,6 @@ if command -v rsync >/dev/null 2>&1; then
         --exclude='__pycache__' \
         --exclude='*.pyc' \
         --exclude='harness.log' \
-        --exclude='usage_dashboard.html' \
         --exclude='config/model_versions.json' \
         "$DEV_DIR/" "$LIVE_DIR/"
 else
