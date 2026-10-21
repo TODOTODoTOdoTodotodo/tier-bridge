@@ -2,9 +2,9 @@
 
 - **Controller File**: `Controller/memory_prefetch_cache_optimizer_controller.md`
 - **Related Components**:
-  - `src/tierbridge/memory_prefetcher.py` (`MemoryPrefetcher`)
+  - `src/harnex/memory_prefetcher.py` (`MemoryPrefetcher`)
   - `harness.py` (`RecallHook`, `Router`)
-  - `src/tierbridge/router.py`
+  - `src/harnex/router.py`
 - **Target Policy**: Documentation First Policy & Prompt Caching Cost Optimization
 
 ---
@@ -50,7 +50,7 @@ OpenAI의 프롬프트 캐싱은 메시지 배열의 첫 번째 토큰(`messages
 ## 3. 상세 구현 명세 (Implementation Specification)
 
 ### 3.1 `MemoryPrefetcher.fetch_associated_context()` 바이패스 확장
-* 파일: `src/tierbridge/memory_prefetcher.py`
+* 파일: `src/harnex/memory_prefetcher.py`
 * 변경 내용:
   ```python
   # IDE 내부 보조/백그라운드 관리 작업 질의 제외 (Bypass: 불필요한 연산 및 토큰 낭비 방지)

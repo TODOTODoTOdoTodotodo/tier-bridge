@@ -2,23 +2,38 @@
 set -e
 
 # ==============================================================================
-# TierBridge 원클릭 런타임 배포 스크립트 (Production Live Deployer)
-# 개발 레포($PWD) ➔ 개인 라이브 런타임($HOME/.tierbridge/live) 동기화 및 무중단 재가동
+# Harnex 원클릭 런타임 배포 스크립트 (Production Live Deployer)
+# 개발 레포($PWD) ➔ 개인 라이브 런타임($HOME/.harnex/live) 동기화 및 무중단 재가동
 # ==============================================================================
 
 DEV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIVE_DIR="$HOME/.tierbridge/live"
-PID_FILE="$HOME/.tierbridge/harness.pid"
+LIVE_DIR="$HOME/.harnex/live"
+PID_FILE="$HOME/.harnex/harness.pid"
 PORT=18080
 
-echo "🚀 [TierBridge Deployer] 배포 시작..."
+echo "🚀 [Harnex Deployer] 배포 시작..."
 echo "📂 개발 저장소 경로 : $DEV_DIR"
 echo "🌐 라이브 런타임 경로: $LIVE_DIR"
 
-# 1. 라이브 디렉토리 생성
+# 1. 라이브 디렉토리 생성 및 기존 데이터 마이그레이션
 mkdir -p "$LIVE_DIR"
-mkdir -p "$HOME/.tierbridge"
-echo "$DEV_DIR" > "$HOME/.tierbridge/source_repo.path"
+mkdir -p "$HOME/.harnex"
+echo "$DEV_DIR" > "$HOME/.harnex/source_repo.path"
+
+if [ -d "$HOME/.tierbridge" ]; then
+    if [ ! -f "$LIVE_DIR/harness.log" ] && [ -f "$HOME/.tierbridge/live/harness.log" ]; then
+        echo "📦 기존 ~/.tierbridge/live/harness.log ➔ $LIVE_DIR/harness.log 마이그레이션..."
+        cp "$HOME/.tierbridge/live/harness.log" "$LIVE_DIR/harness.log"
+    fi
+    if [ ! -f "$HOME/.harnex/memory.db" ] && [ -f "$HOME/.tierbridge/memory.db" ]; then
+        echo "🧠 기존 ~/.tierbridge/memory.db ➔ ~/.harnex/memory.db 마이그레이션..."
+        cp "$HOME/.tierbridge/memory.db" "$HOME/.harnex/memory.db"
+    fi
+    if [ ! -f "$LIVE_DIR/config/model_versions.json" ] && [ -f "$HOME/.tierbridge/live/config/model_versions.json" ]; then
+        mkdir -p "$LIVE_DIR/config"
+        cp "$HOME/.tierbridge/live/config/model_versions.json" "$LIVE_DIR/config/model_versions.json"
+    fi
+fi
 
 # 2. 소스코드 동기화 & 로그 마이그레이션
 echo "📦 소스코드 핫-동기화 진행 중..."
@@ -64,15 +79,15 @@ if [ ! -f "$LIVE_DIR/harness.log" ] || [ ! -s "$LIVE_DIR/harness.log" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [sid: init] ➔ [USAGE: BRONZE] (gpt-5.6-luna) | input=0 output=0 tokens | real_credit=0.0000 | balance=0.00 | loc=0 lines | cost=\$0.000000 USD" > "$LIVE_DIR/harness.log"
 fi
 
-# 2-2. 기억저장소(memory.db) TierBridge 런타임($HOME/.tierbridge/memory.db) 일원화 및 자동 마이그레이션
-TIERBRIDGE_MEM_DB="$HOME/.tierbridge/memory.db"
-if [ ! -f "$TIERBRIDGE_MEM_DB" ]; then
+# 2-2. 기억저장소(memory.db) Harnex 런타임($HOME/.harnex/memory.db) 일원화 및 자동 마이그레이션
+HARNEX_MEM_DB="$HOME/.harnex/memory.db"
+if [ ! -f "$HARNEX_MEM_DB" ]; then
     if [ -f "$HOME/.codex/sub-memory/memory.db" ]; then
-        echo "🧠 기존 Giyeok 기억저장소(~/.codex/sub-memory/memory.db) ➔ $TIERBRIDGE_MEM_DB 자동 마이그레이션 중..."
-        cp "$HOME/.codex/sub-memory/memory.db" "$TIERBRIDGE_MEM_DB"
+        echo "🧠 기존 Giyeok 기억저장소(~/.codex/sub-memory/memory.db) ➔ $HARNEX_MEM_DB 자동 마이그레이션 중..."
+        cp "$HOME/.codex/sub-memory/memory.db" "$HARNEX_MEM_DB"
     elif [ -f "$HOME/.sub-memory/memory.db" ]; then
-        echo "🧠 기존 기억저장소(~/.sub-memory/memory.db) ➔ $TIERBRIDGE_MEM_DB 자동 마이그레이션 중..."
-        cp "$HOME/.sub-memory/memory.db" "$TIERBRIDGE_MEM_DB"
+        echo "🧠 기존 기억저장소(~/.sub-memory/memory.db) ➔ $HARNEX_MEM_DB 자동 마이그레이션 중..."
+        cp "$HOME/.sub-memory/memory.db" "$HARNEX_MEM_DB"
     fi
 fi
 
@@ -83,7 +98,7 @@ if [ ! -d ".venv" ]; then
     python3 -m venv .venv
 fi
 
-echo "📦 라이브 가상환경 패키지 및 tierbridge 모듈 설치 중..."
+echo "📦 라이브 가상환경 패키지 및 harnex 모듈 설치 중..."
 .venv/bin/python -m pip install -q fastapi uvicorn httpx python-dotenv 2>/dev/null || true
 .venv/bin/python -m pip install -q -e . 2>/dev/null || true
 
@@ -93,6 +108,14 @@ if [ -f "$PID_FILE" ]; then
     if kill -0 "$OLD_PID" 2>/dev/null; then
         echo "🛑 기존 하네스 프록시 (PID: $OLD_PID) 안전 종료 중..."
         kill "$OLD_PID" 2>/dev/null || true
+        sleep 1
+    fi
+fi
+if [ -f "$HOME/.tierbridge/harness.pid" ]; then
+    LEGACY_PID=$(cat "$HOME/.tierbridge/harness.pid")
+    if kill -0 "$LEGACY_PID" 2>/dev/null; then
+        echo "🛑 기존 TierBridge 프록시 (PID: $LEGACY_PID) 안전 종료 중..."
+        kill "$LEGACY_PID" 2>/dev/null || true
         sleep 1
     fi
 fi
@@ -107,14 +130,14 @@ fi
 
 # 5. 라이브 런타임에서 하네스 백그라운드 가동 (PYTHONPATH=src 설정 & --log-level warning 적용, append 모드 >>)
 echo "⚡ 라이브 하네스 프록시 서버 가동 중 (Port: $PORT, LogLevel: WARNING)..."
-TIERBRIDGE_DEV_DIR="$DEV_DIR" MEMORY_DB_PATH="$TIERBRIDGE_MEM_DB" PYTHONPATH="$LIVE_DIR/src:$PYTHONPATH" nohup .venv/bin/python -m uvicorn harness:app --host 0.0.0.0 --port $PORT --log-level warning >> "$LIVE_DIR/harness.log" 2>&1 &
+HARNEX_DEV_DIR="$DEV_DIR" MEMORY_DB_PATH="$HARNEX_MEM_DB" PYTHONPATH="$LIVE_DIR/src:$PYTHONPATH" nohup .venv/bin/python -m uvicorn harness:app --host 0.0.0.0 --port $PORT --log-level warning >> "$LIVE_DIR/harness.log" 2>&1 &
 NEW_PID=$!
 echo "$NEW_PID" > "$PID_FILE"
 
 sleep 2
 
 # 대시보드 HTML 사전 동기화 생성
-MEMORY_DB_PATH="$TIERBRIDGE_MEM_DB" PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$LIVE_DIR/analyze_usage.py" "$LIVE_DIR/harness.log" --html --no-open >/dev/null 2>&1 || true
+MEMORY_DB_PATH="$HARNEX_MEM_DB" PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$LIVE_DIR/analyze_usage.py" "$LIVE_DIR/harness.log" --html --no-open >/dev/null 2>&1 || true
 cp "$LIVE_DIR/usage_dashboard.html" "$DEV_DIR/usage_dashboard.html" 2>/dev/null || true
 cp "$LIVE_DIR/harness.log" "$DEV_DIR/harness.log" 2>/dev/null || true
 
@@ -130,35 +153,48 @@ fi
 # 7. Global CLI Executables (~/.local/bin) & Shell Alias 등록
 mkdir -p "$HOME/.local/bin"
 
-cat << 'EOF' > "$HOME/.local/bin/tierbridge-dash"
+cat << 'EOF' > "$HOME/.local/bin/harnex-dash"
 #!/usr/bin/env bash
-LIVE_DIR="$HOME/.tierbridge/live"
+LIVE_DIR="$HOME/.harnex/live"
 PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$LIVE_DIR/analyze_usage.py" "$LIVE_DIR/harness.log" --html "$@"
 EOF
-chmod +x "$HOME/.local/bin/tierbridge-dash"
+chmod +x "$HOME/.local/bin/harnex-dash"
 
-cat << 'EOF' > "$HOME/.local/bin/tierbridge-log"
+cat << 'EOF' > "$HOME/.local/bin/harnex-log"
 #!/usr/bin/env bash
-tail -f "$HOME/.tierbridge/live/harness.log" "$@"
+tail -f "$HOME/.harnex/live/harness.log" "$@"
 EOF
-chmod +x "$HOME/.local/bin/tierbridge-log"
+chmod +x "$HOME/.local/bin/harnex-log"
 
-cat << 'EOF' > "$HOME/.local/bin/tierbridge"
+cat << 'EOF' > "$HOME/.local/bin/harnex-credit"
 #!/usr/bin/env bash
-source "$HOME/.tierbridge/live/run_harness.sh" "$@"
+LIVE_DIR="$HOME/.harnex/live"
+PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$LIVE_DIR/analyze_usage.py" --balance "$@"
 EOF
-chmod +x "$HOME/.local/bin/tierbridge"
+chmod +x "$HOME/.local/bin/harnex-credit"
+
+cat << 'EOF' > "$HOME/.local/bin/harnex"
+#!/usr/bin/env bash
+source "$HOME/.harnex/live/run_harness.sh" "$@"
+EOF
+chmod +x "$HOME/.local/bin/harnex"
+
+# 하위 호환성 심볼릭 링크 제공
+ln -sf "$HOME/.local/bin/harnex" "$HOME/.local/bin/tierbridge" 2>/dev/null || true
+ln -sf "$HOME/.local/bin/harnex-dash" "$HOME/.local/bin/tierbridge-dash" 2>/dev/null || true
+ln -sf "$HOME/.local/bin/harnex-log" "$HOME/.local/bin/tierbridge-log" 2>/dev/null || true
+ln -sf "$HOME/.local/bin/harnex-credit" "$HOME/.local/bin/tierbridge-credit" 2>/dev/null || true
 
 setup_alias() {
     local shell_rc="$1"
     if [ -f "$shell_rc" ]; then
-        if ! grep -q "alias tierbridge=" "$shell_rc"; then
+        if ! grep -q "alias harnex=" "$shell_rc"; then
             echo "" >> "$shell_rc"
-            echo "# TierBridge Global Aliases" >> "$shell_rc"
-            echo "alias tierbridge=\"source \$HOME/.tierbridge/live/run_harness.sh\"" >> "$shell_rc"
-            echo "alias tierbridge-log=\"tail -f \$HOME/.tierbridge/live/harness.log\"" >> "$shell_rc"
-            echo "alias tierbridge-dash=\"PYTHONPATH=\\\$HOME/.tierbridge/live/src:\\\$HOME/.tierbridge/live:\\\$PYTHONPATH \\\$HOME/.tierbridge/live/.venv/bin/python \\\$HOME/.tierbridge/live/analyze_usage.py \\\$HOME/.tierbridge/live/harness.log --html\"" >> "$shell_rc"
-            echo "alias tierbridge-credit=\"PYTHONPATH=\\\$HOME/.tierbridge/live/src:\\\$HOME/.tierbridge/live:\\\$PYTHONPATH \\\$HOME/.tierbridge/live/.venv/bin/python \\\$HOME/.tierbridge/live/analyze_usage.py --balance\"" >> "$shell_rc"
+            echo "# Harnex Global Aliases" >> "$shell_rc"
+            echo "alias harnex=\"source \$HOME/.harnex/live/run_harness.sh\"" >> "$shell_rc"
+            echo "alias harnex-log=\"tail -f \$HOME/.harnex/live/harness.log\"" >> "$shell_rc"
+            echo "alias harnex-dash=\"PYTHONPATH=\\\$HOME/.harnex/live/src:\\\$HOME/.harnex/live:\\\$PYTHONPATH \\\$HOME/.harnex/live/.venv/bin/python \\\$HOME/.harnex/live/analyze_usage.py \\\$HOME/.harnex/live/harness.log --html\"" >> "$shell_rc"
+            echo "alias harnex-credit=\"PYTHONPATH=\\\$HOME/.harnex/live/src:\\\$HOME/.harnex/live:\\\$PYTHONPATH \\\$HOME/.harnex/live/.venv/bin/python \\\$HOME/.harnex/live/analyze_usage.py --balance\"" >> "$shell_rc"
             echo "🔗 Shell Alias 가 $shell_rc 에 자동 등록되었습니다."
         fi
     fi
@@ -166,4 +202,4 @@ setup_alias() {
 
 setup_alias "$HOME/.zshrc"
 setup_alias "$HOME/.bashrc"
-echo "💡 어디서든 'tierbridge-dash', 'tierbridge', 'tierbridge-log' 명령어를 바로 실행할 수 있습니다!"
+echo "💡 어디서든 'harnex-dash', 'harnex', 'harnex-log' 명령어를 바로 실행할 수 있습니다!"

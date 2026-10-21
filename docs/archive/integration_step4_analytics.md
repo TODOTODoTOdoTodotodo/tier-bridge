@@ -1,6 +1,6 @@
 # 📑 Step 4: 하네스 ✕ Giyeok 통합 대시보드 시너지 분석 & 인터랙티브 노드 연결망 시각화
 
-본 문서는 TierBridge 하네스의 사용량 로그(`harness.log`)와 SQLite `memory.db`의 `nodes`, `edges`, `memories` 데이터를 결합하여, 장기 기억 회수(Recall)로 인한 크레딧 절감(ROI) 지표와 기억 간 연상 구조("생각나무" 노드 연결망)를 인터랙티브하게 시각화하는 **Step 4 구현 작업지시서**입니다.
+본 문서는 Harnex 하네스의 사용량 로그(`harness.log`)와 SQLite `memory.db`의 `nodes`, `edges`, `memories` 데이터를 결합하여, 장기 기억 회수(Recall)로 인한 크레딧 절감(ROI) 지표와 기억 간 연상 구조("생각나무" 노드 연결망)를 인터랙티브하게 시각화하는 **Step 4 구현 작업지시서**입니다.
 
 ---
 
@@ -29,7 +29,7 @@
 ## 2. 연동 아키텍처 및 데이터 흐름
 
 ```
-[harness.log] (실시간 로그 파싱)                [~/.tierbridge/memory.db] (Direct SQLite)
+[harness.log] (실시간 로그 파싱)                [~/.harnex/memory.db] (Direct SQLite)
   ├─ [USAGE: GOLD/SILVER]                         ├─ nodes (id, text, embedding, timestamp)
   ├─ [MEMORY:RECALLED]                            ├─ edges (source_id, target_id, weight)
   └─ [MEMORY:HINT]                                └─ memories (id, content, tags, created_at)
@@ -53,7 +53,7 @@
 
 ## 3. 세부 구현 스펙 (Implementation Specs)
 
-### 3.1 `MemoryHandler` 그래프 데이터 추출 메서드 추가 (`src/tierbridge/memory_handler.py`)
+### 3.1 `MemoryHandler` 그래프 데이터 추출 메서드 추가 (`src/harnex/memory_handler.py`)
 ```python
 @classmethod
 def get_graph_data(cls, limit_nodes: int = 50) -> Dict[str, Any]:

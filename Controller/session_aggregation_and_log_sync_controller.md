@@ -3,14 +3,14 @@
 ## 1. 개요 및 목적 (Background & Objectives)
 사용자가 실행한 최신 대화 세션(예: `01a0cbe5-af35-7472-b81f-bf3b3d192dbc`)이 `usage_dashboard.html` 웹 대시보드 및 CLI 분석기(`analyze_usage.py`)에서 정상 집계되지 않고 누락되는 문제를 해결합니다.
 
-개발 레포지토리(`DEV_DIR`)와 독립 라이브 런타임(`LIVE_DIR`, `~/.tierbridge/live`) 간의 로그 탐색 우선순위를 정립하고, 대시보드 내 월별 필터(`monthSelect`)와 세션 필터(`sessionSelect`) 간의 충돌로 인한 데이터 유실(Data Wipe-out)을 방지하는 정밀 필터링 아키텍처를 수립합니다.
+개발 레포지토리(`DEV_DIR`)와 독립 라이브 런타임(`LIVE_DIR`, `~/.harnex/live`) 간의 로그 탐색 우선순위를 정립하고, 대시보드 내 월별 필터(`monthSelect`)와 세션 필터(`sessionSelect`) 간의 충돌로 인한 데이터 유실(Data Wipe-out)을 방지하는 정밀 필터링 아키텍처를 수립합니다.
 
 ---
 
 ## 2. 근본 원인 분석 (Root Cause Analysis)
 
 ### 2.1 로그 소스 탐색 우선순위 결함
-- 라이브 프록시(Port 18080)는 `~/.tierbridge/live/harness.log`에 실시간으로 요청 및 토큰 사용량을 기록함 (16,339줄 이상).
+- 라이브 프록시(Port 18080)는 `~/.harnex/live/harness.log`에 실시간으로 요청 및 토큰 사용량을 기록함 (16,339줄 이상).
 - 개발 디렉토리의 `/Users/HH191_1/Documents/agent-cli/harness.log`는 2026-08-13에 멈춘 구형 로그임 (3,618줄).
 - `analyze_usage.py`의 `parse_args()`가 `script_dir/harness.log`를 기본값 1순위로 지정하여, 개발 디렉토리에서 스크립트를 실행할 경우 최신 9월 세션(`01a0cbe5` 등)이 포함되지 않은 8월 데이터만 분석/생성됨.
 
@@ -41,13 +41,13 @@
 
 ## 3. 상세 설계 및 해결 명세 (Detailed Architecture & Specifications)
 
-### 3.1 로그 파일 탐색 우선순위 규격 (`analyze_usage.py`)
-`analyze_usage.py`는 `ModelRegistry` 및 `MemoryHandler`와 동일하게 라이브 런타임 로그를 최우선 탐색하도록 개편합니다.
+### 3.1 로그 파일 탐색 우선순위 규격 (`analyze_usage.py` & `harness.py`)
+`analyze_usage.py`와 `harness.py`의 실시간 대시보드 API(`/v1/dashboard/stats`)는 `ModelRegistry` 및 `MemoryHandler`와 동일하게 라이브 런타임 로그를 최우선 탐색하도록 일원화합니다.
 
 ```
 [로그 탐색 우선순위 (Priority Waterfall)]
-1순위: 환경변수 TIERBRIDGE_LOG_PATH
-2순위: ~/.tierbridge/live/harness.log (실시간 활성 라이브 로그)
+1순위: 환경변수 HARNEX_LOG_PATH
+2순위: ~/.harnex/live/harness.log (실시간 활성 라이브 로그)
 3순위: $DEV_DIR/harness.log (개발 저장소 로컬 백업 로그)
 4순위: ./harness.log (현재 작업 디렉토리)
 ```
@@ -75,7 +75,7 @@
    - `session_prompts = {}` 매핑 테이블을 운용하여 `[DECISION]` 발생 시 `session_prompts[sid] = prompt`로 기록.
    - `[USAGE]` 매칭 시 해당 세션 ID의 최신 프롬프트를 1순위로 바인딩하여 세션 간 프롬프트 오염 원천 방지.
 
-### 3.6 크레딧 중심 로깅(Credit-First Logging) 및 하위 호환 듀얼 파서 규격
+### 3.6 크레딧 중심 로깅(Credit-First Logging) 및 하위 호환 듀얼 파서 규격 (`analyze_usage.py` & `harness.py`)
 1. **가변적 USD 로깅 제거 및 불변 물리량 중심 기록**:
    - 달러 단가는 OpenAI 정책, 캐시 할인, 모델 힐링에 따라 수시로 변동하므로 로그 라인에 고정 박제하지 않음.
    - 메인 모델 로그 규격:
@@ -85,8 +85,9 @@
    - 백엔드 조회 실패 시 폴백 규격:
      `[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | input={in_tok} output={out_tok} tokens | loc={loc} lines`
 2. **하위 호환 듀얼 파서 (Tolerant / Backward-compatible Parser)**:
-   - `analyze_usage.py`의 `usage_pattern`은 과거 로그의 `cost=$... USD` 존재 여부를 Optional(`(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?`)로 수용함.
-   - 신규 로그처럼 `cost` 문자열이 없는 경우, 기록된 `input_tokens` 및 `output_tokens`에 해당 모델의 최신 단가표([`config/model_versions.json`](file:///Users/HH191_1/Documents/agent-cli/config/model_versions.json))를 적용하여 집계 시점에 동적으로 USD 비용과 크레딧을 산출함.
+   - `analyze_usage.py` 및 `harness.py`(`/v1/dashboard/stats`)의 `usage_pattern`은 과거 로그의 `cost=$... USD` 존재 여부를 Optional(`(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?`)로 수용함.
+   - 신규 로그처럼 `cost` 문자열이 없는 경우, 기록된 `input_tokens` 및 `output_tokens`에 `OfficialPricingCrawler.get_price(model)`의 최신 공식 단가를 동적 적용하여 USD 비용과 크레딧을 산출함.
+   - 이를 통해 매월 1일 월 롤오버(예: 2026-10) 및 신규 세션 인입 시에도 데이터 누락 없이 실시간 대시보드와 정적 HTML에 100% 즉시 반영됨.
 3. **지표 표출 우선순위**:
    - CLI와 대시보드 모두 **크레딧(Credits)**을 제1 메인 지표로 삼고, USD는 참고용 환산 보조 지표로 표시함.
 
@@ -94,7 +95,7 @@
 
 ## 4. 검증 시나리오 (Verification Scenarios)
 1. **CLI 세션 조회 검증**:
-   - `python3 analyze_usage.py -s 01a0cbe5` 실행 시 추가 인자 없이 라이브 로그(`~/.tierbridge/live/harness.log`)를 자동 감지하여 10회 요청, 318,504 토큰, 6.16 Cr이 정상 표출되는지 검증.
+   - `python3 analyze_usage.py -s 01a0cbe5` 실행 시 추가 인자 없이 라이브 로그(`~/.harnex/live/harness.log`)를 자동 감지하여 10회 요청, 318,504 토큰, 6.16 Cr이 정상 표출되는지 검증.
 2. **HTML 대시보드 렌더링 검증**:
    - `python3 analyze_usage.py --html --no-open` 실행 시 생성된 `usage_dashboard.html`에 `01a0cbe5` 세션이 드롭다운 최상단(`🔥 [최신]`)에 표출되는지 확인.
    - `sessionSelect`에서 `01a0cbe5` 선택 시 10턴 타임라인, KPI 카드(6.16 Cr, $0.5873, 10회 성사)가 정상 렌더링되는지 확인.

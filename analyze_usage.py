@@ -19,20 +19,23 @@ from datetime import datetime
 
 def parse_args(args=None):
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    env_log = os.environ.get("TIERBRIDGE_LOG_PATH")
-    live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+    env_log = os.environ.get("HARNEX_LOG_PATH", os.environ.get("TIERBRIDGE_LOG_PATH"))
+    live_log = os.path.expanduser("~/.harnex/live/harness.log")
+    old_live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
     script_log = os.path.join(script_dir, "harness.log")
 
     if env_log and os.path.exists(env_log):
         default_log = env_log
     elif os.path.exists(live_log):
         default_log = live_log
+    elif os.path.exists(old_live_log):
+        default_log = old_live_log
     elif os.path.exists(script_log):
         default_log = script_log
     else:
         default_log = "harness.log"
     
-    parser = argparse.ArgumentParser(description="TierBridge AI 사용량 및 모델 라우팅 분석기")
+    parser = argparse.ArgumentParser(description="Harnex AI 사용량 및 모델 라우팅 분석기")
     parser.add_argument("log_file", nargs="?", default=default_log, help=f"분석할 로그 파일 경로 (기본: {default_log})")
     parser.add_argument("--balance", "-b", action="store_true", help="ChatGPT Enterprise 백엔드 실시간 계정 잔여 크레딧 및 지출 한도 조회")
     parser.add_argument("--date", "-d", type=str, help="특정 날짜 필터 (형식: YYYY-MM-DD)")
@@ -115,9 +118,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     # Healing Engine 상태 가져오기 (Smart Import)
     try:
         try:
-            from tierbridge.healing_engine import HealingEngine
+            from harnex.healing_engine import HealingEngine
         except ImportError:
-            from src.tierbridge.healing_engine import HealingEngine
+            from src.harnex.healing_engine import HealingEngine
         healing_status = HealingEngine.get_healing_status()
     except Exception as e:
         healing_status = {
@@ -201,9 +204,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
     try:
         try:
-            from tierbridge.version import get_version_info
+            from harnex.version import get_version_info
         except ImportError:
-            from src.tierbridge.version import get_version_info
+            from src.harnex.version import get_version_info
         app_version_tag = get_version_info().get("tag", "v0.1.1")
     except Exception:
         app_version_tag = "v0.1.1"
@@ -231,9 +234,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         initial_memories = MemoryHandler.get_recent_memories(limit=100)
         initial_mem_stats = MemoryHandler.get_memory_stats()
         initial_graph_data = MemoryHandler.get_graph_data(limit_nodes=60)
@@ -257,7 +260,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TierBridge Dashboard</title>
+    <title>Harnex Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {{
@@ -585,7 +588,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
             <div>
                 <h1 class="text-2xl md:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-                    <span>TierBridge</span>
+                    <span>Harnex</span>
                     <span id="appVersionBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-white/20 text-white border border-white/30 font-mono font-medium align-middle">{app_version_tag}</span>
                 </h1>
                 <p class="text-[#d1e5f9] text-xs md:text-sm mt-0.5 font-medium">
@@ -1657,7 +1660,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
     <!-- Footer -->
     <footer class="text-center text-xs text-slate-500 py-4 border-t border-slate-800/60">
-        TierBridge Analytics Core • Powered by LLM Routing Harness Proxy • Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        Harnex Analytics Core • Powered by LLM Routing Harness Proxy • Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     </footer>
 
     <!-- Client-side Interactive Scripts -->
@@ -4020,7 +4023,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         let currentPollIntervalSeconds = 5; // default 5초
 
         function initPollInterval() {{
-            const saved = localStorage.getItem('tierbridge_poll_interval');
+            const saved = localStorage.getItem('harnex_poll_interval');
             if (saved !== null && saved !== undefined) {{
                 const parsed = parseInt(saved, 10);
                 if (!isNaN(parsed) && parsed >= 0) {{
@@ -4035,7 +4038,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         function setPollInterval(sec) {{
             currentPollIntervalSeconds = parseInt(sec, 10);
             if (isNaN(currentPollIntervalSeconds) || currentPollIntervalSeconds < 0) currentPollIntervalSeconds = 5;
-            localStorage.setItem('tierbridge_poll_interval', currentPollIntervalSeconds);
+            localStorage.setItem('harnex_poll_interval', currentPollIntervalSeconds);
             applyPollInterval(currentPollIntervalSeconds, true);
             closePollDropdown();
         }}
@@ -4426,7 +4429,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
     with open(html_filename, "w", encoding="utf-8") as f:
         f.write(html_content)
     
-    print(f"✅ [TierBridge Dashboard] 성공적으로 생성되었습니다: {os.path.abspath(html_filename)}")
+    print(f"✅ [Harnex Dashboard] 성공적으로 생성되었습니다: {os.path.abspath(html_filename)}")
     return html_filename
 
 def analyze(log_filepath, target_date=None, target_month=None, target_session=None, generate_html=False, open_browser=True):
@@ -4505,16 +4508,23 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
                 if cost_str:
                     cost = float(cost_str)
                 else:
-                    # 동적 단가 산출 (On-the-fly Dynamic Pricing)
-                    in_p, out_p = 1.0, 3.0
-                    m_lower = model.lower()
-                    if "sol" in m_lower or decision_str == "CHALLENGER":
-                        in_p, out_p = 5.0, 20.0
-                    elif "terra" in m_lower or decision_str in ("GOLD", "PLATINUM", "DIAMOND"):
-                        in_p, out_p = 2.5, 10.0
-                    elif "luna" in m_lower or "reserve" in m_lower or decision_str in ("BRONZE", "SILVER", "CLASSIFIER"):
+                    # 공식 단가 동적 산출 (On-the-fly Dynamic Pricing via OfficialPricingCrawler)
+                    try:
+                        try:
+                            from harnex.official_pricing_crawler import OfficialPricingCrawler
+                        except ImportError:
+                            from src.harnex.official_pricing_crawler import OfficialPricingCrawler
+                        in_p, out_p = OfficialPricingCrawler.get_price(model, fallback_in=1.0, fallback_out=3.0)
+                    except Exception:
                         in_p, out_p = 1.0, 3.0
-                    cost = (in_tok / 1000000.0) * in_p + (out_tok / 1000000.0) * out_p
+                        m_lower = model.lower()
+                        if "sol" in m_lower or decision_str == "CHALLENGER":
+                            in_p, out_p = 2.0, 10.0
+                        elif "terra" in m_lower or decision_str in ("GOLD", "PLATINUM", "DIAMOND"):
+                            in_p, out_p = 2.5, 10.0
+                        elif "luna" in m_lower or "reserve" in m_lower or decision_str in ("BRONZE", "SILVER", "CLASSIFIER"):
+                            in_p, out_p = 0.1, 0.5
+                    cost = (in_tok / 1_000_000.0) * in_p + (out_tok / 1_000_000.0) * out_p
 
                 real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
                 balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
@@ -4680,7 +4690,7 @@ def analyze(log_filepath, target_date=None, target_month=None, target_session=No
     saved_credits = saved_usd / 0.20
 
     print("====================================================================================================")
-    print("📊 [TierBridge Dashboard] AI 사용량, 크레딧 & 모델 관리 보고서")
+    print("📊 [Harnex Dashboard] AI 사용량, 크레딧 & 모델 관리 보고서")
     print("====================================================================================================")
     if target_month: print(f"🗓️  조회 대상 월: {target_month}")
     if target_date: print(f"🗓️  조회 대상 일자: {target_date}")

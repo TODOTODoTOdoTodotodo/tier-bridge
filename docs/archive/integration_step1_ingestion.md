@@ -1,14 +1,14 @@
 # 📑 Step 1: 비동기 세션 로그 수집 파이프라인 & 퀄리티 게이팅 (Ingestion Worker)
 
-이 문서는 TierBridge 하네스에서 수집된 세션 로그(`session_id`, `prompt`, `decision`, `cost`, `loc` 등)를 `sub-memory-bootstrap` (Giyeok) 장기 기억 저장소로 무중단 초고속 수집하고, **"고민(Problem) ➔ 해결(Solution) ➔ 결과(Outcome)"의 고품질 지식 에피소드**로 구조화하여 적재하기 위한 **Step 1 구현 작업지시서**입니다.
+이 문서는 Harnex 하네스에서 수집된 세션 로그(`session_id`, `prompt`, `decision`, `cost`, `loc` 등)를 `sub-memory-bootstrap` (Giyeok) 장기 기억 저장소로 무중단 초고속 수집하고, **"고민(Problem) ➔ 해결(Solution) ➔ 결과(Outcome)"의 고품질 지식 에피소드**로 구조화하여 적재하기 위한 **Step 1 구현 작업지시서**입니다.
 
 ---
 
 ## 1. 작업 개요 및 목적 (Objectives)
 
-- **TierBridge 단일 통합 레포 및 런타임 일원화 (Unified Storage Policy)**:
-  - 분리된 외부 레포/경로(`~/.codex/sub-memory/`) 대신, TierBridge 런타임 홈 **`~/.tierbridge/memory.db`** 로 장기 기억 저장소 DB를 일원화하여 단일 패키지로 관리.
-  - 기존 `~/.codex/sub-memory/memory.db`의 지식 데이터는 `~/.tierbridge/memory.db`로 자동 무손실 마이그레이션.
+- **Harnex 단일 통합 레포 및 런타임 일원화 (Unified Storage Policy)**:
+  - 분리된 외부 레포/경로(`~/.codex/sub-memory/`) 대신, Harnex 런타임 홈 **`~/.harnex/memory.db`** 로 장기 기억 저장소 DB를 일원화하여 단일 패키지로 관리.
+  - 기존 `~/.codex/sub-memory/memory.db`의 지식 데이터는 `~/.harnex/memory.db`로 자동 무손실 마이그레이션.
 - **하이브리드 아키텍처 (Hybrid Dual Architecture)**:
   1. **하네스 비동기 수집 (Direct Module In-process 5ms)**: 하네스 내부에서는 MCP HTTP 오버헤드 없이 파이썬 모듈 및 SQLite 직결로 5ms 이내 비동기 인메모리/DB 직접 수집.
   2. **MCP 인터페이스 유지**: 에이전트 자율 툴 호출 및 `sub-memory-web` UI 연동을 위해 MCP Protocol(Port 8766)도 듀얼 노출.
@@ -45,20 +45,20 @@
                [Direct In-process Python Import: MemoryService.store_memory()]
                       │
                       ▼
-             [SQLite ~/.tierbridge/memory.db Direct Update (<5ms, 비용 $0.00)]
+             [SQLite ~/.harnex/memory.db Direct Update (<5ms, 비용 $0.00)]
 ```
 
 ---
 
 ## 3. 세부 구현 스펙 (Implementation Specs)
 
-### 3.1 신규 모듈 생성: `src/tierbridge/memory_ingestion_worker.py`
+### 3.1 신규 모듈 생성: `src/harnex/memory_ingestion_worker.py`
 ```python
 import asyncio
 import logging
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger("TierBridge.MemoryIngestion")
+logger = logging.getLogger("Harnex.MemoryIngestion")
 
 class MemoryIngestionWorker:
     @classmethod
@@ -83,7 +83,7 @@ class MemoryIngestionWorker:
             f"[Session: {session_id}] [Decision: {decision}] [LOC: {loc}] [Cost: ${cost:.4f}]\n"
             f"- 📌 문제 및 요구사항: {clean_prompt}\n"
             f"- 💡 적용 해결책 및 LLM 응답: {clean_sol}\n"
-            f"- 🏷️ 태그: #{decision} #Session_{session_id[:8]} #TierBridge"
+            f"- 🏷️ 태그: #{decision} #Session_{session_id[:8]} #Harnex"
         )
 
     @classmethod
@@ -105,7 +105,7 @@ class MemoryIngestionWorker:
             return False
 
         content = cls.format_problem_solution_episode(session_id, prompt, decision, loc, cost, solution_text)
-        tags = [session_id, decision, "tierbridge_auto_ingest"]
+        tags = [session_id, decision, "harnex_auto_ingest"]
         if loc > 0:
             tags.append("code_modified")
         if is_first_turn:
@@ -162,7 +162,7 @@ class MemoryIngestionWorker:
 
 1. **Direct In-process 파이썬 임포트 테스트**:
    ```bash
-   python -c "import asyncio; from src.tierbridge.memory_ingestion_worker import MemoryIngestionWorker; asyncio.run(MemoryIngestionWorker.process_log_event({'session_id': 'sess_test1', 'prompt': '테스트 지식 저장', 'decision': 'GOLD', 'cost': 0.12, 'is_first_turn': True}))"
+   python -c "import asyncio; from src.harnex.memory_ingestion_worker import MemoryIngestionWorker; asyncio.run(MemoryIngestionWorker.process_log_event({'session_id': 'sess_test1', 'prompt': '테스트 지식 저장', 'decision': 'GOLD', 'cost': 0.12, 'is_first_turn': True}))"
    ```
 2. **하네스 실시간 연동 테스트**:
    * `run_harness.sh` 가동 후 Codex CLI로 프롬프트 전송.

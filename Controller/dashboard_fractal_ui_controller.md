@@ -1,7 +1,7 @@
 # Dashboard Fractal UI Theme Controller Specification
 
 ## 1. 개요 및 목적 (Background & Objectives)
-본 문서는 TierBridge 웹 대시보드(`usage_dashboard.html` 및 `analyze_usage.py`)의 UI/UX 디자인을 **HTML5 UP Fractal**(`https://html5up.net/fractal`) 디자인 랭귀지 기반으로 전면 리뉴얼하기 위한 아키텍처 및 구현 규격서입니다.
+본 문서는 Harnex 웹 대시보드(`usage_dashboard.html` 및 `analyze_usage.py`)의 UI/UX 디자인을 **HTML5 UP Fractal**(`https://html5up.net/fractal`) 디자인 랭귀지 기반으로 전면 리뉴얼하기 위한 아키텍처 및 구현 규격서입니다.
 
 과도한 미사여구와 과장된 사이파이(Sci-Fi) 스타일의 텍스트/스타일을 걷어내고, Fractal 템플릿의 핵심 시그니처인 **산뜻하고 가벼운 스카이블루-화이트 듀오톤, 원형 아이콘 스포트라이트 뱃지, 모던 필(Pill)/아웃라인 액션 버튼, 통일된 타이포그래피**를 도입하여 가독성과 직관성을 극대화합니다.
 
@@ -20,7 +20,7 @@
 ### 2.2 핵심 UI 컴포넌트 규격
 1. **시그니처 히어로 헤더 (`.fractal-header`)**:
    - Fractal 고유의 `#4696e5` 그라데이션 및 부드러운 래디얼 오버레이 적용.
-   - 원형 아이콘 프레임(`fractal-icon-circle lg`, 반투명 화이트 배경 및 보더)과 깔끔한 서비스명(`TierBridge`), 간결한 서브타이틀(`AI 사용량 및 모델 라우팅 현황`) 배치.
+   - 원형 아이콘 프레임(`fractal-icon-circle lg`, 반투명 화이트 배경 및 보더)과 깔끔한 서비스명(`Harnex`), 간결한 서브타이틀(`AI 사용량 및 모델 라우팅 현황`) 배치.
    - 우측 툴바에는 화이트/반투명 글래스 형태의 드롭다운(월, 세션, 버전 선택)과 라이브 갱신 툴바, 화이트 솔리드(Primary) 및 반투명 아웃라인(Alt) 액션 버튼 배치.
 
 2. **원형 아이콘 스포트라이트 (`.fractal-icon-circle`)**:
@@ -49,5 +49,5 @@
 - 자바스크립트 `applyTheme` 함수 내 차트 눈금선 및 텍스트 컬러 동적 업데이트 로직 강화.
 
 ### 3.2 배포 및 검증 규격
-- `deploy.sh` 실행을 통한 라이브 런타임(`~/.tierbridge/live`) 동기화 및 서비스 정상 기동(Port 18080) 확인.
+- `deploy.sh` 실행을 통한 라이브 런타임(`~/.harnex/live`) 동기화 및 서비스 정상 기동(Port 18080) 확인.
 - 브라우저 및 정적 HTML 렌더링 확인.

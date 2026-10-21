@@ -1,12 +1,12 @@
-# ⚡ TierBridge
+# ⚡ Harnex
 
 > **Codex & ChatGPT Enterprise 크레딧을 최대 70%까지 자동 절감하고, 개발 맥락을 스스로 학습하는 자가진화형 LLM 라우팅 하네스 프록시**
 
 <p align="center">
-  <img src="docs/assets/tierbridge_architecture.png" alt="TierBridge Architecture Overview" width="100%" />
+  <img src="docs/assets/harnex_architecture.png" alt="Harnex Architecture Overview" width="100%" />
 </p>
 
-TierBridge는 에이전트 CLI(Codex 등)와 OpenAI 백엔드 사이에서 동작하는 지능형 로컬 프록시입니다. 에이전트 코드 수정 없이 투명하게 동작하며, 질문의 복잡도를 실시간으로 평가하여 **최적의 모델과 추론 레벨(Reasoning Effort)을 6단계 게이밍 랭크 티어로 자동 스왑**해 크레딧을 대폭 절약하고, 이전 문제 해결 지식을 **생각나무(Thought-Tree) 장기 기억망**으로 보존합니다.
+Harnex는 에이전트 CLI(Codex 등)와 OpenAI 백엔드 사이에서 동작하는 지능형 로컬 프록시입니다. 에이전트 코드 수정 없이 투명하게 동작하며, 질문의 복잡도를 실시간으로 평가하여 **최적의 모델과 추론 레벨(Reasoning Effort)을 6단계 게이밍 랭크 티어로 자동 스왑**해 크레딧을 대폭 절약하고, 이전 문제 해결 지식을 **생각나무(Thought-Tree) 장기 기억망**으로 보존합니다.
 
 ---
 
@@ -26,11 +26,11 @@ TierBridge는 에이전트 CLI(Codex 등)와 OpenAI 백엔드 사이에서 동�
 
 ---
 
-### 2단계: 작업 터미널 세션 연결 (`tierbridge`)
-새 터미널 창을 열거나 작업을 시작할 때, **어느 폴더에서든 `tierbridge` 한 줄만 입력**하면 현재 터미널 세션에 하네스 환경 변수(`OLLAMA_HOST=http://127.0.0.1:18080`)가 즉시 주입됩니다:
+### 2단계: 작업 터미널 세션 연결 (`harnex`)
+새 터미널 창을 열거나 작업을 시작할 때, **어느 폴더에서든 `harnex` 한 줄만 입력**하면 현재 터미널 세션에 하네스 환경 변수(`OLLAMA_HOST=http://127.0.0.1:18080`)가 즉시 주입됩니다:
 
 ```bash
-tierbridge
+harnex
 ```
 
 ---
@@ -48,11 +48,11 @@ codex --oss --local-provider=ollama --model super
 
 > [!TIP]
 > **🔑 로그인 인증은 기존 Codex 계정과 100% 동일하게 자동 연동됩니다**  
-> 별도의 신규 회원가입이나 복잡한 API Key 발급/환경설정 과정이 전혀 필요 없습니다. 평소 사용하시던 Codex CLI에 이미 한 번이라도 로그인되어 있다면(`~/.codex/auth.json`), TierBridge 프록시가 기존 ChatGPT Enterprise 인증 세션을 자동으로 승계하여 안전하고 투명하게 통신합니다.
+> 별도의 신규 회원가입이나 복잡한 API Key 발급/환경설정 과정이 전혀 필요 없습니다. 평소 사용하시던 Codex CLI에 이미 한 번이라도 로그인되어 있다면(`~/.codex/auth.json`), Harnex 프록시가 기존 ChatGPT Enterprise 인증 세션을 자동으로 승계하여 안전하고 투명하게 통신합니다.
 
 > [!NOTE]
 > **💡 왜 공급자를 `ollama`로 지정해야 하나요?**  
-> Codex CLI 바이너리가 지원하는 로컬 오픈소스 공급자 옵션은 `ollama`로 고정되어 있습니다. TierBridge는 에이전트 코드 수정 없이 `OLLAMA_HOST` 환경변수로 요청을 가로채어 작동하므로, `--local-provider=ollama`를 사용해야만 하네스 프록시의 스마트 라우팅 및 크레딧 절감 기능을 정상적으로 연결받을 수 있습니다.
+> Codex CLI 바이너리가 지원하는 로컬 오픈소스 공급자 옵션은 `ollama`로 고정되어 있습니다. Harnex는 에이전트 코드 수정 없이 `OLLAMA_HOST` 환경변수로 요청을 가로채어 작동하므로, `--local-provider=ollama`를 사용해야만 하네스 프록시의 스마트 라우팅 및 크레딧 절감 기능을 정상적으로 연결받을 수 있습니다.
 
 ---
 
@@ -61,17 +61,17 @@ codex --oss --local-provider=ollama --model super
 
 ```bash
 # 📊 Kibana 스타일 3초 실시간 라이브 대시보드 열기 (브라우저 자동 오픈)
-tierbridge-dash
+harnex-dash
 
 # 📄 실시간 런타임 라우팅 로그 모니터링 (tail -f)
-tierbridge-log
+harnex-log
 
 # 💳 ChatGPT Enterprise 실제 계정 잔여 크레딧 및 한도 조회
-tierbridge-credit
+harnex-credit
 ```
 
 <p align="center">
-  <img src="docs/assets/dashboard_overview.png" alt="TierBridge Live Real-time Dashboard" width="100%" />
+  <img src="docs/assets/dashboard_overview.png" alt="Harnex Live Real-time Dashboard" width="100%" />
 </p>
 
 ---
@@ -82,15 +82,15 @@ tierbridge-credit
 질문의 난이도, 변경 파일 범위, AST 복잡도를 실시간으로 판정하여 적합한 모델과 추론 강도로 자동 연결합니다:
 
 <p align="center">
-  <img src="docs/assets/routing_tier_matrix.png" alt="TierBridge 6-Tier Intelligent Routing Matrix" width="100%" />
+  <img src="docs/assets/routing_tier_matrix.png" alt="Harnex 6-Tier Intelligent Routing Matrix" width="100%" />
 </p>
 
-* 🥉 **BRONZE** (`gpt-5.6-luna:low`): 단순 오타 수정, 명령어 안내, 파일 읽기/조회 스텝
-* 🥈 **SILVER** (`gpt-5.6-luna:medium`): 표준 비즈니스 로직 단위 구현, 단일 파일 리팩토링
+* 🥉 **BRONZE** (`gpt-5.6-luna:low` / `gpt-6-luna:low`): 단순 오타 수정, 명령어 안내, 파일 읽기/조회 스텝
+* 🥈 **SILVER** (`gpt-5.6-luna:medium` / `gpt-6-luna:medium`): 표준 비즈니스 로직 단위 구현, 단일 파일 리팩토링
 * 🥇 **GOLD** (`gpt-5.6-terra:medium`): 중간 복잡도 기능 구현, 컴포넌트 간 연동
 * 💎 **PLATINUM** (`gpt-5.6-terra:high`): 복잡한 알고리즘, 다중 컴포넌트 아키텍처 설계
 * 🔷 **DIAMOND** (`gpt-5.6-terra:extra_high`): 심층 디버깅 및 성능 튜닝 (3-Tier 모드 상한)
-* 🏆 **CHALLENGER** (`gpt-5.6-sol:extra_high`): 데드락/메모리 누수 분석 (`--model super` 모드 상한)
+* 🏆 **CHALLENGER** (`gpt-6.1-sol` / `gpt-6-sol` / `gpt-5.6-sol:extra_high`): 데드락/메모리 누수 분석 (`--model super` 모드 상한)
 
 > 📖 **[상세 기술 문서: 라우팅 하네스 & 6단계 랭크 설계 (routing_harness.md)](docs/model/routing_harness.md)**
 
@@ -98,9 +98,9 @@ tierbridge-credit
 
 ### 2. 🧠 생각나무 장기 기억 저장소 (Giyeok Thought-Tree & Memory System)
 
-> **💡 왜 '생각나무 기억저장소'가 TierBridge의 핵심 심장인가?**  
+> **💡 왜 '생각나무 기억저장소'가 Harnex의 핵심 심장인가?**  
 > 일반적인 AI 코딩 에이전트는 세션이 종료되면 모든 작업 맥락을 잊어버리는 **"기억상실증(Amnesia)"**을 겪습니다. 이로 인해 동일한 도메인 규칙(예: 쿠폰 계산, Redis 캐시 키 정책, XML 파싱 NPE 방어)을 만날 때마다 매번 수십 번의 파일 탐색(grep)과 시행착오 턴을 반복하며 대량의 토큰과 크레딧을 낭비합니다.  
-> TierBridge의 생각나무 기억저장소는 이 문제를 해결하는 **4대 핵심 전략적 역할**을 수행합니다:
+> Harnex의 생각나무 기억저장소는 이 문제를 해결하는 **4대 핵심 전략적 역할**을 수행합니다:
 > 
 > 1. 🛡️ **초고속 회상 기반 탐색 턴 80% 제거 (Pre-fetch Recall)**: 신규 질문 인입 시 50ms 이내로 과거 검증된 정답 해결책을 선행 주입하여, 불필요한 파일 탐색과 중간 추론 과정을 건너뛰고 정답으로 직행합니다.
 > 2. 💰 **모델 랭크 다운스케일링 시너지 (Tier Downscaling)**: 정답 힌트가 이미 주입되어 있으므로 고비용 모델(`GOLD`/`DIAMOND`) 대신 저비용 랭크(`BRONZE`/`SILVER`) 모델만으로도 완벽한 코드가 생성되어 크레딧 절감 효과가 극대화됩니다.
@@ -108,7 +108,7 @@ tierbridge-credit
 > 4. ⚡ **기억 오염 원천 차단 (Neuralizer Safety)**: 기획이 변경되었거나 무효화된 과거 지식은 원클릭(0ms)으로 뇌세포를 지우듯 정밀 소각하여 모델의 환각(Hallucination)을 방지합니다.
 
 ```
-[ TierBridge 기억 저장소 파이프라인 ]
+[ Harnex 기억 저장소 파이프라인 ]
   1. 자동 수집 (Ingestion)      : 에피소드 종료 시 문제-해결-LOC 구조화 자동 적재
   2. 사전 회수 (Pre-fetch Recall): 신규 질문 인입 시 50ms 샌드박스 시맨틱 유사도 검색 & 투명 주입
   3. 시너지 강화 (Reinforcement) : 연관 지식 재참조 시 엣지 가중치 강화 (+0.1x ~ 최대 3.0x 승격)
@@ -120,7 +120,7 @@ tierbridge-credit
 * **우측 콤팩트 미니 그래프**: 자주 연결된 핵심 지식들이 유기적으로 성단을 형성하며, 카드 클릭 시 카메라가 즉시 1.5배 줌인 포커스 이동.
 
 <p align="center">
-  <img src="docs/assets/memory_semantic_search.png" alt="TierBridge Semantic Search & Mini Canvas" width="100%" />
+  <img src="docs/assets/memory_semantic_search.png" alt="Harnex Semantic Search & Mini Canvas" width="100%" />
 </p>
 
 #### 🌌🌿 전체화면 듀얼 뷰포트 (Dual Viewport)
@@ -128,7 +128,7 @@ tierbridge-credit
 * **🌿 생각나무 마인드맵 뷰 (`Markmap`)**: 도메인별(쿠폰, GNB 가이드, 여행네컷 등)로 지식을 Root ➔ Branch ➔ Leaf 접이식 브레인스토밍 트리로 펼쳐보며 문제와 해결책을 신속히 정독 (맥북 트랙패드 두 손가락 스크롤 줌 및 노드별 `[🔍 상세 확인]` 링크 완비).
 
 <p align="center">
-  <img src="docs/assets/memory_viewport_mindmap.png" alt="TierBridge Thought-Tree Mindmap Viewport" width="100%" />
+  <img src="docs/assets/memory_viewport_mindmap.png" alt="Harnex Thought-Tree Mindmap Viewport" width="100%" />
 </p>
 
 #### ⚡ Neuralizer (기억 정밀 소각)
@@ -144,7 +144,7 @@ tierbridge-credit
 OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가 인하 패치가 이루어지면 자동으로 감지하여 원클릭으로 반영합니다.
 
 <p align="center">
-  <img src="docs/assets/model_healing_factor.png" alt="TierBridge Model Healing Factor Cost Comparison" width="100%" />
+  <img src="docs/assets/model_healing_factor.png" alt="Harnex Model Healing Factor Cost Comparison" width="100%" />
 </p>
 
 * **신규 모델 자동 감지 배너**: 대시보드 상단에 `[ 🩹 최신 모델 핫패치 가능 (GPT-5.6 Lineup) ]` 알림 자동 트리거
@@ -184,23 +184,44 @@ OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가
 
 ---
 
+### 5. 🌐 AGY Gemini 브릿지 & 무중단 자동 페일오버 (Agy Gemini Upstream Bridge)
+사내 ChatGPT Enterprise 계정의 워크스페이스 공용 크레딧 풀 소진(`workspace_member_credits_depleted`)으로 인한 `HTTP 429 (usage_limit_reached)` 오류 발생 시, 로컬 Antigravity CLI(`agy`)의 플래그십 모델인 **`gemini-3.8-flash-high`**로 즉각 투명 자동 페일오버(Transparent Failover)되어 진행 중인 개발 세션과 컨텍스트의 중단 없는 고가용성(High Availability)을 보장합니다.
+
+* **투명 자동 페일오버 (`UPSTREAM_PROVIDER=auto`)**: ChatGPT Enterprise 호출 실패(429) 시 에러 중단 없이 `gemini-3.8-flash-high`로 즉각 스위칭되어 스트리밍 출력 지속.
+* **직결 모드 (`UPSTREAM_PROVIDER=agy` 또는 `--model gemini*`)**: 프록시 진입 즉시 Gemini 백엔드로 직접 라우팅.
+* **양방향 프로토콜 변환**: Codex `/v1/responses` 규격 및 표준 OpenAI `/v1/chat/completions` 규격 SSE 스트림 무손실 트랜스파일링.
+
+> 📖 **[상세 기술 명세서: Agy Gemini Bridge & Failover 컨트롤러 (agy_gemini_upstream_bridge_controller.md)](Controller/agy_gemini_upstream_bridge_controller.md)**
+
+---
+
+### 6. 🏢 워크스페이스 공용 크레딧 풀 & 계정 잔여량 관측 (Workspace Shared Credits Pool)
+ChatGPT Enterprise 조직 계정의 특성상, 사용자 개인 할당량(3,000 Cr)이 남아있더라도 사내 공용 풀이 소진되면 모든 요청이 차단됩니다. Harnex는 백엔드 사용량 API를 실시간 가로채어 공용 풀 상태와 개인 한도를 대시보드 및 터미널에 즉시 시각화합니다.
+
+* **실시간 상태 뱃지**: 대시보드 상단에 `[🏢 워크스페이스 풀: 정상]` 또는 `[⚠️ 워크스페이스 풀: 고갈 (0 Cr)]` 알림 배너 표출.
+* **터미널 원클릭 조회 (`harnex-credit`)**: 사용자 계정, 워크스페이스 공용 풀 상태, 개인 월간 지출 한도(Used / Remaining / Reset 일시)를 한 화면에 종합 출력.
+
+> 📖 **[상세 기술 명세서: 워크스페이스 공용 풀 컨트롤러 (workspace_shared_credits_pool_controller.md)](Controller/workspace_shared_credits_pool_controller.md)**
+
+---
+
 ## ⌨️ 글로벌 단축키 & 명령어 가이드 (Shell Aliases)
 
 `./deploy.sh` 실행 시 사용자의 `~/.zshrc`에 자동 등록되어 터미널 어디에서든 즉시 사용할 수 있습니다:
 
 | 명령어 (Alias) | 설명 및 동작 |
 | :--- | :--- |
-| **`tierbridge`** | 하네스 프록시 런타임 실행 여부를 점검하고, 현재 터미널 세션에 환경 변수 주입 |
-| **`tierbridge-dash`** | Kibana 스타일 3초 라이브 웹 대시보드(`usage_dashboard.html`)를 생성하고 브라우저로 오픈 |
-| **`tierbridge-log`** | 라이브 프록시 가동 로그를 실시간으로 스트리밍 모니터링 (`tail -f ~/.tierbridge/live/harness.log`) |
-| **`tierbridge-credit`** | ChatGPT Enterprise 실제 계정 잔여 크레딧 및 지출 한도 실시간 조회 |
+| **`harnex`** | 하네스 프록시 런타임 실행 여부를 점검하고, 현재 터미널 세션에 환경 변수 주입 |
+| **`harnex-dash`** | Kibana 스타일 3초 라이브 웹 대시보드(`usage_dashboard.html`)를 생성하고 브라우저로 오픈 |
+| **`harnex-log`** | 라이브 프록시 가동 로그를 실시간으로 스트리밍 모니터링 (`tail -f ~/.harnex/live/harness.log`) |
+| **`harnex-credit`** | ChatGPT Enterprise 실제 계정 잔여 크레딧 및 지출 한도 실시간 조회 |
 
 ---
 
 ## 🛠️ 트러블슈팅 & FAQ (Troubleshooting)
 
 * **Q1. 새 터미널 창을 열면 프록시 연결이 안 됩니다.**
-  * ➔ 새 터미널에서 `tierbridge`를 1회 입력하여 환경 변수를 활성화하세요.
+  * ➔ 새 터미널에서 `harnex`를 1회 입력하여 환경 변수를 활성화하세요.
 * **Q2. 포트 18080에 프로세스가 2개 뜹니다.**
   * ➔ FastAPI Uvicorn Reloader(Watcher + Worker)의 정상적인 아키텍처입니다.
 * **Q3. 핫패치 적용 후 이전 버전으로 되돌리고 싶습니다.**
@@ -216,6 +237,16 @@ OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가
 
 | 카테고리 | 문서명 | 설명 |
 | :--- | :--- | :--- |
+| **도메인 컨트롤러 명세 (`Controller/`)**<br>*(Documentation First Policy)* | [agy_gemini_upstream_bridge_controller.md](Controller/agy_gemini_upstream_bridge_controller.md) | Agy Gemini 백엔드 연동 및 429 무중단 페일오버 명세 |
+| | [workspace_shared_credits_pool_controller.md](Controller/workspace_shared_credits_pool_controller.md) | 워크스페이스 공용 크레딧 풀 및 계정 잔여량 관측 규격 |
+| | [session_aggregation_and_log_sync_controller.md](Controller/session_aggregation_and_log_sync_controller.md) | 세션 집계 및 라이브 로그 워터폴 동기화 컨트롤러 |
+| | [dashboard_fractal_ui_controller.md](Controller/dashboard_fractal_ui_controller.md) | 프랙탈 트리 및 월간 세션 렌더링 컨트롤러 규격 |
+| | [classifier_advanced_routing_controller.md](Controller/classifier_advanced_routing_controller.md) | 3-Tier/6-Tier 다단 지능형 분류기 파이프라인 명세 |
+| | [classifier_reserve_fallback_controller.md](Controller/classifier_reserve_fallback_controller.md) | Fast-path Regex 및 Reserve 분류기 폴백 규격 |
+| | [memory_prefetch_cache_optimizer_controller.md](Controller/memory_prefetch_cache_optimizer_controller.md) | 생각나무 사전 회수 및 50ms 샌드박스 캐시 최적화 |
+| | [model_healing_factor.md](Controller/model_healing_factor.md) | 신규 모델 감지, 단가 대조 및 무중단 핫패치 컨트롤러 |
+| | [stream_resilience_and_error_handling_controller.md](Controller/stream_resilience_and_error_handling_controller.md) | 스트리밍 단절 방어 및 업스트림 에러 핸들링 |
+| | [thought_tree_vector_graph_controller.md](Controller/thought_tree_vector_graph_controller.md) | 생각나무 벡터 임베딩 & SQLite3 노드/엣지 그래프 |
 | **기억 저장소 & 듀얼 뷰포트 (`docs/memory/`)** | [dashboard_dual_viewport_markmap_tree.md](docs/memory/dashboard_dual_viewport_markmap_tree.md) | 성단 네트워크 ↔ 접이식 마인드맵 듀얼 뷰포트 명세 |
 | | [dashboard_memory_integration.md](docs/memory/dashboard_memory_integration.md) | 2단 분할 시맨틱 검색 & 실시간 기억 카드 연동 명세 |
 | | [dashboard_neuralizer_and_compact_graph.md](docs/memory/dashboard_neuralizer_and_compact_graph.md) | 콤팩트 미니 그래프 & Neuralizer 정밀 소각 설계 |
@@ -239,7 +270,7 @@ OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가
 
 ## 🛠️ 기술 스택 & 오픈소스 라이선스 명세 (Tech Stack & Licenses)
 
-TierBridge는 기업 및 사내 환경에서 라이선스 오염(GPL 전파 등) 걱정 없이 안전하게 배포·운영할 수 있도록 **100% Permissive(허용적) 오픈소스 라이선스** 기술 스택으로만 구성되어 있습니다.
+Harnex는 기업 및 사내 환경에서 라이선스 오염(GPL 전파 등) 걱정 없이 안전하게 배포·운영할 수 있도록 **100% Permissive(허용적) 오픈소스 라이선스** 기술 스택으로만 구성되어 있습니다.
 
 ### 1. 백엔드 및 코어 런타임 (Backend & Core Engine)
 | 기술 / 라이브러리 | 버전 / 출처 | 역할 및 용도 | 라이선스 (License) | 상용/기업 배포 |
@@ -266,9 +297,9 @@ TierBridge는 기업 및 사내 환경에서 라이선스 오염(GPL 전파 등)
 
 ## 🧠 장기 기억저장소(GiyEOK) & 벡터 저장 스펙 (Vector & Storage Specs)
 
-TierBridge는 외부 벡터 DB 종속성 없이, **초저지연(<5ms) 인프로세스 임베디드 SQLite3** 엔진을 채택하여 지식 그래프 및 고차원 임베딩 벡터를 직접 영구 관리합니다.
+Harnex는 외부 벡터 DB 종속성 없이, **초저지연(<5ms) 인프로세스 임베디드 SQLite3** 엔진을 채택하여 지식 그래프 및 고차원 임베딩 벡터를 직접 영구 관리합니다.
 
-### 1. 데이터베이스 스키마 구조 (`~/.tierbridge/memory.db`)
+### 1. 데이터베이스 스키마 구조 (`~/.harnex/memory.db`)
 ```sql
 -- 1. 지식 노드 및 고차원 벡터 임베딩 테이블
 CREATE TABLE nodes (

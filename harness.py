@@ -8,16 +8,16 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, PlainTextResponse, Response
 from dotenv import load_dotenv
 
-# TierBridge 패키지 임포트
-from tierbridge.models import UnifiedRequest, Message
-from tierbridge.adapters.factory import AdapterFactory
-from tierbridge.stream_transpiler import StreamTranspiler
-from tierbridge.router import Router
-from tierbridge.auth_manager import AuthManager
-from tierbridge.usage_tracker import UsageTracker
-from tierbridge.memory_prefetcher import MemoryPrefetcher
-from tierbridge.memory_handler import MemoryHandler
-from tierbridge.system_directive import SystemDirective
+# Harnex 패키지 임포트
+from harnex.models import UnifiedRequest, Message
+from harnex.adapters.factory import AdapterFactory
+from harnex.stream_transpiler import StreamTranspiler
+from harnex.router import Router
+from harnex.auth_manager import AuthManager
+from harnex.usage_tracker import UsageTracker
+from harnex.memory_prefetcher import MemoryPrefetcher
+from harnex.memory_handler import MemoryHandler
+from harnex.system_directive import SystemDirective
 
 import logging
 
@@ -32,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-app = FastAPI(title="TierBridge")
+app = FastAPI(title="Harnex")
 
 # 브라우저 대시보드 3초 라이브 오토싱크 및 AJAX 요청용 CORS 설정
 app.add_middleware(
@@ -49,9 +49,9 @@ async def on_startup():
         while True:
             try:
                 try:
-                    from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                    from src.harnex.official_pricing_crawler import OfficialPricingCrawler
                 except ImportError:
-                    from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                    from harnex.official_pricing_crawler import OfficialPricingCrawler
                 OfficialPricingCrawler.sync_prices(force=False)
             except Exception as e:
                 log.error(f"Error in periodic pricing sync: {e}")
@@ -70,6 +70,8 @@ ENTERPRISE_API_URL = os.getenv(
 MOCK_MODE = os.getenv("MOCK_TEST_MODE", "false").lower() == "true" or ENTERPRISE_API_URL in ("mock", "test")
 ROUTING_MODE = os.getenv("ROUTING_MODE", "standard").lower()
 HIGH_POWER_MODE = os.getenv("HIGH_POWER_MODE", "false").lower() == "true" or ROUTING_MODE in ("high_power", "high", "power")
+UPSTREAM_PROVIDER = os.getenv("UPSTREAM_PROVIDER", "auto").lower()  # "auto" (auto-failover), "agy", "gemini", "chatgpt"
+AGY_MODEL = os.getenv("AGY_MODEL", "gemini-3.8-flash-high")
 
 # Mock 모드 활성화 시 로컬 모크 엔드포인트로 우회
 if MOCK_MODE:
@@ -146,6 +148,7 @@ async def get_models():
     return {
         "object": "list",
         "data": [
+            {"id": "gpt-6.1-sol", "object": "model", "owned_by": "openai"},
             {"id": "gpt-6-luna", "object": "model", "owned_by": "openai"},
             {"id": "gpt-6-sol", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.4-mini", "object": "model", "owned_by": "openai"},
@@ -153,7 +156,12 @@ async def get_models():
             {"id": "gpt-5.6-terra", "object": "model", "owned_by": "openai"},
             {"id": "gpt-5.6-sol", "object": "model", "owned_by": "openai"},
             {"id": "4tier", "object": "model", "owned_by": "openai"},
-            {"id": "super", "object": "model", "owned_by": "openai"}
+            {"id": "super", "object": "model", "owned_by": "openai"},
+            {"id": "gemini-3.8-flash-high", "object": "model", "owned_by": "google"},
+            {"id": "gemini-3.8-flash-medium", "object": "model", "owned_by": "google"},
+            {"id": "gemini-3.8-flash-low", "object": "model", "owned_by": "google"},
+            {"id": "agy", "object": "model", "owned_by": "google"},
+            {"id": "gemini", "object": "model", "owned_by": "google"}
         ]
     }
 
@@ -174,7 +182,7 @@ async def get_usage():
     """ 실시간으로 세션 누적 사용량 및 예상 비용(USD) 조회 """
     return global_tracker.get_summary()
 
-from src.tierbridge.healing_engine import HealingEngine
+from src.harnex.healing_engine import HealingEngine
 
 @app.get("/v1/models/healing-status")
 async def get_healing_status():
@@ -205,9 +213,9 @@ async def switch_model_version(request: Request):
     return res
 
 try:
-    from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+    from src.harnex.official_pricing_crawler import OfficialPricingCrawler
 except ImportError:
-    from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+    from harnex.official_pricing_crawler import OfficialPricingCrawler
 
 @app.get("/v1/models/pricing")
 async def get_official_pricing():
@@ -227,21 +235,28 @@ async def sync_official_pricing():
 async def get_classifier_telemetry():
     """ 5단계 SOLID 분류 파이프라인 텔레메트리 메트릭 조회 """
     try:
-        from src.tierbridge.classifier.pipeline import ClassifierPipeline
+        from src.harnex.classifier.pipeline import ClassifierPipeline
     except ImportError:
-        from tierbridge.classifier.pipeline import ClassifierPipeline
+        from harnex.classifier.pipeline import ClassifierPipeline
     return ClassifierPipeline().get_telemetry()
 
 @app.get("/v1/dashboard/stats")
 async def get_dashboard_stats():
-    env_log = os.environ.get("TIERBRIDGE_LOG_PATH")
-    live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+    env_log = os.environ.get("HARNEX_LOG_PATH", os.environ.get("TIERBRIDGE_LOG_PATH"))
+    live_log = os.path.expanduser("~/.harnex/live/harness.log")
+    old_live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+    dev_dir = os.environ.get("HARNEX_DEV_DIR", os.environ.get("TIERBRIDGE_DEV_DIR"))
+    dev_log = os.path.join(dev_dir, "harness.log") if dev_dir else None
     if env_log and os.path.exists(env_log):
         log_file = env_log
-    elif os.path.exists("harness.log"):
-        log_file = "harness.log"
     elif os.path.exists(live_log):
         log_file = live_log
+    elif os.path.exists(old_live_log):
+        log_file = old_live_log
+    elif dev_log and os.path.exists(dev_log):
+        log_file = dev_log
+    elif os.path.exists("harness.log"):
+        log_file = "harness.log"
     else:
         log_file = "harness.log"
     records = []
@@ -250,7 +265,7 @@ async def get_dashboard_stats():
     
     if os.path.exists(log_file):
         usage_pattern = re.compile(
-            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)? \| cost=\$(?P<cost>[\d\.]+) USD'
+            r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)?(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?'
         )
         decision_pattern = re.compile(
             r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+)(?:\s+\([^)]+\))?(?:\s+\[clf:[^\]]+\])?\s*\|\s*\"(?P<prompt>.*)\"$'
@@ -297,10 +312,23 @@ async def get_dashboard_stats():
                         except ValueError:
                             pass
                     decision_str = u_match.group("decision_opt") or u_match.group("decision_legacy") or "UNKNOWN"
+                    model_val = u_match.group("model")
                     in_tok = int(u_match.group("in_tok"))
                     out_tok = int(u_match.group("out_tok"))
                     loc_val = int(u_match.group("loc")) if u_match.group("loc") else 0
-                    cost = float(u_match.group("cost"))
+                    cost_str = u_match.group("cost")
+                    if cost_str:
+                        cost = float(cost_str)
+                    else:
+                        try:
+                            try:
+                                from harnex.official_pricing_crawler import OfficialPricingCrawler
+                            except ImportError:
+                                from src.harnex.official_pricing_crawler import OfficialPricingCrawler
+                            in_p, out_p = OfficialPricingCrawler.get_price(model_val, fallback_in=1.0, fallback_out=3.0)
+                        except Exception:
+                            in_p, out_p = 1.0, 3.0
+                        cost = (in_tok / 1_000_000.0) * in_p + (out_tok / 1_000_000.0) * out_p
                     real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
                     balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
                     
@@ -345,45 +373,45 @@ async def get_dashboard_stats():
 
     try:
         try:
-            from tierbridge.credit_interceptor import interceptor
+            from harnex.credit_interceptor import interceptor
         except ImportError:
-            from src.tierbridge.credit_interceptor import interceptor
+            from src.harnex.credit_interceptor import interceptor
         ent_balance = await interceptor.fetch_enterprise_usage()
     except Exception:
         ent_balance = None
 
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         mem_stats = MemoryHandler.get_memory_stats()
     except Exception:
         mem_stats = {"total_memories": 0, "total_tags": 0, "code_modified_count": 0, "structured_rate": 100.0}
 
     try:
         try:
-            from tierbridge.git_sync_checker import get_git_sync_status
+            from harnex.git_sync_checker import get_git_sync_status
         except ImportError:
-            from src.tierbridge.git_sync_checker import get_git_sync_status
+            from src.harnex.git_sync_checker import get_git_sync_status
         git_sync_data = get_git_sync_status()
     except Exception:
         git_sync_data = {"is_git": False, "needs_pull": False, "behind_count": 0, "pending_commits": []}
 
     try:
         try:
-            from tierbridge.version import get_version_info
+            from harnex.version import get_version_info
         except ImportError:
-            from src.tierbridge.version import get_version_info
+            from src.harnex.version import get_version_info
         app_version_tag = get_version_info().get("tag", "v0.1.1")
     except Exception:
         app_version_tag = "v0.1.1"
 
     try:
         try:
-            from tierbridge.router import Router
+            from harnex.router import Router
         except ImportError:
-            from src.tierbridge.router import Router
+            from src.harnex.router import Router
         clf_status = dict(Router.last_classifier_status)
         if not clf_status.get("last_timestamp"):
             clf_records = [r for r in records if "CLASSIFIER" in r.get("decision", "")]
@@ -392,9 +420,9 @@ async def get_dashboard_stats():
                 clf_status["last_timestamp"] = clf_records[-1].get("timestamp")
         try:
             try:
-                from tierbridge.classifier.pipeline import ClassifierPipeline
+                from harnex.classifier.pipeline import ClassifierPipeline
             except ImportError:
-                from src.tierbridge.classifier.pipeline import ClassifierPipeline
+                from src.harnex.classifier.pipeline import ClassifierPipeline
             clf_status["telemetry"] = ClassifierPipeline().get_telemetry()
         except Exception:
             clf_status["telemetry"] = {}
@@ -414,15 +442,15 @@ async def get_dashboard_stats():
 
 @app.get("/v1/version")
 async def get_app_version():
-    """ TierBridge 시스템 버전 정보 반환 """
+    """ Harnex 시스템 버전 정보 반환 """
     try:
         try:
-            from tierbridge.version import get_version_info
+            from harnex.version import get_version_info
         except ImportError:
-            from src.tierbridge.version import get_version_info
+            from src.harnex.version import get_version_info
         return get_version_info()
     except Exception:
-        return {"version": "0.1.1", "tag": "v0.1.1", "name": "TierBridge Core", "release_date": "2026-08-27"}
+        return {"version": "0.1.1", "tag": "v0.1.1", "name": "Harnex Core", "release_date": "2026-08-27"}
 
 # ==========================================
 # GiyEOK (SUB-MEMORY) DASHBOARD APIS
@@ -433,9 +461,9 @@ async def get_dashboard_memories(limit: int = 50, session_id: Optional[str] = No
     """ 기억저장소(memory.db)에 적재된 최근 문제-해결 지식 에피소드 목록 조회 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         memories = MemoryHandler.get_recent_memories(limit=limit, session_id=session_id)
         return {"status": "success", "total_count": len(memories), "memories": memories}
     except Exception as e:
@@ -446,9 +474,9 @@ async def search_dashboard_memories(q: str = "", limit: int = 10):
     """ 질의어(키워드/시맨틱) 기반 연관 기억 및 유사도 검색 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         results = MemoryHandler.search_associated_memories(query=q, limit=limit)
         return {"status": "success", "query": q, "results_count": len(results), "results": results}
     except Exception as e:
@@ -459,9 +487,9 @@ async def get_dashboard_memory_stats():
     """ 기억저장소 통계 지표 조회 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         return MemoryHandler.get_memory_stats()
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -471,9 +499,9 @@ async def get_dashboard_memory_graph(limit_nodes: int = 60):
     """ vis-network 렌더링용 nodes & edges 그래프 데이터셋 조회 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         data = MemoryHandler.get_graph_data(limit_nodes=limit_nodes)
         return {"status": "success", **data}
     except Exception as e:
@@ -484,9 +512,9 @@ async def get_dashboard_top_edges(limit: int = 10):
     """ 가장 높은 가중치를 가진 상위 엣지 및 노드 정보 목록 조회 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         edges = MemoryHandler.get_top_weighted_edges(limit=limit)
         return {"status": "success", "total_count": len(edges), "edges": edges}
     except Exception as e:
@@ -497,9 +525,9 @@ async def neuralize_dashboard_memory(node_id: str):
     """ Neuralizer: 특정 기억 노드를 안전하게 삭제하고 연결된 엣지만 정밀 소각 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         result = MemoryHandler.neuralize_memory(node_id)
         return result
     except Exception as e:
@@ -613,11 +641,25 @@ async def route_harness(request: Request):
     )
 
     # 6. 타겟 백엔드 벤더 매핑
-    target_vendor = "openai"
-    if "claude" in target_model:
+    req_model_lower = str(requested_model or "").lower()
+    is_agy_target = (
+        UPSTREAM_PROVIDER in ("agy", "gemini")
+        or req_model_lower.startswith("gemini")
+        or req_model_lower in ("agy", "gemini")
+        or "gemini" in str(target_model).lower()
+    )
+
+    if is_agy_target:
+        target_vendor = "agy"
+        if req_model_lower.startswith("gemini-"):
+            target_model = requested_model
+        else:
+            target_model = os.getenv("AGY_MODEL", "gemini-3.8-flash-high")
+        decision = "AGY_BRIDGE"
+    elif "claude" in target_model:
         target_vendor = "anthropic"
-    elif "gemini" in target_model:
-        target_vendor = "gemini"
+    else:
+        target_vendor = "openai"
 
     # 7. 타겟 어댑터 및 자격증명 스왑 해결
     target_adapter = AdapterFactory.get_adapter(target_vendor)
@@ -731,6 +773,81 @@ async def route_harness(request: Request):
     # 10. 스트리밍 비동기 포워딩 및 실시간 트랜스파일링 파이프라인
     # 지식 저장소의 문제(Problem)는 항상 사용자의 실제 원본 질문(user_prompt)을 보존
     stored_prompt_text = user_prompt if user_prompt else (substep_prompt or raw_prompt_text)
+
+    # 10-A. Agy (Gemini) 직접 실행 파이프라인
+    if target_vendor == "agy":
+        agy_adapter = AdapterFactory.get_adapter("agy")
+        agy_payload = agy_adapter.from_unified_request(unified_req)
+        agy_prompt = agy_payload.get("prompt") or stored_prompt_text
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sid_tag = f" [sid: {session_id}]" if session_id else ""
+        print(f"[{now_str}]{sid_tag} ➔ [UPSTREAM: AGY GEMINI] Model: {target_model} | Provider: {UPSTREAM_PROVIDER.upper()}", flush=True)
+
+        if unified_req.stream:
+            accumulated_bytes = b""
+            def append_agy_raw(chunk_bytes: bytes):
+                nonlocal accumulated_bytes
+                accumulated_bytes += chunk_bytes
+
+            is_responses_api = "responses" in incoming_path
+            if is_responses_api:
+                gen = agy_adapter.generate_responses_sse_stream(agy_prompt, model=target_model, on_chunk=append_agy_raw)
+            else:
+                gen = agy_adapter.generate_chat_completions_sse_stream(agy_prompt, model=target_model, on_chunk=append_agy_raw)
+
+            async def agy_stream_generator():
+                try:
+                    async for sse_chunk in gen:
+                        yield sse_chunk
+                except (asyncio.CancelledError, GeneratorExit):
+                    return
+                except Exception as e:
+                    print(f"[Error] Agy Stream exception: {e}")
+                    err_msg = json.dumps({"error": {"message": f"Agy stream exception: {str(e)}", "type": "agy_error"}})
+                    yield f"data: {err_msg}\n\n".encode("utf-8")
+                    yield b"data: [DONE]\n\n"
+                    return
+                finally:
+                    resp_text = accumulated_bytes.decode("utf-8", errors="ignore")
+                    in_tok = max(100, int(len(agy_prompt) * 0.35))
+                    out_tok = max(50, int(len(resp_text) * 0.35))
+                    loc = global_tracker.extract_code_lines(resp_text)
+                    global_tracker.track_request(
+                        target_model,
+                        decision,
+                        in_tok,
+                        out_tok,
+                        loc=loc,
+                        session_id=session_id,
+                        auth_token=enterprise_token,
+                        account_id=get_latest_enterprise_account_id(),
+                        prompt_text=stored_prompt_text,
+                        response_text=resp_text
+                    )
+
+            return StreamingResponse(agy_stream_generator(), media_type="text/event-stream")
+        else:
+            res = await agy_adapter.send_request(agy_payload, {}, "")
+            resp_data = res.json()
+            resp_text = resp_data.get("output_text", "")
+            in_tok = max(100, int(len(agy_prompt) * 0.35))
+            out_tok = max(50, int(len(resp_text) * 0.35))
+            loc = global_tracker.extract_code_lines(resp_text)
+            global_tracker.track_request(
+                target_model,
+                decision,
+                in_tok,
+                out_tok,
+                loc=loc,
+                session_id=session_id,
+                auth_token=enterprise_token,
+                account_id=get_latest_enterprise_account_id(),
+                prompt_text=stored_prompt_text,
+                response_text=resp_text
+            )
+            return res
+
     if unified_req.stream:
         is_passthrough = "responses" in incoming_path
         client = httpx.AsyncClient(timeout=180.0)
@@ -751,6 +868,66 @@ async def route_harness(request: Request):
             await client.aclose()
             err_text = error_body.decode('utf-8', errors='ignore')
             print(f"[Warning] Upstream API Error Status: {upstream_res.status_code}, Body: {err_text}")
+
+            # Auto-Failover to Agy Gemini if upstream credits depleted (429) or server unavailable (503)
+            is_credits_depleted = (
+                upstream_res.status_code in (429, 503)
+                or "usage_limit_reached" in err_text
+                or "credits_depleted" in err_text
+                or "workspace_member_credits_depleted" in err_text
+            )
+            if UPSTREAM_PROVIDER in ("auto", "auto_fallback") and is_credits_depleted:
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                sid_tag = f" [sid: {session_id}]" if session_id else ""
+                fallback_model = os.getenv("AGY_MODEL", "gemini-3.8-flash-high")
+                print(f"[{now_str}]{sid_tag} ➔ [FAILOVER: AGY GEMINI] Upstream {upstream_res.status_code} credits depleted! Transparently failing over to agy ({fallback_model})...", flush=True)
+
+                agy_adapter = AdapterFactory.get_adapter("agy")
+                agy_payload = agy_adapter.from_unified_request(unified_req)
+                agy_prompt = agy_payload.get("prompt") or stored_prompt_text
+
+                accumulated_bytes = b""
+                def append_failover_raw(chunk_bytes: bytes):
+                    nonlocal accumulated_bytes
+                    accumulated_bytes += chunk_bytes
+
+                if is_passthrough:
+                    gen = agy_adapter.generate_responses_sse_stream(agy_prompt, model=fallback_model, on_chunk=append_failover_raw)
+                else:
+                    gen = agy_adapter.generate_chat_completions_sse_stream(agy_prompt, model=fallback_model, on_chunk=append_failover_raw)
+
+                async def failover_stream_generator():
+                    try:
+                        async for sse_chunk in gen:
+                            yield sse_chunk
+                    except (asyncio.CancelledError, GeneratorExit):
+                        return
+                    except Exception as e:
+                        print(f"[Error] Failover Agy Stream exception: {e}")
+                        err_msg = json.dumps({"error": {"message": f"Failover agy exception: {str(e)}", "type": "failover_error"}})
+                        yield f"data: {err_msg}\n\n".encode("utf-8")
+                        yield b"data: [DONE]\n\n"
+                        return
+                    finally:
+                        resp_text = accumulated_bytes.decode("utf-8", errors="ignore")
+                        in_tok = max(100, int(len(agy_prompt) * 0.35))
+                        out_tok = max(50, int(len(resp_text) * 0.35))
+                        loc = global_tracker.extract_code_lines(resp_text)
+                        global_tracker.track_request(
+                            fallback_model,
+                            "GEMINI_FAILOVER",
+                            in_tok,
+                            out_tok,
+                            loc=loc,
+                            session_id=session_id,
+                            auth_token=enterprise_token,
+                            account_id=get_latest_enterprise_account_id(),
+                            prompt_text=stored_prompt_text,
+                            response_text=resp_text
+                        )
+
+                return StreamingResponse(failover_stream_generator(), media_type="text/event-stream")
+
             media_type = upstream_res.headers.get("content-type", "application/json")
             return Response(content=error_body, status_code=upstream_res.status_code, media_type=media_type)
 

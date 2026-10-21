@@ -1,5 +1,6 @@
 import unittest
 import os
+import sys
 import re
 import subprocess
 import json
@@ -8,21 +9,30 @@ class TestSessionAggregationAndDashboard(unittest.TestCase):
     def test_live_log_waterfall_in_parse_args(self):
         """ parse_args should prioritize live harness.log over dev harness.log """
         import analyze_usage
-        live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+        live_log = os.path.expanduser("~/.harnex/live/harness.log")
+        if not os.path.exists(live_log):
+            live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
         if os.path.exists(live_log):
-            parser_args = analyze_usage.parse_args.__code__.co_consts
             # Verify the default log logic prioritizes live_log
             args = analyze_usage.parse_args([])
             self.assertEqual(args.log_file, live_log)
 
     def test_session_aggregation_01a0cbe5(self):
         """ Session 01a0cbe5 must be aggregated correctly with 10 turns and ~6.16 credits """
-        live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+        live_log = os.path.expanduser("~/.harnex/live/harness.log")
+        if not os.path.exists(live_log):
+            live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
         if not os.path.exists(live_log):
             self.skipTest("Live harness.log not found")
 
+        py_bin = os.path.expanduser("~/.harnex/live/.venv/bin/python")
+        if not os.path.exists(py_bin):
+            py_bin = os.path.expanduser("~/.tierbridge/live/.venv/bin/python")
+        if not os.path.exists(py_bin):
+            py_bin = sys.executable
+
         cmd = [
-            os.path.expanduser("~/.tierbridge/live/.venv/bin/python"),
+            py_bin,
             "analyze_usage.py",
             "-s", "01a0cbe5"
         ]
@@ -45,12 +55,20 @@ class TestSessionAggregationAndDashboard(unittest.TestCase):
 
     def test_prompt_matching_accuracy_for_01a0cbe5(self):
         """ Ensure prompt is not contaminated by previous session's prompt """
-        live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+        live_log = os.path.expanduser("~/.harnex/live/harness.log")
+        if not os.path.exists(live_log):
+            live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
         if not os.path.exists(live_log):
             self.skipTest("Live harness.log not found")
 
+        py_bin = os.path.expanduser("~/.harnex/live/.venv/bin/python")
+        if not os.path.exists(py_bin):
+            py_bin = os.path.expanduser("~/.tierbridge/live/.venv/bin/python")
+        if not os.path.exists(py_bin):
+            py_bin = sys.executable
+
         cmd = [
-            os.path.expanduser("~/.tierbridge/live/.venv/bin/python"),
+            py_bin,
             "analyze_usage.py",
             "-s", "01a0cbe5"
         ]

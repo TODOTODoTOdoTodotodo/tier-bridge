@@ -27,11 +27,11 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 ┌────────────────────────────────────────────────────────────────────────┐
 │                 LLM Routing Harness Proxy (Port 18080)                 │
 │                                                                        │
-│ * ModelRegistry (`src/tierbridge/model_registry.py`)                   │
+│ * ModelRegistry (`src/harnex/model_registry.py`)                   │
 │   - Persistent Config: `config/model_versions.json`                    │
 │   - Active Version Pointer: "latest" -> "v1.2.0"                       │
 │   - History Snapshots: v1.0.0, v1.1.0, v1.2.0                          │
-│ * Dynamic Router (`src/tierbridge/router.py`)                          │
+│ * Dynamic Router (`src/harnex/router.py`)                          │
 │   - Reads active model mapping from ModelRegistry in real-time         │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -48,17 +48,18 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
   - 업스트림 카탈로그의 모델 목록(slug, display_name, description 등)을 조회 (TTL 캐시 60초 적용).
   - 현재 활성 버전(`active_mapping`)의 모델 라인업과 업스트림 가용 모델을 비교:
     - 현재 매핑이 `gpt-5.6` 계열인데 업스트림에 `gpt-6` 계열(`gpt-6-luna`, `gpt-6-sol` 등)이 감지되면 즉시 `has_new_healing: true` 트리거.
+    - 업스트림에 차세대 `gpt-6.1` 계열(`gpt-6.1-sol` 등)이 출시 감지될 경우 최신 핫패치(`v2.1.0-gpt61-hotpatch`) 제안 트리거.
     - 구형 버전(`v0.9.0-test-legacy`, `gpt-5.4-mini`, `gpt-5.5` 등)인 경우에도 상위 모델 감지로 즉시 트리거.
-    - 이미 최신 업스트림 모델로 핫패치가 완료된 상태(예: `v2.0.0-gpt6-hotpatch`)일 경우 `has_new_healing: false`로 자동 은닉.
+    - 이미 최신 업스트림 모델로 핫패치가 완료된 상태(예: `v2.0.0-gpt6-hotpatch`, `v2.1.0-gpt61-hotpatch`)일 경우 `has_new_healing: false`로 자동 은닉.
 - **동적 핫패치 매핑 생성 규칙 (Dynamic Recommendation Rule)**:
-  - `BRONZE` / `SILVER` (경량/고효율 티어): 업스트림의 경량 고속 모델 (예: `gpt-6-luna`, in: $0.50, out: $1.50)
-  - `GOLD` / `PLATINUM` / `DIAMOND` / `CHALLENGER` (고성능/엔지니어링 티어): 업스트림의 작업마 코딩 모델 (예: `gpt-6-sol`, in: $2.00, out: $8.00)
+  - `BRONZE` / `SILVER` (경량/고효율 티어): 업스트림의 경량 고속 모델 (예: `gpt-6-luna`, in: $0.10, out: $0.50)
+  - `GOLD` / `PLATINUM` / `DIAMOND` / `CHALLENGER` (고성능/엔지니어링 티어): 업스트림의 최신 코딩 모델 (`gpt-6.1-sol` 우선 탑재, 미지원 시 `gpt-6-sol`, in: $2.00, out: $10.00)
 - **원클릭 핫패칭 릴리즈 적용 (`POST /v1/models/heal`)**:
   - 탐지된 업스트림 모델을 기반으로 신규 버전 스냅샷(예: `v2.0.0-gpt6-hotpatch`)을 동적 생성하고 즉시 활성화.
   - 적용 완료 시 대시보드 알림 배너 자동 닫힘 및 하단 타임라인 이력 기록.
 
 - **원클릭 핫패칭 릴리즈 적용 및 배포 영구 보존 (Dual-Sink Persistence & Deployment Preservation)**:
-  - `ModelRegistry.get_config_path()`는 라이브 런타임의 설정 파일(`~/.tierbridge/live/config/model_versions.json`)을 1순위로 탐색하여 참조합니다.
+  - `ModelRegistry.get_config_path()`는 라이브 런타임의 설정 파일(`~/.harnex/live/config/model_versions.json`)을 1순위로 탐색하여 참조합니다.
   - 사용자가 핫패칭을 적용하거나 드롭다운으로 변경한 `active_version` 런타임 상태는 `deploy.sh` 동기화 시 `--exclude='config/model_versions.json'` 규칙과 라이브 경로 1순위 참조 정책에 의해, **배포(`deploy.sh`)를 몇 번 가동하더라도 활성화된 모델 버전(Active Version) 상태가 리셋되지 않고 100% 지속 유지**됩니다.
   - 핫패치가 완료되면 `has_new_healing`은 `false`로 닫히고, 대시보드 버전 선택 드롭다운과 하단 타임라인에 `v2.0.0-gpt6-hotpatch`가 이력으로 남게 됩니다.
 

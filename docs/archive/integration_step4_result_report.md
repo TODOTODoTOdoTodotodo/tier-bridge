@@ -10,7 +10,7 @@
 | :--- | :--- |
 | **작업 명칭** | Step 4: 통합 대시보드 시너지 분석, 듀얼 뷰포트(vis ↔ Markmap) & Neuralizer 정밀 소각 |
 | **적용 브랜치** | `feature/memory-integration-step4` |
-| **핵심 모듈** | `src/tierbridge/memory_handler.py`, `analyze_usage.py`, `harness.py` |
+| **핵심 모듈** | `src/harnex/memory_handler.py`, `analyze_usage.py`, `harness.py` |
 | **신규 API** | `GET /v1/dashboard/memories/graph`, `GET /v1/dashboard/memories/top-edges`, `POST /v1/dashboard/memories/neuralize/{id}` |
 | **시각화 엔진** | `vis-network` (Force-Directed 성단 클러스터) + `Markmap` (D3 기반 계층형 마인드맵) |
 | **단위 테스트** | `test_memory_handler.py` 포함 25개 테스트 100% 통과 |

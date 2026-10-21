@@ -1,6 +1,6 @@
 # 📑 Step 3: 비용/난이도 기반 기억 가중치 재강화 엔진 & 잠재 연관 지식 힌트 제안
 
-본 문서는 TierBridge 하네스에서 많은 크레딧과 비용(`cost_usd`), 고난도 추론(`CHALLENGER`/`PLATINUM`/`GOLD`)이 투입되어 해결된 핵심 대화/디버깅 턴을 감지하여, 로컬 SQLite `memory.db`의 `edges` 및 랭킹 점수를 강화하고, 검색 적합도가 다소 낮더라도 유용한 힌트를 함께 제안하는 **Step 3 구현 작업지시서**입니다.
+본 문서는 Harnex 하네스에서 많은 크레딧과 비용(`cost_usd`), 고난도 추론(`CHALLENGER`/`PLATINUM`/`GOLD`)이 투입되어 해결된 핵심 대화/디버깅 턴을 감지하여, 로컬 SQLite `memory.db`의 `edges` 및 랭킹 점수를 강화하고, 검색 적합도가 다소 낮더라도 유용한 힌트를 함께 제안하는 **Step 3 구현 작업지시서**입니다.
 
 ---
 
@@ -43,14 +43,14 @@
 
 ## 3. 세부 구현 스펙 (Implementation Specs)
 
-### 3.1 신규 모듈 생성: `src/tierbridge/memory_reinforcer.py`
-* **역할**: 비용/난이도/LOC 기반 가중치 계산 및 `~/.tierbridge/memory.db`의 `edges` 테이블 직접 갱신.
+### 3.1 신규 모듈 생성: `src/harnex/memory_reinforcer.py`
+* **역할**: 비용/난이도/LOC 기반 가중치 계산 및 `~/.harnex/memory.db`의 `edges` 테이블 직접 갱신.
 * **주요 메서드**:
   * `compute_reinforce_weight(cost_usd: float, decision: str, loc: int = 0) -> float`
   * `reinforce_node(db_path: str, node_id: str, cost_usd: float, decision: str, loc: int = 0) -> bool`
   * `link_related_edges(db_path: str, new_node_id: str, weight: float) -> int`
 
-### 3.2 사전 회수 템플릿 개선: `src/tierbridge/memory_prefetcher.py`
+### 3.2 사전 회수 템플릿 개선: `src/harnex/memory_prefetcher.py`
 * **주요 지식 (High Confidence, Score >= 60%)**: 상단에 즉시 브리핑용 핵심 지식으로 배치.
 * **잠재 힌트 지식 (Low Score / Exploratory Hint, 35% <= Score < 60%)**:
   ```markdown
@@ -60,7 +60,7 @@
   - 안내 지침: 명확한 일치가 아닌 경우, 사용자에게 "혹시 이 작업과 관련된 내용인가요?" 형태로 가볍게 제안해 보세요.
   ```
 
-### 3.3 검색 랭킹 보강: `src/tierbridge/memory_handler.py`
+### 3.3 검색 랭킹 보강: `src/harnex/memory_handler.py`
 * `search_associated_memories()` 랭킹 산출 시 `edges.weight` 및 `cost_usd` 가중치를 추가 가산하여 고가치 지식이 상위에 안정적으로 랭크되도록 보정.
 
 ---

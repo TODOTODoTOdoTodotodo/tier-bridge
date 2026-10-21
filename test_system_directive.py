@@ -1,6 +1,6 @@
 import unittest
-from tierbridge.models import UnifiedRequest, Message
-from tierbridge.system_directive import SystemDirective
+from harnex.models import UnifiedRequest, Message
+from harnex.system_directive import SystemDirective
 
 
 class TestSystemDirective(unittest.TestCase):

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock, AsyncMock
-from tierbridge.models import UnifiedRequest, Message
-from tierbridge.router import Router
+from harnex.models import UnifiedRequest, Message
+from harnex.router import Router
 
 
 class TestClassifierReserveFallback(unittest.TestCase):

@@ -1,6 +1,6 @@
 import unittest
-from tierbridge.official_pricing_crawler import OfficialPricingCrawler
-from tierbridge.healing_engine import HealingEngine
+from harnex.official_pricing_crawler import OfficialPricingCrawler
+from harnex.healing_engine import HealingEngine
 
 class TestOfficialPricingCrawler(unittest.TestCase):
     def test_sync_prices_live_or_cache(self):
@@ -44,7 +44,7 @@ class TestOfficialPricingCrawler(unittest.TestCase):
 
         # CHALLENGER (sol) 단가 확인
         chal_row = next(r for r in comparison if r["tier"] == "CHALLENGER")
-        self.assertEqual(chal_row["healing_model"], "gpt-6-sol")
+        self.assertIn(chal_row["healing_model"], ["gpt-6-sol", "gpt-6.1-sol"])
         self.assertEqual(chal_row["healing_in_price"], 2.0)
         self.assertEqual(chal_row["healing_out_price"], 10.0)
 

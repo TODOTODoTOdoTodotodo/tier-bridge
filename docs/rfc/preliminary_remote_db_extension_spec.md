@@ -1,22 +1,22 @@
 # 🌐 [예비 기술 명세서 / RFC] 원격 DB 확장 및 전사 기억 동기화 아키텍처 (Preliminary Remote DB Extension Spec)
 
 > 💡 **문서 목적 (Status: Draft / Proposed RFC)**:  
-> 본 문서는 TierBridge 기억저장소를 전사 공유 시스템으로 확장할 때 참조할 **예비 기술 명세서(Preliminary Specification)**입니다. 향후 전사 프로젝트 승인 시 즉시 구현 및 확장이 가능하도록 아키텍처, 동기화 프로토콜, 경합 해결 정책 및 체크리스트를 정의합니다.
+> 본 문서는 Harnex 기억저장소를 전사 공유 시스템으로 확장할 때 참조할 **예비 기술 명세서(Preliminary Specification)**입니다. 향후 전사 프로젝트 승인 시 즉시 구현 및 확장이 가능하도록 아키텍처, 동기화 프로토콜, 경합 해결 정책 및 체크리스트를 정의합니다.
 
 ## 1. 핵심 아키텍처 철학: 로컬 퍼스트 (Local-First Zero-Latency)
 런타임 프롬프트 인입 시마다 원격 DB를 직접 조회(Dynamic Remote Query)하면 네트워크 RTT(15~40ms)와 원격 부하로 인해 **50ms 사전 회수(Pre-fetch Recall) SLA가 위협**받을 수 있습니다.
-따라서 **각 개발자의 머신에서는 로컬 SQLite(`~/.tierbridge/memory.db`)를 100% 독립적으로 사용하여 0.5ms 초저지연을 유지**하고, 전사 지식 공유는 **백그라운드 비동기 동기화(Background Asynchronous Sync)**로 처리하는 **로컬 퍼스트 분산 지식 아키텍처**를 채택합니다.
+따라서 **각 개발자의 머신에서는 로컬 SQLite(`~/.harnex/memory.db`)를 100% 독립적으로 사용하여 0.5ms 초저지연을 유지**하고, 전사 지식 공유는 **백그라운드 비동기 동기화(Background Asynchronous Sync)**로 처리하는 **로컬 퍼스트 분산 지식 아키텍처**를 채택합니다.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────┐
 │                   [개발자 A의 로컬 머신]                     [개발자 B의 로컬 머신]        │
 │                ┌────────────────────────┐                ┌────────────────────────┐      │
-│  프롬프트 ──►  │  TierBridge Harness    │  프롬프트 ──►  │  TierBridge Harness    │      │
+│  프롬프트 ──►  │  Harnex Harness    │  프롬프트 ──►  │  Harnex Harness    │      │
 │  (0.5ms 즉시)  └───────────▲────────────┘  (0.5ms 즉시)  └───────────▲────────────┘      │
 │                            │ (0ms Local I/O)                         │ (0ms Local I/O)   │
 │                ┌───────────▼────────────┐                ┌───────────▼────────────┐      │
 │                │ 💾 Local SQLite DB     │                │ 💾 Local SQLite DB     │      │
-│                │ (~/.tierbridge/memory) │                │ (~/.tierbridge/memory) │      │
+│                │ (~/.harnex/memory) │                │ (~/.harnex/memory) │      │
 │                └───────────▲────────────┘                └───────────▲────────────┘      │
 └────────────────────────────┼─────────────────────────────────────────┼───────────────────┘
                              │                                         │
@@ -50,7 +50,7 @@
      - 로컬에서 소각된 노드 ID는 중앙 RDB에 `is_deleted = true`, `neuralized_at = NOW()`로 비동기 반영.
 
 ### 2.2 📥 Downstream Pull (중앙 RDB ➔ 로컬 SQLite)
-* **트리거 시점**: `tierbridge` 세션 시작 시점, 또는 30분~1시간 주기 백그라운드 폴링.
+* **트리거 시점**: `harnex` 세션 시작 시점, 또는 30분~1시간 주기 백그라운드 폴링.
 * **처리 절차**:
   1. **증분 쿼리 (Delta Query)**:
      - `GET /v1/enterprise/sync/pull?since={local_last_sync_timestamp}`
@@ -78,7 +78,7 @@
 
 ### 3.1 ⏱️ Pulling 주기 및 네트워크 트래픽 제어 정책
 1. **Session-Start Pull (세션 진입 시 1회 즉시 실행)**:
-   * `tierbridge` 명령어로 터미널 세션 진입 시, 백그라운드 동기화 데몬이 1회 비동기 실행되어 최신 전사 지식을 로컬 SQLite로 복제.
+   * `harnex` 명령어로 터미널 세션 진입 시, 백그라운드 동기화 데몬이 1회 비동기 실행되어 최신 전사 지식을 로컬 SQLite로 복제.
 2. **Adaptive Idle Pull (유휴 시간 적응형 폴링)**:
    * 개발자가 프롬프트 질의를 하지 않는 터미널 유휴 시간(Idle > 15분)에만 1회씩 경량 델타(`since={timestamp}`) 쿼리를 요청하여 작업 방해 0% 달성.
 3. **지수 백오프 (Exponential Backoff for Offline Resilience)**:
@@ -103,7 +103,7 @@
 #### [정책 3] 소각(Neuralize) vs 로컬 참조(Usage) 충돌 (Tombstone 비석 정책)
 * 전사 관리자나 팀원이 특정 노드를 중앙에서 소각(`is_deleted = true`)했으나, 로컬 개발자는 아직 해당 노드를 보존 중인 경우:
   1. 중앙의 **Tombstone(비석) 레코드**가 항상 우선하여 로컬 SQLite에서도 노드가 자동 `DELETE` 처리됨.
-  2. 로컬 개발자의 예기치 않은 데이터 손실을 방지하기 위해, 소각 전 로컬 스냅샷을 `~/.tierbridge/trash/`에 30일간 백업 보존.
+  2. 로컬 개발자의 예기치 않은 데이터 손실을 방지하기 위해, 소각 전 로컬 스냅샷을 `~/.harnex/trash/`에 30일간 백업 보존.
 
 #### [정책 4] 도메인 태그 병합 (Tag Set Union)
 * 전사 태그 `["MGTT-25938", "Gmarket"]`와 로컬 태그 `["Coupon_NPE", "Gmarket"]` 충돌 시:
@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS sync_meta (
 
 ## 6. 준비 작업 체크리스트 (TODO Checklist)
 
-- [ ] **로컬 동기화 백그라운드 워커 모듈 설계 (`src/tierbridge/sync_worker.py`)**
+- [ ] **로컬 동기화 백그라운드 워커 모듈 설계 (`src/harnex/sync_worker.py`)**
 - [ ] **로컬 Sanitization 필터 구현 (로컬 절대 경로 상대화 & PII 마스킹)**
 - [ ] **중앙 Enterprise Sync API 게이트웨이 엔드포인트 설계 (`POST /v1/enterprise/sync/push`, `GET /v1/enterprise/sync/pull`)**
 - [ ] **중앙 PostgreSQL 스키마 정의 및 다중 머신 가중치 MAX 병합 로직 작성**

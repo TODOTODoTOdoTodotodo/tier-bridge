@@ -33,7 +33,7 @@ Codex 및 고급 개발자 사용자는 복잡한 지식 네트워크를 다각�
 기억 저장소의 지식 에피소드를 구조화된 마크다운 트리로 자동 변환하며, 각 지식 노드 제목 및 메타 라인에 **원클릭 상세 확인 인터랙티브 링크(`<a class="tb-node-link" onclick="openNodeDetail(...)">...</a>`)**를 삽입합니다:
 
 ```markdown
-# 🌿 TierBridge Thought-Tree (34 Pure Fruits)
+# 🌿 Harnex Thought-Tree (34 Pure Fruits)
 ## 🎫 쿠폰 및 결제 동기화 (MGTT-25938)
 ### 📌 #d48fb397 P1 쿠폰 사전 계산 금액 복원 및 XML NPE 방어 <a class="tb-node-link" onclick="openNodeDetail('d48fb397-...')">🔍 상세 확인</a>
 - 💡 **적용 해결책**: `aplAmt` 복원 및 `GmarketGetCoupon` null 안전성 보강
