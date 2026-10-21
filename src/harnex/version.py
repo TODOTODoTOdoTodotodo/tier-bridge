@@ -25,7 +25,7 @@ def _read_version():
 
 __version__ = _read_version()
 __release_name__ = "Harnex Core"
-__release_date__ = "2026-09-07"
+__release_date__ = "2026-10-21"
 
 
 def get_version_info() -> dict:

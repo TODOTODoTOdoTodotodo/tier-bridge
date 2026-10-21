@@ -5,6 +5,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.2.0] - 2026-10-21 (Rebranding to Harnex, AGY Gemini Failover, Workspace Shared Pool & GPT-6.1 Sol)
+
+### 🌟 Added
+* **⚡ 프로젝트 및 패키지 리브랜딩 (TierBridge ➔ Harnex)**:
+  * 전체 코드베이스 및 문서 내 명칭을 `Harnex`로 전면 개편.
+  * `src/tierbridge/` 모듈을 `src/harnex/`로 이전하고, 하위 호환성 심볼릭 링크(`src/tierbridge -> src/harnex`) 유지.
+  * 글로벌 CLI 실행 파일(`harnex`, `harnex-dash`, `harnex-log`, `harnex-credit`) 및 레거시 `tierbridge*` 심볼릭 링크 자동 생성.
+  * 환경 변수(`HARNEX_LOG_PATH`, `HARNEX_DEV_DIR`) 및 레거시 폴백 체계 지원.
+* **🌐 Agy Gemini Upstream Bridge & 429 무중단 자동 페일오버 (`AgyAdapter`)**:
+  * ChatGPT Enterprise 공용 크레딧 소진(429) 시 `gemini-3.8-flash-high`로 즉각 투명 자동 전환되어 세션 중단 방지 (`UPSTREAM_PROVIDER=auto`).
+  * Codex `/v1/responses` 및 OpenAI `/v1/chat/completions` 양방향 SSE 프로토콜 실시간 트랜스파일링.
+* **🏢 워크스페이스 공용 크레딧 풀 실시간 모니터링 (`CreditInterceptor`)**:
+  * 사내 공용 크레딧 풀 상태(`has_credits`, `is_depleted`) 파싱 및 대시보드 알림 배너, `harnex-credit` CLI 출력 연동.
+* **🚀 GPT-6.1 Sol 모델 연동 및 힐링 팩터 핫패치 고도화**:
+  * 최신 공식 단가 크롤러(`OfficialPricingCrawler`)에 `gpt-6.1-sol` 반영 및 챌린저 티어 동적 모델 해결.
+* **📊 대시보드 10월 세션 집계 및 라이브 로그 우선순위 개선**:
+  * 최신 세션 집계 누락 방지를 위한 크레딧 우선순위 워터폴 적용 및 월별/세션별 필터링 무결성 강화.
+
+---
+
 ## [0.1.2] - 2026-09-07 (Prompt Caching Prefix Preservation, IDE Task Bypass & Git Sync Tracking)
 
 ### 🌟 Added

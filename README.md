@@ -85,12 +85,12 @@ harnex-credit
   <img src="docs/assets/routing_tier_matrix.png" alt="Harnex 6-Tier Intelligent Routing Matrix" width="100%" />
 </p>
 
-* 🥉 **BRONZE** (`gpt-5.6-luna:low`): 단순 오타 수정, 명령어 안내, 파일 읽기/조회 스텝
-* 🥈 **SILVER** (`gpt-5.6-luna:medium`): 표준 비즈니스 로직 단위 구현, 단일 파일 리팩토링
+* 🥉 **BRONZE** (`gpt-5.6-luna:low` / `gpt-6-luna:low`): 단순 오타 수정, 명령어 안내, 파일 읽기/조회 스텝
+* 🥈 **SILVER** (`gpt-5.6-luna:medium` / `gpt-6-luna:medium`): 표준 비즈니스 로직 단위 구현, 단일 파일 리팩토링
 * 🥇 **GOLD** (`gpt-5.6-terra:medium`): 중간 복잡도 기능 구현, 컴포넌트 간 연동
 * 💎 **PLATINUM** (`gpt-5.6-terra:high`): 복잡한 알고리즘, 다중 컴포넌트 아키텍처 설계
 * 🔷 **DIAMOND** (`gpt-5.6-terra:extra_high`): 심층 디버깅 및 성능 튜닝 (3-Tier 모드 상한)
-* 🏆 **CHALLENGER** (`gpt-5.6-sol:extra_high`): 데드락/메모리 누수 분석 (`--model super` 모드 상한)
+* 🏆 **CHALLENGER** (`gpt-6.1-sol` / `gpt-6-sol` / `gpt-5.6-sol:extra_high`): 데드락/메모리 누수 분석 (`--model super` 모드 상한)
 
 > 📖 **[상세 기술 문서: 라우팅 하네스 & 6단계 랭크 설계 (routing_harness.md)](docs/model/routing_harness.md)**
 
@@ -184,6 +184,27 @@ OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가
 
 ---
 
+### 5. 🌐 AGY Gemini 브릿지 & 무중단 자동 페일오버 (Agy Gemini Upstream Bridge)
+사내 ChatGPT Enterprise 계정의 워크스페이스 공용 크레딧 풀 소진(`workspace_member_credits_depleted`)으로 인한 `HTTP 429 (usage_limit_reached)` 오류 발생 시, 로컬 Antigravity CLI(`agy`)의 플래그십 모델인 **`gemini-3.8-flash-high`**로 즉각 투명 자동 페일오버(Transparent Failover)되어 진행 중인 개발 세션과 컨텍스트의 중단 없는 고가용성(High Availability)을 보장합니다.
+
+* **투명 자동 페일오버 (`UPSTREAM_PROVIDER=auto`)**: ChatGPT Enterprise 호출 실패(429) 시 에러 중단 없이 `gemini-3.8-flash-high`로 즉각 스위칭되어 스트리밍 출력 지속.
+* **직결 모드 (`UPSTREAM_PROVIDER=agy` 또는 `--model gemini*`)**: 프록시 진입 즉시 Gemini 백엔드로 직접 라우팅.
+* **양방향 프로토콜 변환**: Codex `/v1/responses` 규격 및 표준 OpenAI `/v1/chat/completions` 규격 SSE 스트림 무손실 트랜스파일링.
+
+> 📖 **[상세 기술 명세서: Agy Gemini Bridge & Failover 컨트롤러 (agy_gemini_upstream_bridge_controller.md)](Controller/agy_gemini_upstream_bridge_controller.md)**
+
+---
+
+### 6. 🏢 워크스페이스 공용 크레딧 풀 & 계정 잔여량 관측 (Workspace Shared Credits Pool)
+ChatGPT Enterprise 조직 계정의 특성상, 사용자 개인 할당량(3,000 Cr)이 남아있더라도 사내 공용 풀이 소진되면 모든 요청이 차단됩니다. Harnex는 백엔드 사용량 API를 실시간 가로채어 공용 풀 상태와 개인 한도를 대시보드 및 터미널에 즉시 시각화합니다.
+
+* **실시간 상태 뱃지**: 대시보드 상단에 `[🏢 워크스페이스 풀: 정상]` 또는 `[⚠️ 워크스페이스 풀: 고갈 (0 Cr)]` 알림 배너 표출.
+* **터미널 원클릭 조회 (`harnex-credit`)**: 사용자 계정, 워크스페이스 공용 풀 상태, 개인 월간 지출 한도(Used / Remaining / Reset 일시)를 한 화면에 종합 출력.
+
+> 📖 **[상세 기술 명세서: 워크스페이스 공용 풀 컨트롤러 (workspace_shared_credits_pool_controller.md)](Controller/workspace_shared_credits_pool_controller.md)**
+
+---
+
 ## ⌨️ 글로벌 단축키 & 명령어 가이드 (Shell Aliases)
 
 `./deploy.sh` 실행 시 사용자의 `~/.zshrc`에 자동 등록되어 터미널 어디에서든 즉시 사용할 수 있습니다:
@@ -216,6 +237,16 @@ OpenAI / ChatGPT Enterprise 백엔드에 신규 모델이 출시되거나 단가
 
 | 카테고리 | 문서명 | 설명 |
 | :--- | :--- | :--- |
+| **도메인 컨트롤러 명세 (`Controller/`)**<br>*(Documentation First Policy)* | [agy_gemini_upstream_bridge_controller.md](Controller/agy_gemini_upstream_bridge_controller.md) | Agy Gemini 백엔드 연동 및 429 무중단 페일오버 명세 |
+| | [workspace_shared_credits_pool_controller.md](Controller/workspace_shared_credits_pool_controller.md) | 워크스페이스 공용 크레딧 풀 및 계정 잔여량 관측 규격 |
+| | [session_aggregation_and_log_sync_controller.md](Controller/session_aggregation_and_log_sync_controller.md) | 세션 집계 및 라이브 로그 워터폴 동기화 컨트롤러 |
+| | [dashboard_fractal_ui_controller.md](Controller/dashboard_fractal_ui_controller.md) | 프랙탈 트리 및 월간 세션 렌더링 컨트롤러 규격 |
+| | [classifier_advanced_routing_controller.md](Controller/classifier_advanced_routing_controller.md) | 3-Tier/6-Tier 다단 지능형 분류기 파이프라인 명세 |
+| | [classifier_reserve_fallback_controller.md](Controller/classifier_reserve_fallback_controller.md) | Fast-path Regex 및 Reserve 분류기 폴백 규격 |
+| | [memory_prefetch_cache_optimizer_controller.md](Controller/memory_prefetch_cache_optimizer_controller.md) | 생각나무 사전 회수 및 50ms 샌드박스 캐시 최적화 |
+| | [model_healing_factor.md](Controller/model_healing_factor.md) | 신규 모델 감지, 단가 대조 및 무중단 핫패치 컨트롤러 |
+| | [stream_resilience_and_error_handling_controller.md](Controller/stream_resilience_and_error_handling_controller.md) | 스트리밍 단절 방어 및 업스트림 에러 핸들링 |
+| | [thought_tree_vector_graph_controller.md](Controller/thought_tree_vector_graph_controller.md) | 생각나무 벡터 임베딩 & SQLite3 노드/엣지 그래프 |
 | **기억 저장소 & 듀얼 뷰포트 (`docs/memory/`)** | [dashboard_dual_viewport_markmap_tree.md](docs/memory/dashboard_dual_viewport_markmap_tree.md) | 성단 네트워크 ↔ 접이식 마인드맵 듀얼 뷰포트 명세 |
 | | [dashboard_memory_integration.md](docs/memory/dashboard_memory_integration.md) | 2단 분할 시맨틱 검색 & 실시간 기억 카드 연동 명세 |
 | | [dashboard_neuralizer_and_compact_graph.md](docs/memory/dashboard_neuralizer_and_compact_graph.md) | 콤팩트 미니 그래프 & Neuralizer 정밀 소각 설계 |

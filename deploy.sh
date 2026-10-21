@@ -166,6 +166,13 @@ tail -f "$HOME/.harnex/live/harness.log" "$@"
 EOF
 chmod +x "$HOME/.local/bin/harnex-log"
 
+cat << 'EOF' > "$HOME/.local/bin/harnex-credit"
+#!/usr/bin/env bash
+LIVE_DIR="$HOME/.harnex/live"
+PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$LIVE_DIR/analyze_usage.py" --balance "$@"
+EOF
+chmod +x "$HOME/.local/bin/harnex-credit"
+
 cat << 'EOF' > "$HOME/.local/bin/harnex"
 #!/usr/bin/env bash
 source "$HOME/.harnex/live/run_harness.sh" "$@"
@@ -176,6 +183,7 @@ chmod +x "$HOME/.local/bin/harnex"
 ln -sf "$HOME/.local/bin/harnex" "$HOME/.local/bin/tierbridge" 2>/dev/null || true
 ln -sf "$HOME/.local/bin/harnex-dash" "$HOME/.local/bin/tierbridge-dash" 2>/dev/null || true
 ln -sf "$HOME/.local/bin/harnex-log" "$HOME/.local/bin/tierbridge-log" 2>/dev/null || true
+ln -sf "$HOME/.local/bin/harnex-credit" "$HOME/.local/bin/tierbridge-credit" 2>/dev/null || true
 
 setup_alias() {
     local shell_rc="$1"
