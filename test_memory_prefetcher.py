@@ -15,9 +15,9 @@ _src_dir = os.path.join(_script_dir, "src")
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from tierbridge.memory_prefetcher import MemoryPrefetcher
-from tierbridge.memory_handler import MemoryHandler
-from tierbridge.models import UnifiedRequest, Message
+from harnex.memory_prefetcher import MemoryPrefetcher
+from harnex.memory_handler import MemoryHandler
+from harnex.models import UnifiedRequest, Message
 
 
 class TestMemoryPrefetcher(unittest.IsolatedAsyncioTestCase):

@@ -10,7 +10,7 @@ _src_dir = os.path.join(_script_dir, "src")
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from src.tierbridge.credit_interceptor import CreditInterceptor
+from src.harnex.credit_interceptor import CreditInterceptor
 import analyze_usage
 
 class TestCreditInterceptor(unittest.TestCase):
@@ -149,7 +149,7 @@ class TestCreditInterceptor(unittest.TestCase):
             )
 
         try:
-            os.environ["TIERBRIDGE_LOG_PATH"] = temp_path
+            os.environ["HARNEX_LOG_PATH"] = temp_path
             resp = client.get("/v1/dashboard/stats")
             self.assertEqual(resp.status_code, 200)
             data = resp.json()
@@ -175,8 +175,8 @@ class TestCreditInterceptor(unittest.TestCase):
             self.assertEqual(main_rec["loc"], 12)
             self.assertGreater(main_rec["cost"], 0.0)
         finally:
-            if "TIERBRIDGE_LOG_PATH" in os.environ:
-                del os.environ["TIERBRIDGE_LOG_PATH"]
+            if "HARNEX_LOG_PATH" in os.environ:
+                del os.environ["HARNEX_LOG_PATH"]
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 

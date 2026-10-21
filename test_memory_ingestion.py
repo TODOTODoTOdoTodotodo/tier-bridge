@@ -11,8 +11,8 @@ _src_dir = os.path.join(_script_dir, "src")
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from tierbridge.memory_ingestion_worker import MemoryIngestionWorker
-from tierbridge.usage_tracker import UsageTracker
+from harnex.memory_ingestion_worker import MemoryIngestionWorker
+from harnex.usage_tracker import UsageTracker
 
 
 class TestMemoryIngestionWorker(unittest.IsolatedAsyncioTestCase):
@@ -123,7 +123,7 @@ class TestMemoryIngestionWorker(unittest.IsolatedAsyncioTestCase):
                 row = cursor.fetchone()
                 self.assertIsNotNone(row)
                 self.assertIn("SQLite DB에 성공적으로 저장된 솔루션 본문", row[0])
-                self.assertIn("tierbridge_auto_ingest", row[1])
+                self.assertIn("harnex_auto_ingest", row[1])
                 conn.close()
         finally:
             if os.path.exists(temp_db):
@@ -133,7 +133,7 @@ class TestMemoryIngestionWorker(unittest.IsolatedAsyncioTestCase):
         """UsageTracker.track_request 호출 시 MemoryIngestionWorker가 비동기 실행되는지 검증"""
         tracker = UsageTracker()
         
-        with patch("tierbridge.memory_ingestion_worker.MemoryIngestionWorker.process_log_event") as mock_process:
+        with patch("harnex.memory_ingestion_worker.MemoryIngestionWorker.process_log_event") as mock_process:
             mock_process.return_value = asyncio.Future()
             mock_process.return_value.set_result(True)
 

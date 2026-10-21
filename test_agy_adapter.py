@@ -13,8 +13,8 @@ if _src_dir not in sys.path:
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 
-from tierbridge.adapters.agy_adapter import AgyAdapter
-from tierbridge.models import UnifiedRequest, Message
+from harnex.adapters.agy_adapter import AgyAdapter
+from harnex.models import UnifiedRequest, Message
 from harness import app
 
 class TestAgyAdapter(unittest.TestCase):

@@ -1,7 +1,7 @@
 # Advanced SOLID Classifier & Multi-Stage Adaptive Routing Specification
 
 ## 1. 개요 및 목적 (Background & Objectives)
-기존 TierBridge의 단일 LLM 의존적 분류기 구조를 탈피하여, **객체지향 SOLID 원칙(Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion)**에 입각한 5단계 하이브리드 파이프라인(Multi-Stage Pipeline) 아키텍처로 전면 고도화합니다.
+기존 Harnex의 단일 LLM 의존적 분류기 구조를 탈피하여, **객체지향 SOLID 원칙(Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion)**에 입각한 5단계 하이브리드 파이프라인(Multi-Stage Pipeline) 아키텍처로 전면 고도화합니다.
 
 코드 내 하드코딩이나 임의 판단 로직을 배제하고, 모든 임계값·가중치·패턴은 외재화된 설정 파일(`config/classifier_policy.json`)을 통해 런타임에 동적으로 주입 및 관리됩니다.
 

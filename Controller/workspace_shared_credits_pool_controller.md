@@ -5,11 +5,11 @@ ChatGPT Business 및 Enterprise 조직 계정에서는 사용자 개인별 월�
 
 개인 잔여 한도가 남아있더라도(예: 3,000 Cr 중 2,537 Cr 잔여) 회사의 공용 풀이 소진되면(`workspace_member_credits_depleted`, `credits.balance: 0`) OpenAI 백엔드가 모든 모델 요청에 대해 즉각 `429 Too Many Requests (usage_limit_reached)`를 반환하게 됩니다.
 
-본 사양서는 이러한 공용 풀의 실시간 잔여량 및 고갈 상태를 백엔드 API에서 가로채 대시보드(Enterprise Balance Widget)와 CLI(`tierbridge-credit` / `--balance`)에 실시간 시각화하여, 원인 규명 및 관리자 충전 요청을 즉시 파악할 수 있도록 관측성(Observability)을 고도화하는 규격을 정의합니다.
+본 사양서는 이러한 공용 풀의 실시간 잔여량 및 고갈 상태를 백엔드 API에서 가로채 대시보드(Enterprise Balance Widget)와 CLI(`harnex-credit` / `--balance`)에 실시간 시각화하여, 원인 규명 및 관리자 충전 요청을 즉시 파악할 수 있도록 관측성(Observability)을 고도화하는 규격을 정의합니다.
 
 ---
 
-## 2. 데이터 수집 및 파싱 규격 (`src/tierbridge/credit_interceptor.py`)
+## 2. 데이터 수집 및 파싱 규격 (`src/harnex/credit_interceptor.py`)
 
 ### 2.1 OpenAI 엔터프라이즈 백엔드 API 스키마 매핑
 `GET https://chatgpt.com/backend-api/codex/usage` 응답에서 아래 필드를 추출:
@@ -70,7 +70,7 @@ ChatGPT Business 및 Enterprise 조직 계정에서는 사용자 개인별 월�
 3. **실시간 오토싱크 (Live Sync)**:
    - 3초 주기 대시보드 폴링(`/v1/dashboard/stats`) 시 `workspace_pool` 상태를 동적으로 DOM에 반영.
 
-### 3.2 CLI 터미널 출력 (`analyze_usage.py --balance` / `tierbridge-credit`)
+### 3.2 CLI 터미널 출력 (`analyze_usage.py --balance` / `harnex-credit`)
 ```
 =====================================================================================
 💳 [ChatGPT Enterprise] 실시간 계정 잔여 크레딧 및 지출 한도 조회

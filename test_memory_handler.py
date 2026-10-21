@@ -11,8 +11,8 @@ _src_dir = os.path.join(_script_dir, "src")
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from tierbridge.memory_handler import MemoryHandler
-from tierbridge.memory_ingestion_worker import MemoryIngestionWorker
+from harnex.memory_handler import MemoryHandler
+from harnex.memory_ingestion_worker import MemoryIngestionWorker
 
 
 class TestMemoryHandler(unittest.TestCase):
@@ -22,7 +22,7 @@ class TestMemoryHandler(unittest.TestCase):
             "[Session: 019ffec0-eef3-7692-801c-60dae4e386bd] [Decision: GOLD] [LOC: 45] [Cost: $0.1520]\n"
             "- 📌 문제 및 요구사항: Lombok @Getter/@Setter 호환성 오류 해결 및 DTO 리팩토링\n"
             "- 💡 적용 등급 및 라우팅: GOLD (Complex code edit)\n"
-            "- 🏷️ 지식 태그: #019ffec0-eef3-7692-801c-60dae4e386bd, #GOLD, #tierbridge_auto_ingest, #code_modified"
+            "- 🏷️ 지식 태그: #019ffec0-eef3-7692-801c-60dae4e386bd, #GOLD, #harnex_auto_ingest, #code_modified"
         )
 
     def test_parse_memory_content(self):

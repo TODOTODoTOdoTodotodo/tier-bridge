@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import patch
-from tierbridge.healing_engine import HealingEngine
+from harnex.healing_engine import HealingEngine
 
 class TestHealingEngineUpstream(unittest.TestCase):
     def test_dynamic_recommendation_gpt6_detected(self):

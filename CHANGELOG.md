@@ -1,6 +1,6 @@
-# 📝 TierBridge Changelog
+# 📝 Harnex Changelog
 
-All notable changes to the TierBridge Enterprise AI Routing & Memory system will be documented in this file.
+All notable changes to the Harnex Enterprise AI Routing & Memory system will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🌟 Added
 * **🏷️ System Versioning (`v0.1.1`)**:
-  * TierBridge 공식 릴리즈 버전 관리 체계(`VERSION`, `src/tierbridge/version.py`, `GET /v1/version`) 구축 및 대시보드 타이틀 뱃지 연동.
+  * Harnex 공식 릴리즈 버전 관리 체계(`VERSION`, `src/harnex/version.py`, `GET /v1/version`) 구축 및 대시보드 타이틀 뱃지 연동.
 * **🔄 Configurable Live Polling (기본 5초 & `localStorage` 영구 기억)**:
   * 실시간 대시보드 갱신 주기를 `3초`, `5초`, `10초`, `30초`, `수동(중지)`, `직접 입력`으로 세분화하고 새로고침 후에도 유지되도록 구현.
   * 즉시 새로고침(`[🔄]`) 및 일시정지(`[⏸️ / ▶️]`) 원클릭 퀵 컨트롤 툴바 탑재.
@@ -88,11 +88,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   * `BRONZE` (`luna:low`), `SILVER` (`luna:medium`), `GOLD` (`terra:medium`), `PLATINUM` (`terra:high`), `DIAMOND` (`terra:extra_high`), `CHALLENGER` (`sol:extra_high`) 6단계 난이도 자동 분기.
   * `gpt-5.6-luna:low` 분류기 라우터 전담 추적 (`➔ [USAGE] CLASSIFIER`).
 * **📥 Step 1: Memory Ingestion Pipeline (`MemoryIngestionWorker`)**:
-  * LLM 최종 해결책(`solution_text`)과 세션 로그를 비동기로 수집하여 `~/.tierbridge/memory.db`에 구조화 적재.
+  * LLM 최종 해결책(`solution_text`)과 세션 로그를 비동기로 수집하여 `~/.harnex/memory.db`에 구조화 적재.
 * **⚡ Step 2: 50ms Pre-fetch Recall (`MemoryPrefetcher`)**:
   * 50ms Strict Timeout Sandbox 내에서 과거 유사 문제 해결책을 회수하여 인바운드 프롬프트 컨텍스트에 안전하게 선행 투명 주입.
 * **🚀 런타임 격리 배포 (`./deploy.sh`) & 4대 글로벌 단축키**:
-  * `$HOME/.tierbridge/live` 독립 런타임 격리 배포 아키텍처.
-  * `tierbridge`, `tierbridge-dash`, `tierbridge-log`, `tierbridge-credit` 글로벌 셸 별칭 제공.
+  * `$HOME/.harnex/live` 독립 런타임 격리 배포 아키텍처.
+  * `harnex`, `harnex-dash`, `harnex-log`, `harnex-credit` 글로벌 셸 별칭 제공.
 * **🧪 단위 테스트 스위트 (25/25 통과)**:
   * 라우터, 인터셉터, 메모리 파이프라인(Step 1~4) 전체 단위 검증 완료.

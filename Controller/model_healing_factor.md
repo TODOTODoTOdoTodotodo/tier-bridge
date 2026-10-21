@@ -27,11 +27,11 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
 ┌────────────────────────────────────────────────────────────────────────┐
 │                 LLM Routing Harness Proxy (Port 18080)                 │
 │                                                                        │
-│ * ModelRegistry (`src/tierbridge/model_registry.py`)                   │
+│ * ModelRegistry (`src/harnex/model_registry.py`)                   │
 │   - Persistent Config: `config/model_versions.json`                    │
 │   - Active Version Pointer: "latest" -> "v1.2.0"                       │
 │   - History Snapshots: v1.0.0, v1.1.0, v1.2.0                          │
-│ * Dynamic Router (`src/tierbridge/router.py`)                          │
+│ * Dynamic Router (`src/harnex/router.py`)                          │
 │   - Reads active model mapping from ModelRegistry in real-time         │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -59,7 +59,7 @@ LLM 모델 라인업(OpenAI/ChatGPT Enterprise 등)은 빠른 주기로 신규 �
   - 적용 완료 시 대시보드 알림 배너 자동 닫힘 및 하단 타임라인 이력 기록.
 
 - **원클릭 핫패칭 릴리즈 적용 및 배포 영구 보존 (Dual-Sink Persistence & Deployment Preservation)**:
-  - `ModelRegistry.get_config_path()`는 라이브 런타임의 설정 파일(`~/.tierbridge/live/config/model_versions.json`)을 1순위로 탐색하여 참조합니다.
+  - `ModelRegistry.get_config_path()`는 라이브 런타임의 설정 파일(`~/.harnex/live/config/model_versions.json`)을 1순위로 탐색하여 참조합니다.
   - 사용자가 핫패칭을 적용하거나 드롭다운으로 변경한 `active_version` 런타임 상태는 `deploy.sh` 동기화 시 `--exclude='config/model_versions.json'` 규칙과 라이브 경로 1순위 참조 정책에 의해, **배포(`deploy.sh`)를 몇 번 가동하더라도 활성화된 모델 버전(Active Version) 상태가 리셋되지 않고 100% 지속 유지**됩니다.
   - 핫패치가 완료되면 `has_new_healing`은 `false`로 닫히고, 대시보드 버전 선택 드롭다운과 하단 타임라인에 `v2.0.0-gpt6-hotpatch`가 이력으로 남게 됩니다.
 

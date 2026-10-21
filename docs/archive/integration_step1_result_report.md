@@ -10,8 +10,8 @@
 | :--- | :--- |
 | **작업 명칭** | Step 1: 비동기 세션 로그 수집 및 문제-해결 에피소드 퀄리티 게이팅 |
 | **적용 브랜치** | `feature/memory-integration-step1` |
-| **핵심 모듈** | `src/tierbridge/memory_ingestion_worker.py` |
-| **연동 컴포넌트** | `src/tierbridge/usage_tracker.py`, `harness.py` |
+| **핵심 모듈** | `src/harnex/memory_ingestion_worker.py` |
+| **연동 컴포넌트** | `src/harnex/usage_tracker.py`, `harness.py` |
 | **단위 테스트** | `test_memory_ingestion.py` (5개 테스트 100% 통과) |
 | **전체 회귀 테스트** | 7개 테스트 전원 통과 (0 Regression) |
 

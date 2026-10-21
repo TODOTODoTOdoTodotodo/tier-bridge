@@ -2,7 +2,7 @@ import unittest
 import sqlite3
 import tempfile
 import os
-from tierbridge.memory_reinforcer import MemoryReinforcer
+from harnex.memory_reinforcer import MemoryReinforcer
 
 
 class TestMemoryReinforcer(unittest.TestCase):

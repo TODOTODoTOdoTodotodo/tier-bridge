@@ -1,7 +1,7 @@
 # Classifier Reserve & Fallback Controller Specification
 
 ## 1. 개요 및 목적 (Background & Objectives)
-TierBridge 하네스 프록시의 지능형 요청 분류기(Classifier)의 기본 모델을 고속 1.5x 우선 가속(`priority`) 및 별도 쿼터 풀을 가진 `gpt-reserve`로 전환하고, 쿼터 소진 또는 에러 발생 시 기존 `gpt-5.6-luna`로 자동 페일오버(Fallback)되는 고가용성 구조를 수립합니다.
+Harnex 하네스 프록시의 지능형 요청 분류기(Classifier)의 기본 모델을 고속 1.5x 우선 가속(`priority`) 및 별도 쿼터 풀을 가진 `gpt-reserve`로 전환하고, 쿼터 소진 또는 에러 발생 시 기존 `gpt-5.6-luna`로 자동 페일오버(Fallback)되는 고가용성 구조를 수립합니다.
 
 또한, 분류기가 `gpt-reserve`를 사용했는지, 혹은 폴백으로 `gpt-5.6-luna`를 사용했는지를 터미널 로그(`harness.log`) 및 대시보드(Kibana Live Dashboard)에서 직관적으로 식별할 수 있도록 관측성(Observability)을 고도화합니다.
 
@@ -46,7 +46,7 @@ TierBridge 하네스 프록시의 지능형 요청 분류기(Classifier)의 기�
 
 ## 3. 세부 동작 규격 (Detailed Specifications)
 
-### 3.1 라우터 페일오버 실행 규격 (`src/tierbridge/router.py`)
+### 3.1 라우터 페일오버 실행 규격 (`src/harnex/router.py`)
 1. **1순위 호출 (Primary)**:
    - 대상 모델: `gpt-reserve`
    - 페이로드: `reasoning.effort = "low"`, `stream = True`

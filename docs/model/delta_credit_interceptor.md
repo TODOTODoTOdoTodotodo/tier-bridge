@@ -42,7 +42,7 @@
 
 ## 3. 핵심 모듈 구성
 
-### 3.1. `src/tierbridge/credit_interceptor.py` (`CreditInterceptor`)
+### 3.1. `src/harnex/credit_interceptor.py` (`CreditInterceptor`)
 * **`fetch_usage()`**: `~/.codex/auth.json`의 JWT 토큰을 이용해 `https://chatgpt.com/backend-api/codex/usage`를 비동기 호출.
 * **`track_turn_delta(session_id, prompt_summary, model, effort, local_tokens, local_cost)`**:
   * 스트림 종료 후 1.0초 유예(`asyncio.sleep(1.0)`)를 두고 백엔드 `used`를 조회.

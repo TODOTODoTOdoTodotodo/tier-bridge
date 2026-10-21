@@ -1,6 +1,6 @@
 # 📑 [설계 명세서] 하네스 ✕ Giyeok 기억저장소 통합 대시보드 및 MemoryHandler
 
-본 문서는 `sub-memory-bootstrap` (Giyeok) 장기 기억 저장소에 축적된 문제-해결 지식 에피소드를 하네스 웹 대시보드(`usage_dashboard.html` / `tierbridge-dash`)에서 직접 탐색, 검색 및 통계 모니터링할 수 있도록 지원하는 **기억저장소 통합 대시보드 및 `MemoryHandler` 설계 명세서**입니다.
+본 문서는 `sub-memory-bootstrap` (Giyeok) 장기 기억 저장소에 축적된 문제-해결 지식 에피소드를 하네스 웹 대시보드(`usage_dashboard.html` / `harnex-dash`)에서 직접 탐색, 검색 및 통계 모니터링할 수 있도록 지원하는 **기억저장소 통합 대시보드 및 `MemoryHandler` 설계 명세서**입니다.
 
 ---
 
@@ -9,7 +9,7 @@
 ```
                  ┌────────────────────────────────────────────────────────┐
                  │         🧠 MemoryHandler (전용 비즈니스 레이어)          │
-                 │         (src/tierbridge/memory_handler.py)             │
+                 │         (src/harnex/memory_handler.py)             │
                  │  - get_recent_memories(limit, session_id)              │
                  │  - search_associated_memories(query, limit)            │
                  │  - get_memory_stats() (총 기억 수, 태그 수, 코드 수정율) │
@@ -27,8 +27,8 @@
 
 * **단일 책임 원칙 (SRP)**:
   * `harness.py`: 프록시 라우팅 및 얇은 HTTP 엔드포인트 디스패처 역할만 수행.
-  * `src/tierbridge/memory_handler.py`: `sub_memory.service.MemoryService` 및 SQLite `memory.db`와의 연결, 시맨틱/키워드 검색, 통계 산출 로직을 전담.
-  * `src/tierbridge/memory_ingestion_worker.py`: 인바운드 세션 로그 수집 및 1차 퀄리티 게이트 필터링 전담.
+  * `src/harnex/memory_handler.py`: `sub_memory.service.MemoryService` 및 SQLite `memory.db`와의 연결, 시맨틱/키워드 검색, 통계 산출 로직을 전담.
+  * `src/harnex/memory_ingestion_worker.py`: 인바운드 세션 로그 수집 및 1차 퀄리티 게이트 필터링 전담.
 
 ---
 
@@ -50,7 +50,7 @@
         "cost": 0.1523,
         "problem": "jCustNo 필드를 affCustNo로 변경하고 암호화 분기를 우회해줘",
         "solution": "GOLD",
-        "tags": ["019ffec0-eef3-7692-801c-60dae4e386bd", "GOLD", "tierbridge_auto_ingest", "code_modified"],
+        "tags": ["019ffec0-eef3-7692-801c-60dae4e386bd", "GOLD", "harnex_auto_ingest", "code_modified"],
         "created_at": "2026-08-20 10:15:30"
       }
     ]

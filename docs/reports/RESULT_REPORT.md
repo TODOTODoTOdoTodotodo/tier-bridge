@@ -1,12 +1,12 @@
-# 📊 [종합 결과 보고서] TierBridge 엔터프라이즈 AI 라우팅 하네스 & 생각나무 기억저장소 구축 완료
+# 📊 [종합 결과 보고서] Harnex 엔터프라이즈 AI 라우팅 하네스 & 생각나무 기억저장소 구축 완료
 
 ## 1. 📌 최종 엔지니어링 결과 요약
 
-TierBridge는 OpenAI / ChatGPT Enterprise 인프라 기반에서 동작하는 **엔터프라이즈 지능형 모델 라우팅 프록시 및 생각나무(Giyeok) 장기 기억저장소 통합 시스템**의 모든 핵심 기능 개발과 25개 단위 테스트 검증을 완료하였습니다.
+Harnex는 OpenAI / ChatGPT Enterprise 인프라 기반에서 동작하는 **엔터프라이즈 지능형 모델 라우팅 프록시 및 생각나무(Giyeok) 장기 기억저장소 통합 시스템**의 모든 핵심 기능 개발과 25개 단위 테스트 검증을 완료하였습니다.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│                               🚀 TierBridge AI Engine Core                               │
+│                               🚀 Harnex AI Engine Core                               │
 ├──────────────────────────────┬─────────────────────────────┬─────────────────────────────┤
 │ 1. 6-Tier Routing & Healing  │ 2. Giyeok Thought-Tree      │ 3. Real-time Live Dashboard │
 │ • 6단계 랭크 (LUNA ~ SOL)    │ • 4단계 메모리 파이프라인   │ • 3초 라이브 폴링 & 테마    │
@@ -46,12 +46,12 @@ TierBridge는 OpenAI / ChatGPT Enterprise 인프라 기반에서 동작하는 **
 - **⚡ Neuralizer (기억 정밀 소각)**: 클릭 즉시 캔버스에서 0ms 소각 및 DB 영구 삭제.
 
 ### ④ 🚀 런타임 격리 배포 & 글로벌 단축키 (Deployment & Aliases)
-- **격리 런타임 (`~/.tierbridge/live`)**: 개발 저장소와 실서버 환경 분리.
+- **격리 런타임 (`~/.harnex/live`)**: 개발 저장소와 실서버 환경 분리.
 - **원클릭 배포 (`./deploy.sh`)**: 가상환경 점검, 프록시 무중단 재가동, `~/.zshrc` 글로벌 셸 별칭 자동 주입:
-  - `tierbridge`: 하네스 상태 점검 및 환경변수 주입
-  - `tierbridge-dash`: 3초 라이브 대시보드 브라우저 오픈
-  - `tierbridge-log`: 실시간 스트리밍 로그 모니터링
-  - `tierbridge-credit`: 실제 계정 잔여 크레딧 조회
+  - `harnex`: 하네스 상태 점검 및 환경변수 주입
+  - `harnex-dash`: 3초 라이브 대시보드 브라우저 오픈
+  - `harnex-log`: 실시간 스트리밍 로그 모니터링
+  - `harnex-credit`: 실제 계정 잔여 크레딧 조회
 
 ---
 

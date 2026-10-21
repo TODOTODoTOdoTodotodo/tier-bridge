@@ -52,13 +52,13 @@
 
 ## 3. 세부 구현 스펙 (Implementation Specs)
 
-### 3.1 신규 모듈 생성: `src/tierbridge/memory_prefetcher.py`
+### 3.1 신규 모듈 생성: `src/harnex/memory_prefetcher.py`
 ```python
 import asyncio
 import logging
 from typing import Optional, Dict, Any, List
 
-logger = logging.getLogger("TierBridge.MemoryPrefetcher")
+logger = logging.getLogger("Harnex.MemoryPrefetcher")
 
 class MemoryPrefetcher:
     TIMEOUT_SEC = 0.050    # 50ms Strict Limit
@@ -77,7 +77,7 @@ class MemoryPrefetcher:
             return None
 
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
             
             # 50ms Strict 타임아웃 샌드박싱
             results = await asyncio.wait_for(

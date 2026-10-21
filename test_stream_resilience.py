@@ -74,7 +74,7 @@ class TestStreamResilience(unittest.IsolatedAsyncioTestCase):
             }
 
             # In auto mode, upstream 429 triggers failover to agy returning 200 SSE stream
-            with patch("tierbridge.adapters.agy_adapter.AgyAdapter.stream_agy_process") as mock_stream:
+            with patch("harnex.adapters.agy_adapter.AgyAdapter.stream_agy_process") as mock_stream:
                 async def fake_chunks(prompt, model):
                     yield "Hello from "
                     yield "Gemini"

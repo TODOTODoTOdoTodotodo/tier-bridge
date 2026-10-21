@@ -8,16 +8,16 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, PlainTextResponse, Response
 from dotenv import load_dotenv
 
-# TierBridge 패키지 임포트
-from tierbridge.models import UnifiedRequest, Message
-from tierbridge.adapters.factory import AdapterFactory
-from tierbridge.stream_transpiler import StreamTranspiler
-from tierbridge.router import Router
-from tierbridge.auth_manager import AuthManager
-from tierbridge.usage_tracker import UsageTracker
-from tierbridge.memory_prefetcher import MemoryPrefetcher
-from tierbridge.memory_handler import MemoryHandler
-from tierbridge.system_directive import SystemDirective
+# Harnex 패키지 임포트
+from harnex.models import UnifiedRequest, Message
+from harnex.adapters.factory import AdapterFactory
+from harnex.stream_transpiler import StreamTranspiler
+from harnex.router import Router
+from harnex.auth_manager import AuthManager
+from harnex.usage_tracker import UsageTracker
+from harnex.memory_prefetcher import MemoryPrefetcher
+from harnex.memory_handler import MemoryHandler
+from harnex.system_directive import SystemDirective
 
 import logging
 
@@ -32,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-app = FastAPI(title="TierBridge")
+app = FastAPI(title="Harnex")
 
 # 브라우저 대시보드 3초 라이브 오토싱크 및 AJAX 요청용 CORS 설정
 app.add_middleware(
@@ -49,9 +49,9 @@ async def on_startup():
         while True:
             try:
                 try:
-                    from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                    from src.harnex.official_pricing_crawler import OfficialPricingCrawler
                 except ImportError:
-                    from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                    from harnex.official_pricing_crawler import OfficialPricingCrawler
                 OfficialPricingCrawler.sync_prices(force=False)
             except Exception as e:
                 log.error(f"Error in periodic pricing sync: {e}")
@@ -182,7 +182,7 @@ async def get_usage():
     """ 실시간으로 세션 누적 사용량 및 예상 비용(USD) 조회 """
     return global_tracker.get_summary()
 
-from src.tierbridge.healing_engine import HealingEngine
+from src.harnex.healing_engine import HealingEngine
 
 @app.get("/v1/models/healing-status")
 async def get_healing_status():
@@ -213,9 +213,9 @@ async def switch_model_version(request: Request):
     return res
 
 try:
-    from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+    from src.harnex.official_pricing_crawler import OfficialPricingCrawler
 except ImportError:
-    from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+    from harnex.official_pricing_crawler import OfficialPricingCrawler
 
 @app.get("/v1/models/pricing")
 async def get_official_pricing():
@@ -235,21 +235,24 @@ async def sync_official_pricing():
 async def get_classifier_telemetry():
     """ 5단계 SOLID 분류 파이프라인 텔레메트리 메트릭 조회 """
     try:
-        from src.tierbridge.classifier.pipeline import ClassifierPipeline
+        from src.harnex.classifier.pipeline import ClassifierPipeline
     except ImportError:
-        from tierbridge.classifier.pipeline import ClassifierPipeline
+        from harnex.classifier.pipeline import ClassifierPipeline
     return ClassifierPipeline().get_telemetry()
 
 @app.get("/v1/dashboard/stats")
 async def get_dashboard_stats():
-    env_log = os.environ.get("TIERBRIDGE_LOG_PATH")
-    live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
-    dev_dir = os.environ.get("TIERBRIDGE_DEV_DIR")
+    env_log = os.environ.get("HARNEX_LOG_PATH", os.environ.get("TIERBRIDGE_LOG_PATH"))
+    live_log = os.path.expanduser("~/.harnex/live/harness.log")
+    old_live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+    dev_dir = os.environ.get("HARNEX_DEV_DIR", os.environ.get("TIERBRIDGE_DEV_DIR"))
     dev_log = os.path.join(dev_dir, "harness.log") if dev_dir else None
     if env_log and os.path.exists(env_log):
         log_file = env_log
     elif os.path.exists(live_log):
         log_file = live_log
+    elif os.path.exists(old_live_log):
+        log_file = old_live_log
     elif dev_log and os.path.exists(dev_log):
         log_file = dev_log
     elif os.path.exists("harness.log"):
@@ -319,9 +322,9 @@ async def get_dashboard_stats():
                     else:
                         try:
                             try:
-                                from tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                                from harnex.official_pricing_crawler import OfficialPricingCrawler
                             except ImportError:
-                                from src.tierbridge.official_pricing_crawler import OfficialPricingCrawler
+                                from src.harnex.official_pricing_crawler import OfficialPricingCrawler
                             in_p, out_p = OfficialPricingCrawler.get_price(model_val, fallback_in=1.0, fallback_out=3.0)
                         except Exception:
                             in_p, out_p = 1.0, 3.0
@@ -370,45 +373,45 @@ async def get_dashboard_stats():
 
     try:
         try:
-            from tierbridge.credit_interceptor import interceptor
+            from harnex.credit_interceptor import interceptor
         except ImportError:
-            from src.tierbridge.credit_interceptor import interceptor
+            from src.harnex.credit_interceptor import interceptor
         ent_balance = await interceptor.fetch_enterprise_usage()
     except Exception:
         ent_balance = None
 
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         mem_stats = MemoryHandler.get_memory_stats()
     except Exception:
         mem_stats = {"total_memories": 0, "total_tags": 0, "code_modified_count": 0, "structured_rate": 100.0}
 
     try:
         try:
-            from tierbridge.git_sync_checker import get_git_sync_status
+            from harnex.git_sync_checker import get_git_sync_status
         except ImportError:
-            from src.tierbridge.git_sync_checker import get_git_sync_status
+            from src.harnex.git_sync_checker import get_git_sync_status
         git_sync_data = get_git_sync_status()
     except Exception:
         git_sync_data = {"is_git": False, "needs_pull": False, "behind_count": 0, "pending_commits": []}
 
     try:
         try:
-            from tierbridge.version import get_version_info
+            from harnex.version import get_version_info
         except ImportError:
-            from src.tierbridge.version import get_version_info
+            from src.harnex.version import get_version_info
         app_version_tag = get_version_info().get("tag", "v0.1.1")
     except Exception:
         app_version_tag = "v0.1.1"
 
     try:
         try:
-            from tierbridge.router import Router
+            from harnex.router import Router
         except ImportError:
-            from src.tierbridge.router import Router
+            from src.harnex.router import Router
         clf_status = dict(Router.last_classifier_status)
         if not clf_status.get("last_timestamp"):
             clf_records = [r for r in records if "CLASSIFIER" in r.get("decision", "")]
@@ -417,9 +420,9 @@ async def get_dashboard_stats():
                 clf_status["last_timestamp"] = clf_records[-1].get("timestamp")
         try:
             try:
-                from tierbridge.classifier.pipeline import ClassifierPipeline
+                from harnex.classifier.pipeline import ClassifierPipeline
             except ImportError:
-                from src.tierbridge.classifier.pipeline import ClassifierPipeline
+                from src.harnex.classifier.pipeline import ClassifierPipeline
             clf_status["telemetry"] = ClassifierPipeline().get_telemetry()
         except Exception:
             clf_status["telemetry"] = {}
@@ -439,15 +442,15 @@ async def get_dashboard_stats():
 
 @app.get("/v1/version")
 async def get_app_version():
-    """ TierBridge 시스템 버전 정보 반환 """
+    """ Harnex 시스템 버전 정보 반환 """
     try:
         try:
-            from tierbridge.version import get_version_info
+            from harnex.version import get_version_info
         except ImportError:
-            from src.tierbridge.version import get_version_info
+            from src.harnex.version import get_version_info
         return get_version_info()
     except Exception:
-        return {"version": "0.1.1", "tag": "v0.1.1", "name": "TierBridge Core", "release_date": "2026-08-27"}
+        return {"version": "0.1.1", "tag": "v0.1.1", "name": "Harnex Core", "release_date": "2026-08-27"}
 
 # ==========================================
 # GiyEOK (SUB-MEMORY) DASHBOARD APIS
@@ -458,9 +461,9 @@ async def get_dashboard_memories(limit: int = 50, session_id: Optional[str] = No
     """ 기억저장소(memory.db)에 적재된 최근 문제-해결 지식 에피소드 목록 조회 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         memories = MemoryHandler.get_recent_memories(limit=limit, session_id=session_id)
         return {"status": "success", "total_count": len(memories), "memories": memories}
     except Exception as e:
@@ -471,9 +474,9 @@ async def search_dashboard_memories(q: str = "", limit: int = 10):
     """ 질의어(키워드/시맨틱) 기반 연관 기억 및 유사도 검색 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         results = MemoryHandler.search_associated_memories(query=q, limit=limit)
         return {"status": "success", "query": q, "results_count": len(results), "results": results}
     except Exception as e:
@@ -484,9 +487,9 @@ async def get_dashboard_memory_stats():
     """ 기억저장소 통계 지표 조회 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         return MemoryHandler.get_memory_stats()
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -496,9 +499,9 @@ async def get_dashboard_memory_graph(limit_nodes: int = 60):
     """ vis-network 렌더링용 nodes & edges 그래프 데이터셋 조회 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         data = MemoryHandler.get_graph_data(limit_nodes=limit_nodes)
         return {"status": "success", **data}
     except Exception as e:
@@ -509,9 +512,9 @@ async def get_dashboard_top_edges(limit: int = 10):
     """ 가장 높은 가중치를 가진 상위 엣지 및 노드 정보 목록 조회 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         edges = MemoryHandler.get_top_weighted_edges(limit=limit)
         return {"status": "success", "total_count": len(edges), "edges": edges}
     except Exception as e:
@@ -522,9 +525,9 @@ async def neuralize_dashboard_memory(node_id: str):
     """ Neuralizer: 특정 기억 노드를 안전하게 삭제하고 연결된 엣지만 정밀 소각 """
     try:
         try:
-            from tierbridge.memory_handler import MemoryHandler
+            from harnex.memory_handler import MemoryHandler
         except ImportError:
-            from src.tierbridge.memory_handler import MemoryHandler
+            from src.harnex.memory_handler import MemoryHandler
         result = MemoryHandler.neuralize_memory(node_id)
         return result
     except Exception as e:

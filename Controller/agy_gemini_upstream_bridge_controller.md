@@ -1,9 +1,9 @@
 # Antigravity CLI (Agy) Gemini Bridge & Failover Controller Specification
 
 ## 1. 개요 및 배경 (Background & Objectives)
-사내 ChatGPT Enterprise 계정의 워크스페이스 공용 크레딧 풀(`workspace_member_credits_depleted`)이 소진되었을 때, TierBridge 하네스 프록시(`http://localhost:18080`)를 경유하는 모든 코딩 에이전트(Codex CLI 및 기타 LLM 클라이언트)는 `HTTP 429 (usage_limit_reached)` 오류를 수신하여 진행 중이던 개발 컨텍스트와 대화가 중단됩니다.
+사내 ChatGPT Enterprise 계정의 워크스페이스 공용 크레딧 풀(`workspace_member_credits_depleted`)이 소진되었을 때, Harnex 하네스 프록시(`http://localhost:18080`)를 경유하는 모든 코딩 에이전트(Codex CLI 및 기타 LLM 클라이언트)는 `HTTP 429 (usage_limit_reached)` 오류를 수신하여 진행 중이던 개발 컨텍스트와 대화가 중단됩니다.
 
-이를 원천 해결하기 위해 로컬 개발 머신에 인증되어 있는 Google Antigravity CLI(`agy`)의 고성능 플래그십 모델인 **`gemini-3.8-flash-high`**를 TierBridge 하네스의 업스트림 백엔드로 연동하는 **Agy Gemini Bridge**를 구현합니다.
+이를 원천 해결하기 위해 로컬 개발 머신에 인증되어 있는 Google Antigravity CLI(`agy`)의 고성능 플래그십 모델인 **`gemini-3.8-flash-high`**를 Harnex 하네스의 업스트림 백엔드로 연동하는 **Agy Gemini Bridge**를 구현합니다.
 
 본 사양을 통해 사용자는:
 1. 기존 하네스 포트(`18080`) 및 클라이언트 설정을 변경할 필요 없이 끊긴 컨텍스트를 즉시 이어나갈 수 있습니다.
@@ -28,7 +28,7 @@
 [Agent Client (Codex / OpenAI API)]
          │
          ▼  (POST /v1/responses or /v1/chat/completions)
-[TierBridge Harness (18080)]
+[Harnex Harness (18080)]
          │
     ┌────┴───────────────────────────────┐
     │ 1. UPSTREAM_PROVIDER == 'agy'      │ ──► [AgyAdapter (gemini-3.8-flash-high)] ──► [agy CLI Subprocess]

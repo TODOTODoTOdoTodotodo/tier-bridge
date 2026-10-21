@@ -1,12 +1,12 @@
 import unittest
-from tierbridge.models import UnifiedRequest, Message
-from tierbridge.classifier.interfaces import ClassificationContext
-from tierbridge.classifier.policy_manager import ClassifierPolicyManager
-from tierbridge.classifier.stages.fast_path import FastPathStage
-from tierbridge.classifier.stages.context_metrics import ContextMetricsStage
-from tierbridge.classifier.stages.escalation import EscalationStage
-from tierbridge.classifier.stages.budget_governor import BudgetGovernorStage
-from tierbridge.classifier.pipeline import ClassifierPipeline
+from harnex.models import UnifiedRequest, Message
+from harnex.classifier.interfaces import ClassificationContext
+from harnex.classifier.policy_manager import ClassifierPolicyManager
+from harnex.classifier.stages.fast_path import FastPathStage
+from harnex.classifier.stages.context_metrics import ContextMetricsStage
+from harnex.classifier.stages.escalation import EscalationStage
+from harnex.classifier.stages.budget_governor import BudgetGovernorStage
+from harnex.classifier.pipeline import ClassifierPipeline
 
 class TestClassifierPipeline(unittest.IsolatedAsyncioTestCase):
     def setUp(self):

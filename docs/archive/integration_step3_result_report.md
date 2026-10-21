@@ -10,8 +10,8 @@
 | :--- | :--- |
 | **작업 명칭** | Step 3: 비용/난이도 기반 엣지 가중치 재강화 & 보조 힌트 제안 |
 | **적용 브랜치** | `feature/memory-integration-step3` |
-| **핵심 모듈** | `src/tierbridge/memory_reinforcer.py` |
-| **연동 컴포넌트** | `src/tierbridge/memory_ingestion_worker.py`, `src/tierbridge/memory_handler.py`, `src/tierbridge/memory_prefetcher.py` |
+| **핵심 모듈** | `src/harnex/memory_reinforcer.py` |
+| **연동 컴포넌트** | `src/harnex/memory_ingestion_worker.py`, `src/harnex/memory_handler.py`, `src/harnex/memory_prefetcher.py` |
 | **단위 테스트** | `test_memory_reinforcer.py` 포함 24개 테스트 100% 통과 |
 
 ---
