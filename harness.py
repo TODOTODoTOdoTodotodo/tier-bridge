@@ -46,9 +46,9 @@ app.add_middleware(
 # 신호 기반 비동기 멀티에이전트 오케스트레이터 REST API 마운트 (Dual-Mode)
 try:
     try:
-        from src.harnex.orchestrator.api import orchestrator_router
-    except ImportError:
         from harnex.orchestrator.api import orchestrator_router
+    except ImportError:
+        from src.harnex.orchestrator.api import orchestrator_router
     app.include_router(orchestrator_router, prefix="/v1/orchestrator", tags=["orchestrator"])
 except Exception as e:
     log.warning(f"Failed to mount orchestrator router: {e}")
