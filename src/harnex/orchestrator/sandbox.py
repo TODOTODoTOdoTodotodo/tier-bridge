@@ -1,0 +1,143 @@
+# src/harnex/orchestrator/sandbox.py
+import asyncio
+import os
+import re
+import shutil
+import time
+from typing import Optional
+
+from harnex.orchestrator.config import OrchestratorConfig
+
+SUBTASK_ID_REGEX = re.compile(r"^[a-zA-Z0-9_-]{3,64}$")
+
+
+class WorktreeSandboxManager:
+    """
+    Manages isolated Git worktrees and branches for worker agents.
+    Prevents filesystem write collisions, git index.lock contention, and path traversal attacks.
+    """
+    def __init__(self, base_repo_dir: str, config: OrchestratorConfig):
+        self.base_repo_dir = os.path.abspath(base_repo_dir)
+        self.config = config
+        self.worktree_root = os.path.abspath(os.path.expanduser(config.worktree_root))
+        os.makedirs(self.worktree_root, exist_ok=True)
+        self._lock = asyncio.Lock()
+
+    def _validate_subtask_id(self, subtask_id: str) -> str:
+        if not SUBTASK_ID_REGEX.match(subtask_id):
+            raise ValueError(f"Invalid subtask_id '{subtask_id}'. Must match {SUBTASK_ID_REGEX.pattern} to prevent path injection.")
+        return subtask_id
+
+    def get_worktree_path(self, subtask_id: str) -> str:
+        self._validate_subtask_id(subtask_id)
+        path = os.path.abspath(os.path.join(self.worktree_root, subtask_id))
+        if not path.startswith(self.worktree_root):
+            raise ValueError(f"Path traversal detected: {path}")
+        return path
+
+    async def _run_git(self, args: list, cwd: Optional[str] = None) -> tuple[int, str, str]:
+        cmd = ["git"] + args
+        work_dir = cwd or self.base_repo_dir
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=work_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate()
+        return proc.returncode, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
+
+    async def create_sandbox(self, subtask_id: str, base_commit: str = "HEAD") -> str:
+        """
+        Creates an isolated Git worktree for subtask_id at worktree_root/subtask_id
+        on a dedicated branch 'task/{subtask_id}'.
+        Guards against disk exhaustion and git lock contention.
+        """
+        self._validate_subtask_id(subtask_id)
+        worktree_path = self.get_worktree_path(subtask_id)
+
+        # 1. Disk space check
+        total, used, free = shutil.disk_usage(self.worktree_root)
+        if free < self.config.min_disk_free_bytes:
+            raise RuntimeError(f"Insufficient disk space in {self.worktree_root} (free: {free}B, required: {self.config.min_disk_free_bytes}B)")
+
+        # 2. Worktree creation with lock & retry
+        branch_name = f"task/{subtask_id}"
+
+        async with self._lock:
+            if os.path.exists(worktree_path):
+                # Clean up preexisting worktree if any
+                await self.cleanup_sandbox(subtask_id)
+
+            attempts = self.config.git_lock_retry_attempts
+            backoff_base = self.config.git_lock_retry_backoff_base_ms / 1000.0
+
+            for attempt in range(attempts):
+                # git worktree add <path> -b <branch> <base_commit>
+                code, out, err = await self._run_git(["worktree", "add", worktree_path, "-b", branch_name, base_commit])
+                if code == 0:
+                    return worktree_path
+
+                if "already exists" in err:
+                    # branch might exist from previous run, try without -b
+                    code2, out2, err2 = await self._run_git(["worktree", "add", worktree_path, branch_name])
+                    if code2 == 0:
+                        return worktree_path
+
+                if "index.lock" in err or "Unable to create" in err:
+                    await asyncio.sleep(backoff_base * (2 ** attempt))
+                    continue
+
+                raise RuntimeError(f"Failed to create git worktree for '{subtask_id}': {err}")
+
+            raise RuntimeError(f"Failed to create git worktree after {attempts} attempts due to lock contention: {err}")
+
+    async def cleanup_sandbox(self, subtask_id: str, delete_branch: bool = True) -> None:
+        """
+        Safely removes a worktree and deletes its temporary task branch.
+        """
+        self._validate_subtask_id(subtask_id)
+        worktree_path = self.get_worktree_path(subtask_id)
+        branch_name = f"task/{subtask_id}"
+
+        async with self._lock:
+            if os.path.exists(worktree_path):
+                await self._run_git(["worktree", "remove", "--force", worktree_path])
+                if os.path.exists(worktree_path):
+                    shutil.rmtree(worktree_path, ignore_errors=True)
+
+            await self._run_git(["worktree", "prune"])
+
+            if delete_branch:
+                await self._run_git(["branch", "-D", branch_name])
+
+    async def sweep_stale_worktrees(self) -> int:
+        """
+        Sweeps worktrees that exceed worktree_ttl_seconds.
+        Returns the count of swept worktrees.
+        """
+        now = time.time()
+        ttl = self.config.worktree_ttl_seconds
+        swept = 0
+
+        async with self._lock:
+            if not os.path.exists(self.worktree_root):
+                return 0
+
+            for entry in os.listdir(self.worktree_root):
+                full_path = os.path.join(self.worktree_root, entry)
+                if os.path.isdir(full_path):
+                    try:
+                        mtime = os.path.getmtime(full_path)
+                        if (now - mtime) > ttl:
+                            await self._run_git(["worktree", "remove", "--force", full_path])
+                            if os.path.exists(full_path):
+                                shutil.rmtree(full_path, ignore_errors=True)
+                            swept += 1
+                    except Exception:
+                        pass
+
+            if swept > 0:
+                await self._run_git(["worktree", "prune"])
+
+        return swept

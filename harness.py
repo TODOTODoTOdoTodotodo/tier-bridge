@@ -43,6 +43,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 신호 기반 비동기 멀티에이전트 오케스트레이터 REST API 마운트 (Dual-Mode)
+try:
+    try:
+        from src.harnex.orchestrator.api import orchestrator_router
+    except ImportError:
+        from harnex.orchestrator.api import orchestrator_router
+    app.include_router(orchestrator_router, prefix="/v1/orchestrator", tags=["orchestrator"])
+except Exception as e:
+    log.warning(f"Failed to mount orchestrator router: {e}")
+
 @app.on_event("startup")
 async def on_startup():
     async def run_periodic_pricing_sync():
@@ -429,6 +439,24 @@ async def get_dashboard_stats():
     except Exception:
         clf_status = {"primary": "gpt-reserve", "fallback": "gpt-5.6-luna", "last_used": "gpt-reserve", "last_timestamp": None, "telemetry": {}}
 
+    try:
+        try:
+            from harnex.orchestrator.api import get_orchestrator_summary
+        except ImportError:
+            from src.harnex.orchestrator.api import get_orchestrator_summary
+        orch_stats = get_orchestrator_summary()
+    except Exception:
+        orch_stats = {
+            "enabled": True,
+            "active_tasks_count": 0,
+            "completed_tasks_count": 0,
+            "failed_tasks_count": 0,
+            "tasks": []
+        }
+
+    tot_credits = sum(r.get("credits", (r.get("cost", 0) / 0.20)) for r in records)
+    real_credits = sum(r.get("real_credit", 0) or 0 for r in records if r.get("real_credit") is not None)
+
     return {
         "app_version": app_version_tag,
         "classifier_status": clf_status,
@@ -437,7 +465,12 @@ async def get_dashboard_stats():
         "healing_history": list(reversed(healing_history)),
         "enterprise_balance": ent_balance,
         "memory_stats": mem_stats,
-        "git_status": git_sync_data
+        "git_status": git_sync_data,
+        "total_records": len(records),
+        "total_credits": round(tot_credits, 2),
+        "real_credits": round(real_credits, 2),
+        "balance": ent_balance.get("remaining") if (isinstance(ent_balance, dict) and ent_balance.get("remaining") is not None) else 0.0,
+        "orchestrator": orch_stats
     }
 
 @app.get("/v1/version")

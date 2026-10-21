@@ -173,6 +173,13 @@ PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" "$
 EOF
 chmod +x "$HOME/.local/bin/harnex-credit"
 
+cat << 'EOF' > "$HOME/.local/bin/harnex-task"
+#!/usr/bin/env bash
+LIVE_DIR="$HOME/.harnex/live"
+PYTHONPATH="$LIVE_DIR/src:$LIVE_DIR:$PYTHONPATH" "$LIVE_DIR/.venv/bin/python" -m harnex.orchestrator.cli "$@"
+EOF
+chmod +x "$HOME/.local/bin/harnex-task"
+
 cat << 'EOF' > "$HOME/.local/bin/harnex"
 #!/usr/bin/env bash
 source "$HOME/.harnex/live/run_harness.sh" "$@"
@@ -184,6 +191,7 @@ ln -sf "$HOME/.local/bin/harnex" "$HOME/.local/bin/tierbridge" 2>/dev/null || tr
 ln -sf "$HOME/.local/bin/harnex-dash" "$HOME/.local/bin/tierbridge-dash" 2>/dev/null || true
 ln -sf "$HOME/.local/bin/harnex-log" "$HOME/.local/bin/tierbridge-log" 2>/dev/null || true
 ln -sf "$HOME/.local/bin/harnex-credit" "$HOME/.local/bin/tierbridge-credit" 2>/dev/null || true
+ln -sf "$HOME/.local/bin/harnex-task" "$HOME/.local/bin/tierbridge-task" 2>/dev/null || true
 
 setup_alias() {
     local shell_rc="$1"
@@ -195,6 +203,7 @@ setup_alias() {
             echo "alias harnex-log=\"tail -f \$HOME/.harnex/live/harness.log\"" >> "$shell_rc"
             echo "alias harnex-dash=\"PYTHONPATH=\\\$HOME/.harnex/live/src:\\\$HOME/.harnex/live:\\\$PYTHONPATH \\\$HOME/.harnex/live/.venv/bin/python \\\$HOME/.harnex/live/analyze_usage.py \\\$HOME/.harnex/live/harness.log --html\"" >> "$shell_rc"
             echo "alias harnex-credit=\"PYTHONPATH=\\\$HOME/.harnex/live/src:\\\$HOME/.harnex/live:\\\$PYTHONPATH \\\$HOME/.harnex/live/.venv/bin/python \\\$HOME/.harnex/live/analyze_usage.py --balance\"" >> "$shell_rc"
+            echo "alias harnex-task=\"PYTHONPATH=\\\$HOME/.harnex/live/src:\\\$HOME/.harnex/live:\\\$PYTHONPATH \\\$HOME/.harnex/live/.venv/bin/python -m harnex.orchestrator.cli\"" >> "$shell_rc"
             echo "🔗 Shell Alias 가 $shell_rc 에 자동 등록되었습니다."
         fi
     fi

@@ -111,6 +111,198 @@ def show_enterprise_balance():
     except Exception as e:
         print(f"\n❌ [오류] 엔터프라이즈 실시간 크레딧 조회 실패: {e}\n")
 
+def generate_stats_json(log_filepath=None, target_date=None, target_month=None, target_session=None):
+    """
+    /v1/dashboard/stats API 및 대시보드 통계용 딕셔너리 데이터 반환.
+    기존 필드(total_records, real_credits, total_credits, records, balance 등)를 100% 유지하며
+    비동기 멀티에이전트 오케스트레이터(orchestrator) 섹션을 포함함.
+    """
+    if not log_filepath:
+        env_log = os.environ.get("HARNEX_LOG_PATH", os.environ.get("TIERBRIDGE_LOG_PATH"))
+        live_log = os.path.expanduser("~/.harnex/live/harness.log")
+        old_live_log = os.path.expanduser("~/.tierbridge/live/harness.log")
+        dev_dir = os.environ.get("HARNEX_DEV_DIR", os.environ.get("TIERBRIDGE_DEV_DIR"))
+        dev_log = os.path.join(dev_dir, "harness.log") if dev_dir else None
+        if env_log and os.path.exists(env_log):
+            log_filepath = env_log
+        elif os.path.exists(live_log):
+            log_filepath = live_log
+        elif os.path.exists(old_live_log):
+            log_filepath = old_live_log
+        elif dev_log and os.path.exists(dev_log):
+            log_filepath = dev_log
+        elif os.path.exists("harness.log"):
+            log_filepath = "harness.log"
+        else:
+            log_filepath = "harness.log"
+
+    usage_pattern = re.compile(
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[USAGE(?::\s*(?P<decision_opt>[^\]]+))?\](?:\s+(?P<decision_legacy>[^\s(]+))?\s+\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)?(?:\s*\|\s*cost=\$(?P<cost>[\d\.]+) USD)?'
+    )
+    decision_pattern = re.compile(
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?(?:\[sid:\s*(?P<sid>[^\]]+)\]\s*)?➔ \[DECISION[^\]]*\] (?P<decision>[^\s]+)(?:\s+\([^)]+\))?(?:\s+\[clf:[^\]]+\])?\s*\|\s*\"(?P<prompt>.*)\"$'
+    )
+    healing_pattern = re.compile(
+        r'^(?:\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*)?➔ \[(?P<event_type>HEALING|VERSION_SWITCH)\] (?P<details>.*)$'
+    )
+
+    records = []
+    prompt_history = []
+    session_prompts = {}
+    healing_history = []
+    latest_balance = 0.0
+
+    if os.path.exists(log_filepath):
+        with open(log_filepath, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                h_match = healing_pattern.search(line)
+                if h_match:
+                    healing_history.append({
+                        "timestamp": h_match.group("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "event_type": h_match.group("event_type"),
+                        "details": h_match.group("details")
+                    })
+                    continue
+
+                d_match = decision_pattern.search(line)
+                if d_match:
+                    d_sid = d_match.group("sid") or "N/A"
+                    d_prompt = d_match.group("prompt")
+                    prompt_history.append({
+                        "timestamp": d_match.group("timestamp"),
+                        "sid": d_sid,
+                        "decision": d_match.group("decision"),
+                        "prompt": d_prompt
+                    })
+                    if d_sid != "N/A":
+                        session_prompts[d_sid] = d_prompt
+                    continue
+
+                u_match = usage_pattern.search(line)
+                if u_match:
+                    ts_str = u_match.group("timestamp")
+                    sid_str = u_match.group("sid") or "N/A"
+                    date_key = "Unknown Date"
+                    month_key = "Unknown Month"
+                    if ts_str:
+                        try:
+                            dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                            date_key = dt.strftime("%Y-%m-%d")
+                            month_key = dt.strftime("%Y-%m")
+                        except ValueError:
+                            pass
+
+                    decision_str = u_match.group("decision_opt") or u_match.group("decision_legacy") or "UNKNOWN"
+                    model = u_match.group("model")
+                    in_tok = int(u_match.group("in_tok"))
+                    out_tok = int(u_match.group("out_tok"))
+                    loc_val = int(u_match.group("loc")) if u_match.group("loc") else 0
+                    cost_str = u_match.group("cost")
+                    if cost_str:
+                        cost = float(cost_str)
+                    else:
+                        try:
+                            try:
+                                from harnex.official_pricing_crawler import OfficialPricingCrawler
+                            except ImportError:
+                                from src.harnex.official_pricing_crawler import OfficialPricingCrawler
+                            in_p, out_p = OfficialPricingCrawler.get_price(model, fallback_in=1.0, fallback_out=3.0)
+                        except Exception:
+                            in_p, out_p = 1.0, 3.0
+                        cost = (in_tok / 1_000_000.0) * in_p + (out_tok / 1_000_000.0) * out_p
+
+                    real_credit_val = float(u_match.group("real_credit")) if u_match.group("real_credit") else None
+                    balance_val = float(u_match.group("balance")) if u_match.group("balance") else None
+                    if balance_val is not None:
+                        latest_balance = balance_val
+                    credits_val = real_credit_val if real_credit_val is not None else (cost / 0.20)
+
+                    associated_prompt = ""
+                    if sid_str != "N/A" and sid_str in session_prompts:
+                        associated_prompt = session_prompts[sid_str]
+                    elif prompt_history:
+                        for p in reversed(prompt_history):
+                            if sid_str != "N/A" and p["sid"] == sid_str:
+                                associated_prompt = p["prompt"]
+                                break
+                        if not associated_prompt and sid_str == "N/A":
+                            associated_prompt = prompt_history[-1]["prompt"]
+                            if prompt_history[-1]["sid"] != "N/A":
+                                sid_str = prompt_history[-1]["sid"]
+                        elif not associated_prompt:
+                            associated_prompt = prompt_history[-1]["prompt"]
+
+                    if sid_str == "N/A" and associated_prompt:
+                        import hashlib
+                        prompt_hash = hashlib.md5(associated_prompt.encode("utf-8")).hexdigest()[:8]
+                        sid_str = f"sess_{prompt_hash}"
+                    elif sid_str == "N/A":
+                        sid_str = "sess_legacy"
+
+                    records.append({
+                        "timestamp": ts_str or "N/A",
+                        "date": date_key,
+                        "month": month_key,
+                        "session_id": sid_str,
+                        "decision": decision_str,
+                        "model": model,
+                        "prompt": associated_prompt,
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "total_tokens": in_tok + out_tok,
+                        "loc": loc_val,
+                        "cost": cost,
+                        "real_credit": real_credit_val,
+                        "credits": credits_val,
+                        "balance": balance_val
+                    })
+
+    filtered_records = records
+    if target_month:
+        filtered_records = [r for r in filtered_records if r["month"] == target_month]
+    if target_date:
+        filtered_records = [r for r in filtered_records if r["date"] == target_date]
+    if target_session:
+        filtered_records = [r for r in filtered_records if r["session_id"] == target_session]
+
+    total_records = len(filtered_records)
+    total_cost = sum(r["cost"] for r in filtered_records)
+    total_tokens = sum(r["total_tokens"] for r in filtered_records)
+    total_loc = sum(r["loc"] for r in filtered_records)
+    total_credits = round(sum(r.get("credits", r["cost"] / 0.20) for r in filtered_records), 2)
+    real_credits = round(sum(r.get("real_credit", 0) or 0 for r in filtered_records if r.get("real_credit") is not None), 2)
+
+    try:
+        try:
+            from harnex.orchestrator.api import get_orchestrator_summary
+        except ImportError:
+            from src.harnex.orchestrator.api import get_orchestrator_summary
+        orch_stats = get_orchestrator_summary()
+    except Exception:
+        orch_stats = {
+            "enabled": True,
+            "active_tasks_count": 0,
+            "completed_tasks_count": 0,
+            "failed_tasks_count": 0,
+            "tasks": []
+        }
+
+    return {
+        "total_records": total_records,
+        "total_credits": total_credits,
+        "real_credits": real_credits,
+        "total_cost": total_cost,
+        "total_tokens": total_tokens,
+        "total_loc": total_loc,
+        "balance": latest_balance,
+        "records": filtered_records,
+        "healing_history": list(reversed(healing_history)),
+        "orchestrator": orch_stats
+    }
+
+get_dashboard_stats = generate_stats_json
+
 def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats, session_stats, decision_stats, prompt_stats, total_cost, total_credits, total_tokens, total_loc, target_date=None, target_month=None, target_session=None, healing_history=None):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     html_filename = os.path.join(script_dir, "usage_dashboard.html")
@@ -731,17 +923,21 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
     <!-- Tab Navigation -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-2 gap-4">
-        <div class="inline-flex p-1 bg-slate-200/80 dark:bg-slate-900/80 border border-slate-300/80 dark:border-white/10 rounded-xl shadow-sm gap-1">
-            <button id="tabBtnUsage" onclick="switchDashboardTab('usage')"
-                    class="px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer bg-[#4696e5] text-white shadow-sm">
+        <div id="tabNavigation" class="inline-flex p-1 bg-slate-200/80 dark:bg-slate-900/80 border border-slate-300/80 dark:border-white/10 rounded-xl shadow-sm gap-1">
+            <button id="tabBtnUsage" onclick="switchDashboardTab('usage')" data-tab="usage"
+                    class="tab-button px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer bg-[#4696e5] text-white shadow-sm">
                 <i class="fa-solid fa-chart-line text-xs"></i>
                 <span>사용량 &amp; 크레딧</span>
             </button>
-            <button id="tabBtnMemory" onclick="switchDashboardTab('memory')"
-                    class="px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
+            <button id="tabBtnMemory" onclick="switchDashboardTab('memory')" data-tab="memory"
+                    class="tab-button px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
                 <i class="fa-solid fa-brain text-xs text-purple-500"></i>
                 <span>기억 저장소</span>
                 <span id="memTabCountBadge" class="text-[9px] px-2 py-0.5 bg-purple-500/15 text-purple-600 dark:text-purple-300 rounded-full font-mono font-medium border border-purple-500/30">0건</span>
+            </button>
+            <button class="tab-button text-slate-400 hover:text-white px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer" data-tab="tasks" id="tabBtnTasks" onclick="switchDashboardTab('tasks')">
+                <i class="fa-solid fa-diagram-project mr-1.5"></i> 멀티에이전트 (Tasks)
+                <span id="activeTasksBadge" class="hidden ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">0</span>
             </button>
         </div>
     </div>
@@ -1321,6 +1517,82 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
         </div>
     </div><!-- end #memoryView -->
+
+    <!-- Tab 3: Asynchronous Multi-Agent Tasks View -->
+    <div id="tabContent-tasks" class="hidden">
+        <!-- 4-Card Header Summary -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <!-- Card 1: 총 태스크 -->
+            <div class="glass-card p-5 rounded-2xl border border-slate-200 dark:border-white/10 group">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="fractal-icon-circle sm bg-blue-500/15 border border-blue-500/30 text-[#4696e5]">
+                        <i class="fa-solid fa-diagram-project"></i>
+                    </div>
+                    <span class="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">총 태스크</span>
+                </div>
+                <div class="text-3xl font-extrabold text-slate-800 dark:text-slate-100 font-mono mb-1 tracking-tight" id="kpiTasksTotal">0 <span class="text-xs font-normal text-slate-400 font-sans">개</span></div>
+                <div class="text-xs text-slate-500 dark:text-slate-400" id="kpiTasksSubtext">DAG 단위 워크플로우</div>
+            </div>
+
+            <!-- Card 2: 실행 중 워커 (Active) -->
+            <div class="glass-card p-5 rounded-2xl border border-slate-200 dark:border-white/10 group">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="fractal-icon-circle sm bg-amber-500/15 border border-amber-500/30 text-amber-500">
+                        <i class="fa-solid fa-bolt-lightning"></i>
+                    </div>
+                    <span class="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">실행 중 워커 (Active)</span>
+                </div>
+                <div class="text-3xl font-extrabold text-amber-500 font-mono mb-1 tracking-tight" id="kpiTasksActiveWorkers">0 <span class="text-xs font-normal text-slate-400 font-sans">명</span></div>
+                <div class="text-xs text-slate-500 dark:text-slate-400" id="kpiTasksActiveSubtext">병렬 격리 프로세스</div>
+            </div>
+
+            <!-- Card 3: 누적 생성 LOC -->
+            <div class="glass-card p-5 rounded-2xl border border-slate-200 dark:border-white/10 group">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="fractal-icon-circle sm bg-cyan-500/15 border border-cyan-500/30 text-cyan-500">
+                        <i class="fa-solid fa-code"></i>
+                    </div>
+                    <span class="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">누적 생성 LOC</span>
+                </div>
+                <div class="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400 font-mono mb-1 tracking-tight" id="kpiTasksLoc">0 <span class="text-xs font-normal text-slate-400 font-sans">lines</span></div>
+                <div class="text-xs text-slate-500 dark:text-slate-400" id="kpiTasksLocSubtext">서브태스크 작성 코드량</div>
+            </div>
+
+            <!-- Card 4: 절감 크레딧 -->
+            <div class="glass-card p-5 rounded-2xl border border-emerald-500/25 bg-emerald-50/40 dark:bg-emerald-950/20 group">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="fractal-icon-circle sm bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <span class="text-xs text-emerald-700 dark:text-emerald-400 font-semibold uppercase tracking-wider">절감 크레딧</span>
+                </div>
+                <div class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono mb-1 tracking-tight" id="kpiTasksSavedCredits">0.00 <span class="text-xs font-normal text-slate-400 font-sans">Cr</span></div>
+                <div class="text-xs text-slate-500 dark:text-slate-400" id="kpiTasksSavingsSubtext">오케스트레이션 다운스케일링</div>
+            </div>
+        </div>
+
+        <!-- Empty State Card -->
+        <div id="tasksEmptyState" class="glass-card p-12 rounded-2xl border border-slate-200 dark:border-white/10 text-center flex flex-col items-center justify-center">
+            <div class="fractal-icon-circle lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 mb-4 text-2xl">
+                <i class="fa-solid fa-diagram-project"></i>
+            </div>
+            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">
+                현재 실행 중인 비동기 오케스트레이터 태스크가 없습니다.
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4 max-w-md">
+                <code class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-emerald-600 dark:text-emerald-400 font-bold">harnex-task dispatch</code> 명령어로 병렬 태스크를 시작하세요.
+            </p>
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                <i class="fa-solid fa-terminal text-emerald-400"></i>
+                <span>harnex-task dispatch --plan &lt;dag_spec.json&gt;</span>
+            </div>
+        </div>
+
+        <!-- Task DAG & Subtasks List Container -->
+        <div id="tasksContainer" class="hidden space-y-6">
+            <!-- Dynamically populated via renderTasksView() -->
+        </div>
+    </div><!-- end #tabContent-tasks -->
 
     <!-- Fullscreen Expanded Dual Viewport Modal -->
     <div id="expandedGraphModal" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col p-4 md:p-6">
@@ -2789,6 +3061,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         let currentGraphData = {client_graph_data_json};
         let currentTopEdges = {client_top_edges_json};
         let currentDashboardTab = 'usage';
+        let orchestratorData = {{"enabled": true, "active_tasks_count": 0, "completed_tasks_count": 0, "failed_tasks_count": 0, "tasks": []}};
         let currentModalViewMode = 'network';
         let markmapInstance = null;
         let markmapTransformer = null;
@@ -2882,30 +3155,237 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
         }});
 
+        function escapeHtml(str) {{
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }}
+
+        function getTierBadgeClass(tier) {{
+            const t = (tier || '').toUpperCase();
+            if (t === 'BRONZE') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-900/30 text-amber-500 border border-amber-800/40';
+            if (t === 'SILVER') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-slate-400/20 text-slate-300 border border-slate-400/30';
+            if (t === 'GOLD') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30';
+            if (t === 'PLATINUM') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30';
+            if (t === 'DIAMOND') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30';
+            if (t === 'CHALLENGER') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30';
+            return 'px-2 py-0.5 rounded text-[10px] font-bold bg-slate-500/20 text-slate-400 border border-slate-500/30';
+        }}
+
+        function getStateBadgeClass(state) {{
+            const s = (state || '').toUpperCase();
+            if (s === 'RUNNING') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse';
+            if (s === 'COMPLETED') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+            if (s === 'FAILED') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30';
+            if (s === 'CANCELLED') return 'px-2 py-0.5 rounded text-[10px] font-bold bg-slate-600/20 text-slate-400 border border-slate-600/30';
+            return 'px-2 py-0.5 rounded text-[10px] font-bold bg-slate-500/20 text-slate-400 border border-slate-500/30';
+        }}
+
+        function renderTasksView(orchData) {{
+            const orch = (orchData && orchData.orchestrator) || orchData || {{ enabled: false, tasks: [] }};
+            const tasks = Array.isArray(orch.tasks) ? orch.tasks : [];
+
+            let totalTasks = tasks.length;
+            if (totalTasks === 0 && (orch.active_tasks_count || orch.completed_tasks_count || orch.failed_tasks_count)) {{
+                totalTasks = (orch.active_tasks_count || 0) + (orch.completed_tasks_count || 0) + (orch.failed_tasks_count || 0);
+            }}
+            let activeWorkers = 0;
+            let totalLoc = 0;
+            let totalCreditsSaved = 0.0;
+
+            tasks.forEach(task => {{
+                const subtasks = Array.isArray(task.subtasks) ? task.subtasks : Object.values(task.subtasks || {{}});
+                subtasks.forEach(s => {{
+                    if (s.state === 'RUNNING') activeWorkers++;
+                    totalLoc += parseInt(s.loc || s.loc_modified || 0, 10);
+                    totalCreditsSaved += parseFloat(s.credits || s.credits_used || 0);
+                }});
+            }});
+
+            const kpiTotal = document.getElementById('kpiTasksTotal');
+            if (kpiTotal) kpiTotal.innerHTML = `${{totalTasks}} <span class="text-xs font-normal text-slate-400 font-sans">개</span>`;
+
+            const kpiActive = document.getElementById('kpiTasksActiveWorkers');
+            if (kpiActive) kpiActive.innerHTML = `${{activeWorkers}} <span class="text-xs font-normal text-slate-400 font-sans">명</span>`;
+
+            const kpiLoc = document.getElementById('kpiTasksLoc');
+            if (kpiLoc) kpiLoc.innerHTML = `${{totalLoc.toLocaleString()}} <span class="text-xs font-normal text-slate-400 font-sans">lines</span>`;
+
+            const kpiSaved = document.getElementById('kpiTasksSavedCredits');
+            if (kpiSaved) kpiSaved.innerHTML = `${{totalCreditsSaved.toFixed(2)}} <span class="text-xs font-normal text-slate-400 font-sans">Cr</span>`;
+
+            const activeTasksCount = orch.active_tasks_count !== undefined ? orch.active_tasks_count : activeWorkers;
+            const activeBadge = document.getElementById('activeTasksBadge');
+            if (activeBadge) {{
+                if (activeTasksCount > 0) {{
+                    activeBadge.innerText = `${{activeTasksCount}} RUNNING`;
+                    activeBadge.classList.remove('hidden');
+                }} else {{
+                    activeBadge.innerText = '0';
+                    activeBadge.classList.add('hidden');
+                }}
+            }}
+
+            const emptyState = document.getElementById('tasksEmptyState');
+            const tasksContainer = document.getElementById('tasksContainer');
+
+            if (!emptyState || !tasksContainer) return;
+
+            if (tasks.length === 0) {{
+                emptyState.classList.remove('hidden');
+                tasksContainer.classList.add('hidden');
+                tasksContainer.innerHTML = '';
+                return;
+            }}
+
+            emptyState.classList.add('hidden');
+            tasksContainer.classList.remove('hidden');
+
+            let html = '';
+            tasks.forEach(task => {{
+                const subtasks = Array.isArray(task.subtasks) ? task.subtasks : Object.values(task.subtasks || {{}});
+                const totalSub = task.total_subtasks || subtasks.length;
+                const compSub = task.completed_subtasks !== undefined ? task.completed_subtasks : subtasks.filter(s => s.state === 'COMPLETED').length;
+                const pct = totalSub > 0 ? Math.round((compSub / totalSub) * 100) : 0;
+                const stateClass = getStateBadgeClass(task.state);
+
+                html += `
+                <div class="glass-card p-6 rounded-2xl border border-slate-200 dark:border-white/10" id="task_card_${{task.task_id}}">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-white/10 gap-3">
+                        <div class="flex items-center gap-3">
+                            <div class="fractal-icon-circle sm bg-blue-500/15 border border-blue-500/30 text-[#4696e5]">
+                                <i class="fa-solid fa-diagram-project"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2 mb-0.5">
+                                    <span class="font-mono text-xs font-bold text-slate-400">${{escapeHtml(task.task_id)}}</span>
+                                    <span class="${{stateClass}}">${{task.state}}</span>
+                                </div>
+                                <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">${{escapeHtml(task.title || task.task_id)}}</h3>
+                            </div>
+                        </div>
+                        <div class="flex flex-col md:items-end gap-1.5">
+                            <div class="flex items-center gap-3 text-xs font-mono">
+                                <span class="text-slate-400">진행률: <strong class="text-slate-700 dark:text-slate-200">${{compSub}} / ${{totalSub}} (${{pct}}%)</strong></span>
+                                <span class="text-slate-400">시작: <strong class="text-slate-700 dark:text-slate-200">${{task.created_at || 'N/A'}}</strong></span>
+                            </div>
+                            <div class="w-full md:w-48 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                <div class="h-full bg-emerald-500 transition-all duration-300" style="width: ${{pct}}%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">워커 서브태스크 목록 (${{subtasks.length}})</h4>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                `;
+
+                subtasks.forEach(s => {{
+                    const sStateClass = getStateBadgeClass(s.state);
+                    const sTierClass = getTierBadgeClass(s.tier || s.assigned_tier || 'SILVER');
+                    const elapsed = s.elapsed_seconds || 0;
+                    const turns = s.turns || s.turns_completed || 0;
+                    const loc = s.loc || s.loc_modified || 0;
+                    const pid = s.worker_pid ? `PID: ${{s.worker_pid}}` : 'PID: N/A';
+
+                    html += `
+                        <div class="p-4 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-slate-900/40 hover:border-blue-500/30 transition-all flex flex-col justify-between gap-3">
+                            <div>
+                                <div class="flex items-start justify-between gap-2 mb-1.5">
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <span class="text-[10px] font-mono text-slate-400">${{escapeHtml(s.subtask_id)}}</span>
+                                        <span class="${{sTierClass}}">${{s.tier || s.assigned_tier || 'SILVER'}}</span>
+                                        <span class="${{sStateClass}}">${{s.state}}</span>
+                                    </div>
+                                    <span class="text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-200/50 dark:bg-slate-800/60 px-2 py-0.5 rounded">${{pid}}</span>
+                                </div>
+                                <h5 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${{escapeHtml(s.title || s.instruction || s.subtask_id)}}</h5>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 dark:border-white/5 text-[11px] font-mono">
+                                <div><span class="text-slate-400">턴:</span> <strong class="text-slate-700 dark:text-slate-200">${{turns}}회</strong></div>
+                                <div><span class="text-slate-400">LOC:</span> <strong class="text-cyan-600 dark:text-cyan-400">+${{loc}}</strong></div>
+                                <div><span class="text-slate-400">소요:</span> <strong class="text-slate-700 dark:text-slate-200">${{elapsed}}s</strong></div>
+                            </div>
+
+                            ${{s.worktree ? `
+                            <div class="text-[10px] font-mono text-slate-400 truncate flex items-center gap-1 pt-1 border-t border-slate-200/40 dark:border-white/5">
+                                <i class="fa-solid fa-code-fork text-slate-500"></i>
+                                <span class="truncate">${{escapeHtml(s.worktree)}}</span>
+                            </div>
+                            ` : ''}}
+
+                            ${{s.error_message ? `
+                            <div class="mt-1 p-2 rounded bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-mono">
+                                ${{escapeHtml(s.error_message)}}
+                            </div>
+                            ` : ''}}
+                        </div>
+                    `;
+                }});
+
+                html += `
+                        </div>
+                    </div>
+                </div>
+                `;
+            }});
+
+            tasksContainer.innerHTML = html;
+        }}
+
         function switchDashboardTab(tab) {{
             currentDashboardTab = tab;
             const btnUsage = document.getElementById('tabBtnUsage');
             const btnMemory = document.getElementById('tabBtnMemory');
+            const btnTasks = document.getElementById('tabBtnTasks');
             const viewUsage = document.getElementById('usageView');
             const viewMemory = document.getElementById('memoryView');
+            const viewTasks = document.getElementById('tabContent-tasks');
 
-            const activeTabClass = 'px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer bg-[#4696e5] text-white shadow-sm border border-[#4696e5]';
-            const inactiveTabClass = 'px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent';
+            const activeTabClass = 'tab-button px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer bg-[#4696e5] text-white shadow-sm border border-[#4696e5]';
+            const inactiveTabClass = 'tab-button px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 border border-transparent';
 
-            if (tab === 'usage') {{
-                if (viewUsage) viewUsage.classList.remove('hidden');
-                if (viewMemory) viewMemory.classList.add('hidden');
-                if (btnUsage) btnUsage.className = activeTabClass;
-                if (btnMemory) btnMemory.className = inactiveTabClass;
-            }} else {{
+            if (tab === 'tasks') {{
                 if (viewUsage) viewUsage.classList.add('hidden');
+                if (viewMemory) viewMemory.classList.add('hidden');
+                if (viewTasks) viewTasks.classList.remove('hidden');
+                if (btnTasks) btnTasks.className = activeTabClass;
+                if (btnUsage) btnUsage.className = inactiveTabClass;
+                if (btnMemory) btnMemory.className = inactiveTabClass;
+                renderTasksView(orchestratorData);
+            }} else if (tab === 'memory') {{
+                if (viewUsage) viewUsage.classList.add('hidden');
+                if (viewTasks) viewTasks.classList.add('hidden');
                 if (viewMemory) viewMemory.classList.remove('hidden');
                 if (btnMemory) btnMemory.className = activeTabClass;
                 if (btnUsage) btnUsage.className = inactiveTabClass;
+                if (btnTasks) btnTasks.className = inactiveTabClass;
                 renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
                 setTimeout(() => {{
                     initMemoryGraph(currentGraphData);
                     const curSid = document.getElementById('sessionSelect') ? document.getElementById('sessionSelect').value : 'ALL';
+                    focusSessionInGraph(curSid);
+                }}, 50);
+            }} else {{
+                if (viewTasks) viewTasks.classList.add('hidden');
+                if (viewMemory) viewMemory.classList.add('hidden');
+                if (viewUsage) viewUsage.classList.remove('hidden');
+                if (btnUsage) btnUsage.className = activeTabClass;
+                if (btnMemory) btnMemory.className = inactiveTabClass;
+                if (btnTasks) btnTasks.className = inactiveTabClass;
+            }}
+        }}
+
+        function switchTab(tabName) {{
+            switchDashboardTab(tabName);
+        }}
                     focusSessionInGraph(curSid);
                 }}, 50);
             }}
@@ -4404,6 +4884,24 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                         }}
                     }}
                 }} catch(me) {{ }}
+
+                if (data.orchestrator) {{
+                    orchestratorData = data.orchestrator;
+                    const activeCount = data.orchestrator.active_tasks_count !== undefined ? data.orchestrator.active_tasks_count : (data.orchestrator.tasks || []).filter(t => t.state === 'RUNNING').length;
+                    const activeBadge = document.getElementById('activeTasksBadge');
+                    if (activeBadge) {{
+                        if (activeCount > 0) {{
+                            activeBadge.innerText = `${{activeCount}} RUNNING`;
+                            activeBadge.classList.remove('hidden');
+                        }} else {{
+                            activeBadge.innerText = '0';
+                            activeBadge.classList.add('hidden');
+                        }}
+                    }}
+                    if (currentDashboardTab === 'tasks') {{
+                        renderTasksView(data.orchestrator);
+                    }}
+                }}
             }} else {{
                 if (badge) {{
                     badge.className = "flex items-center gap-1.5 bg-rose-950/80 border border-rose-500/60 px-2.5 py-1 rounded-lg text-rose-400 text-xs font-bold cursor-pointer hover:bg-rose-900/60 transition-all";
@@ -4417,6 +4915,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             initVersionSelector();
             renderHealingHistory(healingHistoryData);
             renderMemoryView(currentMemories, currentMemStats, currentGraphData, currentTopEdges);
+            renderTasksView(orchestratorData);
             const initialMonth = document.getElementById('monthSelect').value;
             const initialSession = document.getElementById('sessionSelect').value;
             renderDashboard(initialMonth, initialSession);
