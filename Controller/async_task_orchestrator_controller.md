@@ -69,8 +69,18 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
       state: TaskState         # PENDING | READY | RUNNING | COMPLETED | FAILED
   ```
 
-### 3.2 작업 공간 격리 샌드박스 (`WorktreeSandboxManager`)
-- **파일 충돌 원천 차단**: 여러 에이전트가 동시에 같은 저장소의 파일을 수정하면 `git index.lock` 및 코드 덮어쓰기 발생.
+### 3.2 작업 공간 격리 샌드박스 및 프로세스 기반 워커 풀 (`WorktreeSandboxManager` & `WorkerPool`)
+- **프로세스 레벨 격리 (Process vs Thread)**:
+  - 파이썬 스레드(Thread)는 프로세스 작업 디렉토리(`cwd`) 및 프로세스 환경변수를 공유하므로, 한 스레드가 Git 명령을 내릴 때 다른 스레드의 워크트리를 오염시킵니다.
+  - 따라서 모든 워커는 **독립된 OS 서브프로세스(Subprocess)**로 구동되며, 각자 전용 PID, 독립된 CWD(`~/.harnex/worktrees/{task_id}`), 전용 세션 환경 변수를 가집니다.
+- **워커별 자율 멀티턴(롱텀) 실행 (Multi-Turn Long-Running ReAct Loop)**:
+  - 워커는 단순 1회성(One-shot) 호출이 아니라, 독립된 세션 컨텍스트 내에서 **자체적인 멀티턴 루프**를 완주할 때까지 지속 가동됩니다:
+    1. 코드 탐색 및 작성 (Turn 1)
+    2. 로컬 빌드 및 컴파일 수행 (Turn 2)
+    3. 에러 발생 시 자가 치유(Self-Correction) 및 코드 보정 (Turn 3)
+    4. 단위 테스트 실행 및 통과 검증 (Turn 4)
+    5. 최종 diff 생성 및 `SIGNAL_COMPLETED` 발행 (Turn 5)
+  - 이 동안 상위 오케스트레이터는 폴링하지 않고 `SIGNAL_PROGRESS`와 `HEARTBEAT`만 수신하며 비동기 대기(Join Barrier)합니다.
 - **Git Worktree 활용**:
   1. 각 워커 실행 시 `git worktree add ~/.harnex/worktrees/{task_id} -b task/{task_id}` 실행.
   2. 워커는 독립된 폴더에서 코드 작성, 컴파일, 단위 테스트 수행.
@@ -205,4 +215,5 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
 2. **Zero-Poll Event Driven**: 상위 오케스트레이터는 워커의 상태를 루프로 폴링하지 않으며, 워커가 방출하는 HTTP/Signal Webhook 이벤트에 의해서만 깨어나 동작한다 (Reactive Wakeup).
 3. **Strict Isolation**: 워커는 메인 작업 디렉토리에 직접 쓰기 작업을 수행할 수 없으며, 반드시 자신에게 할당된 Worktree 샌드박스 내에서만 파일 I/O를 수행해야 한다.
 4. **Idempotent Transitions**: 이미 완료(`COMPLETED`)되거나 취소/실패(`FAILED`/`CANCELLED`)된 태스크의 상태는 사후 신호에 의해 절대 변경되지 않는다.
-5. **Documentation First**: 모든 신규 모듈 및 인터페이스 변경은 본 컨트롤러 사양서를 기준으로 동기화된다.
+5. **Deployment Pipeline Continuity**: 신규 데몬이나 별도 포트 증설 없이 기존 `./deploy.sh` ➔ `~/.harnex/live` (Port 18080) 단일 파이프라인으로 무중단 배포되며, 기존 프록시 라우팅과 오케스트레이터 API가 단일 런타임 내에서 통합 가동된다.
+6. **Documentation First**: 모든 신규 모듈 및 인터페이스 변경은 본 컨트롤러 사양서를 기준으로 동기화된다.
