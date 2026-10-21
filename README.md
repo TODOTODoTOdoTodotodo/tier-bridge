@@ -237,7 +237,8 @@ ChatGPT Enterprise 조직 계정의 특성상, 사용자 개인 할당량(3,000 
 
 | 카테고리 | 문서명 | 설명 |
 | :--- | :--- | :--- |
-| **도메인 컨트롤러 명세 (`Controller/`)**<br>*(Documentation First Policy)* | [agy_gemini_upstream_bridge_controller.md](Controller/agy_gemini_upstream_bridge_controller.md) | Agy Gemini 백엔드 연동 및 429 무중단 페일오버 명세 |
+| **도메인 컨트롤러 명세 (`Controller/`)**<br>*(Documentation First Policy)* | [async_task_orchestrator_controller.md](Controller/async_task_orchestrator_controller.md) | 신호 기반 비동기 하네스 작업 분할 오케스트레이터 규격 |
+| | [agy_gemini_upstream_bridge_controller.md](Controller/agy_gemini_upstream_bridge_controller.md) | Agy Gemini 백엔드 연동 및 429 무중단 페일오버 명세 |
 | | [workspace_shared_credits_pool_controller.md](Controller/workspace_shared_credits_pool_controller.md) | 워크스페이스 공용 크레딧 풀 및 계정 잔여량 관측 규격 |
 | | [session_aggregation_and_log_sync_controller.md](Controller/session_aggregation_and_log_sync_controller.md) | 세션 집계 및 라이브 로그 워터폴 동기화 컨트롤러 |
 | | [dashboard_fractal_ui_controller.md](Controller/dashboard_fractal_ui_controller.md) | 프랙탈 트리 및 월간 세션 렌더링 컨트롤러 규격 |

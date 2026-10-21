@@ -1,0 +1,18 @@
+{
+  "max_subtasks": 20,
+  "max_dag_depth": 5,
+  "min_instruction_length": 5,
+  "task_timeout_seconds": 600,
+  "worker_heartbeat_interval_seconds": 30,
+  "worker_heartbeat_timeout_seconds": 90,
+  "max_patch_size_bytes": 5242880,
+  "worktree_root": "~/.harnex/worktrees",
+  "worktree_ttl_seconds": 3600,
+  "min_disk_free_bytes": 1073741824,
+  "git_lock_retry_attempts": 5,
+  "git_lock_retry_backoff_base_ms": 200,
+  "max_merge_retries": 2,
+  "failure_policy": "CONTINUE_INDEPENDENT",
+  "conflict_resolution_tier": "PLATINUM",
+  "sse_buffer_size": 1000
+}
