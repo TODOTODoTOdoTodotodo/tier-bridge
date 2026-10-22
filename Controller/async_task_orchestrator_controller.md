@@ -162,7 +162,7 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
 ### 4.2 작업 공간 격리 샌드박스 (Git Worktree Sandbox)
 | 이상 징후 (Abnormal Case) | 발생 원인 및 위험 | 방어 아키텍처 (Defensive Strategy) |
 | :--- | :--- | :--- |
-| **① Git Lock 경합 충돌 (`index.lock`)** | 복수 워커가 동시 `git worktree add` 호출 시 git lock 충돌 | 인프로세스 비동기 뮤텍스(`asyncio.Lock`)로 Worktree 생성/삭제 연산 직렬화. OS 레벨 락 충돌 시 지수 백오프(`git_lock_retry_attempts`, `git_lock_retry_backoff_base_ms`) 재시도 후 안전 해제. |
+| **① Git Lock 경합 충돌 (`index.lock`) 및 내부 락 재진입 데드락 방지** | 복수 워커 동시 생성 시 git lock 충돌, 및 `create_sandbox` 내부에서 `cleanup_sandbox` 호출 시 비재진입 비동기 뮤텍스(`asyncio.Lock`) 데드락 발생 | 인프로세스 비동기 뮤텍스(`asyncio.Lock`)로 직렬화하되, 내부 재진입 데드락을 원천 차단하기 위해 언락 내부 메서드(`_cleanup_sandbox_unlocked`)를 분리. OS 레벨 락 충돌 시 지수 백오프(`git_lock_retry_attempts`, `git_lock_retry_backoff_base_ms`) 재시도 후 안전 해제. 다국어 Git 환경(`already exists` / `이미 있습니다`) 충돌 안전 대응. |
 | **② 비정상 종료 시 좀비 Worktree 및 디스크 고갈 (Zombie Worktree)** | 워커 프로세스 강제 종료(OOM/SIGKILL)로 고아 디렉토리 및 브랜치 누적 | 런타임 기동 시 자동 정리 루틴(`git worktree prune`) 수행. 각 Worktree에 TTL(`worktree_ttl_seconds`) 부여 후 초과분 자동 수거. 디스크 여유 공간(`min_disk_free_bytes`) 임계치 미달 시 신규 디스패치 일시 중지. |
 | **③ 부모 브랜치 드리프트 (Base Branch Drift)** | 선행 태스크의 머지로 메인 브랜치가 전진했으나, 워커가 구버전 커밋 기반으로 작업 | 의존성이 있는 후속 태스크는 선행 태스크의 머지 커밋(Merge Commit)을 최신 Base로 하여 Worktree를 신규 체크아웃. |
 | **④ 경로 조작 공격 (Path Traversal / Injection)** | `task_id`에 `../../` 또는 특수문자 삽입으로 시스템 파일 침범 | 정규식 화이트리스트(`^[a-zA-Z0-9_-]{4,32}$`) 검증 및 `os.path.realpath`가 허용된 Worktree 루트 하위인지 엄격 강제. |

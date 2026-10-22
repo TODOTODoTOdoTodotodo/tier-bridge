@@ -68,8 +68,8 @@ class WorktreeSandboxManager:
 
         async with self._lock:
             if os.path.exists(worktree_path):
-                # Clean up preexisting worktree if any
-                await self.cleanup_sandbox(subtask_id, target_repo=repo_dir)
+                # Clean up preexisting worktree if any (using unlocked internal helper to avoid deadlock)
+                await self._cleanup_sandbox_unlocked(subtask_id, target_repo=repo_dir)
 
             attempts = self.config.git_lock_retry_attempts
             backoff_base = self.config.git_lock_retry_backoff_base_ms / 1000.0
@@ -80,8 +80,10 @@ class WorktreeSandboxManager:
                 if code == 0:
                     return worktree_path
 
-                if "already exists" in err:
-                    # branch might exist from previous run, try without -b
+                if "already exists" in err or "이미 있습니다" in err:
+                    # branch might exist from previous run, try cleaning up directory and attaching or recreating
+                    if os.path.exists(worktree_path):
+                        shutil.rmtree(worktree_path, ignore_errors=True)
                     code2, out2, err2 = await self._run_git(["worktree", "add", worktree_path, branch_name], cwd=repo_dir)
                     if code2 == 0:
                         return worktree_path
@@ -94,25 +96,31 @@ class WorktreeSandboxManager:
 
             raise RuntimeError(f"Failed to create git worktree after {attempts} attempts due to lock contention: {err}")
 
-    async def cleanup_sandbox(self, subtask_id: str, delete_branch: bool = True, target_repo: Optional[str] = None) -> None:
+    async def _cleanup_sandbox_unlocked(self, subtask_id: str, delete_branch: bool = True, target_repo: Optional[str] = None) -> None:
         """
-        Safely removes a worktree and deletes its temporary task branch.
+        Internal unlocked cleanup helper to prevent non-reentrant deadlock when called from create_sandbox.
         """
         self._validate_subtask_id(subtask_id)
         worktree_path = self.get_worktree_path(subtask_id)
         branch_name = f"task/{subtask_id}"
         repo_dir = os.path.abspath(target_repo) if target_repo and os.path.isdir(target_repo) else self.base_repo_dir
 
-        async with self._lock:
+        if os.path.exists(worktree_path):
+            await self._run_git(["worktree", "remove", "--force", worktree_path], cwd=repo_dir)
             if os.path.exists(worktree_path):
-                await self._run_git(["worktree", "remove", "--force", worktree_path], cwd=repo_dir)
-                if os.path.exists(worktree_path):
-                    shutil.rmtree(worktree_path, ignore_errors=True)
+                shutil.rmtree(worktree_path, ignore_errors=True)
 
-            await self._run_git(["worktree", "prune"], cwd=repo_dir)
+        await self._run_git(["worktree", "prune"], cwd=repo_dir)
 
-            if delete_branch:
-                await self._run_git(["branch", "-D", branch_name], cwd=repo_dir)
+        if delete_branch:
+            await self._run_git(["branch", "-D", branch_name], cwd=repo_dir)
+
+    async def cleanup_sandbox(self, subtask_id: str, delete_branch: bool = True, target_repo: Optional[str] = None) -> None:
+        """
+        Safely removes a worktree and deletes its temporary task branch.
+        """
+        async with self._lock:
+            await self._cleanup_sandbox_unlocked(subtask_id, delete_branch=delete_branch, target_repo=target_repo)
 
     async def sweep_stale_worktrees(self) -> int:
         """
