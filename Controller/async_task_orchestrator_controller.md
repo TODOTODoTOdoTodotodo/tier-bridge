@@ -118,7 +118,15 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
 3. **선택적 타겟 레포 바인딩 (`target_repo`)**:
    - `TaskDAG.target_repo` (또는 `metadata["target_repo"]`)가 명시된 경우에만 `WorktreeSandboxManager`가 해당 지정 레포지토리 경로에서 워크트리를 생성하고, 지정되지 않은 경우 기존 기본 레포지토리 경로(`base_repo_dir`)로 자동 폴백합니다.
 
-### 3.7 단일책임원칙(SRP) 기반 컴포넌트 아키텍처
+### 3.8 통합 관측성 및 실시간 로그 파이프라인 (`harness.log` 및 `harnex-log` 연동 규격)
+1. **단일 진실 공급원(Single Source of Truth)**:
+   - 오케스트레이터의 모든 생명주기 이벤트(`DISPATCH`, `MEMORY`, `READY`, `THOUGHT`, `ACTION`, `USER_CHAT`, `COMPLETED`, `CANCELLED`, `FAILED`)는 `ActivityTracker` 및 API 진입점에서 표준 포맷(`➔ [ORCHESTRATOR: ...]`)으로 `stdout`에 즉시 `flush=True` 출력되어 라이브 로그 파일(`~/.harnex/live/harness.log`)에 누적됩니다.
+2. **`harnex-log` 실시간 통합 관제**:
+   - 사용자가 터미널에서 `harnex-log`(`tail -f`)를 실행할 때, 기존의 1:1 리버스 프록시 로그(`➔ [USAGE: ...]`, `➔ [DECISION: ...]`, `➔ [MEMORY: ...]`)와 멀티에이전트 오케스트레이터 이벤트가 완벽히 통합되어 시간 순서대로 스트리밍됩니다.
+3. **무간섭 원칙 (Zero Interference)**:
+   - 로그 포맷에 접두어 `[ORCHESTRATOR: ...]`를 명시하여 기존 `analyze_usage.py`의 토큰 및 크레딧 파싱 정규식(Regex)과 충돌하지 않도록 안전하게 분리합니다.
+
+### 3.9 단일책임원칙(SRP) 기반 컴포넌트 아키텍처
 각 기능의 독립적인 유지보수와 향후 기능 확장을 위해 책임을 명확히 단일화하여 분리:
 1. **기억 선행 주입 및 회수 (`TaskMemoryBridge`, `src/harnex/orchestrator/memory_bridge.py`)**:
    - **단일 책임**: 서브태스크 지시를 분석하여 `MemoryHandler`에서 연관된 사내 지식 노드를 선행 검색(Pre-fetch)하고 주입하며, 작업 완료 후 새 지식을 환원(Ingestion).

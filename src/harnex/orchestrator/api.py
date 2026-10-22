@@ -99,6 +99,10 @@ async def dispatch_dag(dag: TaskDAG):
     for s in dag.subtasks.values():
         _signal_bus.register_subtask(s)
 
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    target_name = dag.target_repo.split('/')[-1] if dag.target_repo else "Default"
+    print(f"[{now_str}] [task: {dag.dag_id}] ➔ [ORCHESTRATOR: DISPATCH] 목표: \"{dag.title}\" | 서브태스크: {len(dag.subtasks)}개 | 대상: {target_name} ({dag.target_repo})", flush=True)
+
     asyncio.create_task(_execute_dag_task(dag))
 
     return {

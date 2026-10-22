@@ -29,6 +29,24 @@ class ActivityTracker:
             self._dag_activities[dag_id] = deque(maxlen=self._max_history)
         return self._dag_activities[dag_id]
 
+    def _print_to_harness_log(self, item: Dict[str, Any]) -> None:
+        """
+        오케스트레이터의 모든 활동을 harness.log / harnex-log에 실시간 스트리밍합니다.
+        """
+        now_str = (item.get("timestamp") or datetime.now().isoformat()).replace("T", " ")[:19]
+        dag_id = item.get("dag_id", "dag")
+        sub_id = item.get("subtask_id", "ALL")
+        act_type = item.get("activity_type", "LOG")
+        tier = item.get("tier", "SILVER")
+        msg = item.get("message", "")
+        loc = item.get("loc_modified", 0)
+        cr = item.get("credits_used", 0.0)
+
+        loc_part = f" | +{loc} LOC" if loc and loc > 0 else ""
+        cr_part = f" | {cr:.4f} Cr" if cr and cr > 0 else ""
+
+        print(f"[{now_str}] [task: {dag_id}/{sub_id}] ➔ [ORCHESTRATOR: {act_type}] ({tier}) {msg}{loc_part}{cr_part}", flush=True)
+
     def record_signal_activity(self, dag_id: str, subtask: Optional[SubTask], signal: SignalMessage) -> Dict[str, Any]:
         """
         인입된 SignalMessage를 피드 렌더링용 활동 레코드로 변환하여 링버퍼에 저장합니다.
@@ -88,6 +106,7 @@ class ActivityTracker:
 
         buf = self._get_buffer(dag_id)
         buf.append(activity_item)
+        self._print_to_harness_log(activity_item)
         return activity_item
 
     def record_memory_injection(self, dag_id: str, subtask: SubTask, memories: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -118,6 +137,7 @@ class ActivityTracker:
         }
         buf = self._get_buffer(dag_id)
         buf.append(item)
+        self._print_to_harness_log(item)
         return item
 
     def record_user_chat(self, dag_id: str, target_subtask_id: Optional[str], message: str) -> Dict[str, Any]:
@@ -143,6 +163,7 @@ class ActivityTracker:
         }
         buf = self._get_buffer(dag_id)
         buf.append(item)
+        self._print_to_harness_log(item)
         return item
 
     def record_activity(
@@ -183,6 +204,7 @@ class ActivityTracker:
         }
         buf = self._get_buffer(dag_id)
         buf.append(item)
+        self._print_to_harness_log(item)
         return item
 
     def get_dag_activities(self, dag_id: str, limit: int = 50) -> List[Dict[str, Any]]:
