@@ -98,3 +98,25 @@ Harnex 오케스트레이터의 신호 기반 비동기 멀티에이전트 태�
 3. **Mermaid 렌더러 안전 가드**: 노드 제목에 괄호, 따옴표, 특수문자가 포함될 경우 Mermaid 구문 오류가 발생하므로 라벨을 항상 큰따옴표로 이스케이프(`id["Label"]`).
 4. **인라인 `<script>` 태그 조기 종료 방어 (`_safe_json_embed`)**: 사용자 프롬프트 또는 메모리 기록에 `</script>` 문자열이 포함될 경우 브라우저 HTML 토크나이저가 인라인 `<script>` 태그를 중간에 강제 종료하는 표준 브라우저 취약점 방어. `json.dumps()` 후 `<`, `>`, `&`를 `\u003c`, `\u003e`, `\u0026`로 유니코드 이스케이프 변환하여 삽입.
 5. **글로벌 스코프 함수 바인딩 (`window.*`)**: WebKit/Safari 환경(cmux 등)에서 인라인 `onclick` 핸들러 호출 누락을 방어하기 위해 `window.switchDashboardTab`, `window.switchTab`, `window.renderTasksView`를 전역 객체에 명시적 등록.
+6. **단일책임원칙(SRP) 기반 UI 함수 분리**:
+   - `renderTasksView`: DAG 카드 및 생각나무(Tree-of-Thought) 구조 렌더링에만 집중.
+   - `renderMissionControlFeed`: 에이전트 발화, 사고 과정, 주입된 기억 피드 렌더링에만 집중.
+   - `sendHumanIntervention`: 사용자 지시 개입 폼 검증 및 API 전송에만 집중.
+   - `initAgentEventSource`: SSE 실시간 스트림 연결 및 자동 재연결에만 집중.
+
+---
+
+## 5. 생각나무형 기억 추적 및 비용 꼬리표 규격 (Tree-of-Thought & Cost Tag Spec)
+1. **서브태스크 노드 생각나무 표출**:
+   - 각 서브태스크 카드 상단에 `🧠 Injected Memory: [기억 노드명]` 뱃지를 표출하여 에이전트가 어떤 사내 지식을 바탕으로 작업 중인지 가시화.
+   - 각 서브태스크 노드 우측에 실시간 비용 꼬리표(`Tier Badge`, `소모 Cr`, `절감 Cr`, `LOC`) 항시 노출.
+2. **실시간 프레즌스(Live Presence) 인디케이터**:
+   - 🟢 `READY`: 선행 태스크 완료 대기 중 (준비 완료)
+   - 🔵 `THINKING`: 사내 기억 및 컨텍스트 추론 중 (펄스 애니메이션)
+   - 🟡 `CODING`: Git Worktree 격리 소스코드 작성 중 (`+LOC`)
+   - 🟣 `TESTING`: 단위 테스트 실행 중
+   - ⚪ `COMPLETED`: 작업 완수 및 Diff 패치 제출
+   - 🔴 `BLOCKED`: 충돌 또는 사용자 개입 대기 중
+3. **경량 관제실 피드 (Mission Control Activity Stream)**:
+   - 복잡한 무거운 웹 IDE 에디터 없이, 시간 순서로 에이전트의 사고(Thought)와 액션(Action), 사용자 지시(User Chat)가 카카오톡/슬랙 스타일로 스크롤되는 미니 피드.
+   - 하단 인풋 바를 통해 특정 에이전트에게 `@sub_1 ...` 지시 전달 지원.

@@ -14,5 +14,8 @@
   "max_merge_retries": 2,
   "failure_policy": "CONTINUE_INDEPENDENT",
   "conflict_resolution_tier": "PLATINUM",
-  "sse_buffer_size": 1000
+  "sse_buffer_size": 1000,
+  "event_history_limit": 200,
+  "memory_injection_enabled": true,
+  "memory_injection_top_k": 2
 }

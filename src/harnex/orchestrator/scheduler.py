@@ -78,6 +78,22 @@ class DAGScheduler:
             if subtask.state != TaskState.PENDING:
                 return
             subtask.state = TaskState.READY
+            subtask.presence = "READY"
+
+        # Pre-fetch relevant corporate memories (Giyeok) for subtask via MemoryBridge
+        try:
+            try:
+                from harnex.orchestrator.memory_bridge import TaskMemoryBridge
+            except ImportError:
+                from src.harnex.orchestrator.memory_bridge import TaskMemoryBridge
+            bridge = TaskMemoryBridge(self.config)
+            mems = bridge.prefetch_memories_for_subtask(subtask)
+            if mems:
+                subtask.injected_memories = mems
+                if hasattr(self.signal_bus, "activity_tracker") and self.signal_bus.activity_tracker:
+                    self.signal_bus.activity_tracker.record_memory_injection(self.dag.dag_id, subtask, mems)
+        except Exception:
+            pass
 
         try:
             # Create isolated Git worktree sandbox

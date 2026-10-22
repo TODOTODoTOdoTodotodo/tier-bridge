@@ -102,7 +102,25 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
 - `POST /v1/orchestrator/dispatch`: 신규 태스크 그래프 등록 및 실행 트리거.
 - `GET /v1/orchestrator/tasks/{task_id}`: 태스크 진행 상태, 워커 현황, 로그 조회.
 - `POST /v1/orchestrator/tasks/{task_id}/signal`: 워커가 하네스로 완료/진행 신호 전송.
+- `GET /v1/orchestrator/tasks/{dag_id}/events`: DAG별 과거 활동 이벤트/대화 히스토리 조회.
+- `POST /v1/orchestrator/tasks/{dag_id}/chat`: 휴먼-인-더-루프(Human-in-the-Loop) 사용자 지시 주입.
 - `GET /v1/orchestrator/events`: SSE 기반 실시간 태스크 상태 스트리밍.
+
+### 3.6 단일책임원칙(SRP) 기반 컴포넌트 아키텍처
+각 기능의 독립적인 유지보수와 향후 기능 확장을 위해 책임을 명확히 단일화하여 분리:
+1. **기억 선행 주입 및 회수 (`TaskMemoryBridge`, `src/harnex/orchestrator/memory_bridge.py`)**:
+   - **단일 책임**: 서브태스크 지시를 분석하여 `MemoryHandler`에서 연관된 사내 지식 노드를 선행 검색(Pre-fetch)하고 주입하며, 작업 완료 후 새 지식을 환원(Ingestion).
+   - 스케줄러나 신호 버스와 분리되어, 임베딩이나 유사도 알고리즘 변경 시 이 모듈만 수정됨.
+2. **활동 추적 및 프레즌스 매핑 (`ActivityTracker`, `src/harnex/orchestrator/activity_tracker.py`)**:
+   - **단일 책임**: DAG별/서브태스크별 활동(Thought, Action, Tool, Ready, Chat) 링버퍼(FIFO) 보관 및 실시간 프레즌스 상태 머신 관리.
+   - 로깅 보관 정책, 백프레셔 제어, 활동 필터링 변경 시 이 모듈만 수정됨.
+3. **휴먼-인-더-루프 지시 개입 관리 (`ChatManager`, `src/harnex/orchestrator/chat_manager.py`)**:
+   - **단일 책임**: 사용자의 실시간 메시지(`@sub_1 ...`) 파싱, 타깃 워커 지시 주입, 이벤트 기록.
+   - 대화형 프로토콜 및 사용자 개입 정책 변경 시 이 모듈만 수정됨.
+
+### 3.7 생각나무(Tree-of-Thought) 계층적 추적 규격
+- 루트(Goal) ➔ 가지(SubTask Worker) ➔ 잎(Injected Memory, Thought, LOC, Cost) 구조로 형성.
+- 모든 서브태스크 노드는 독립된 비용 꼬리표(모델 티어, 소모 크레딧, 절감액)를 지니며, 사내 기억 주입 이력이 투명하게 연계됨.
 
 ---
 

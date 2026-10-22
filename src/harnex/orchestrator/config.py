@@ -27,6 +27,9 @@ class OrchestratorConfig(BaseModel):
     failure_policy: str = Field(default="CONTINUE_INDEPENDENT", description="CONTINUE_INDEPENDENT or FAIL_FAST")
     conflict_resolution_tier: str = Field(default="PLATINUM", description="Model tier for resolving 3-way conflicts")
     sse_buffer_size: int = Field(default=1000, description="Max buffer size for SSE event streaming")
+    event_history_limit: int = Field(default=200, description="Max event activities retained in ring buffer per DAG")
+    memory_injection_enabled: bool = Field(default=True, description="Enable corporate memory pre-fetch for subtasks")
+    memory_injection_top_k: int = Field(default=2, description="Top-K corporate memories to prefetch per subtask")
 
 
 def load_orchestrator_config(config_path: Optional[str] = None) -> OrchestratorConfig:

@@ -1,7 +1,7 @@
 # src/harnex/orchestrator/signal_bus.py
 import asyncio
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set, AsyncIterator
+from typing import Dict, List, Optional, Set, AsyncIterator, Any
 
 from harnex.orchestrator.config import OrchestratorConfig
 from harnex.orchestrator.models import SignalMessage, SignalType, TaskState, SubTask
@@ -13,12 +13,20 @@ class SignalBus:
     Manages non-chatty, silent task status signals (STARTED, PROGRESS, HEARTBEAT, COMPLETED, FAILED).
     Ensures state transition invariants and broadcasts signals to SSE subscribers.
     """
-    def __init__(self, config: OrchestratorConfig):
+    def __init__(self, config: OrchestratorConfig, activity_tracker: Optional[Any] = None):
         self.config = config
         self._subscribers: Set[asyncio.Queue] = set()
         self._subtasks: Dict[str, SubTask] = {}
         self._last_heartbeat: Dict[str, float] = {}
         self._lock = asyncio.Lock()
+        if activity_tracker is None:
+            try:
+                from harnex.orchestrator.activity_tracker import ActivityTracker
+            except ImportError:
+                from src.harnex.orchestrator.activity_tracker import ActivityTracker
+            self.activity_tracker = ActivityTracker(config)
+        else:
+            self.activity_tracker = activity_tracker
 
     def register_subtask(self, subtask: SubTask) -> None:
         self._subtasks[subtask.subtask_id] = subtask
@@ -95,6 +103,8 @@ class SignalBus:
                 subtask.completed_at = now_iso
                 subtask.error_message = signal.message
 
+            dag_id = subtask.parent_task_id if subtask else "global"
+            self.activity_tracker.record_signal_activity(dag_id, subtask, signal)
             await self._broadcast(signal)
             return True
 

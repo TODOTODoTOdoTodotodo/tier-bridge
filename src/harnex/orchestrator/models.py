@@ -1,7 +1,7 @@
 # src/harnex/orchestrator/models.py
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 
 from harnex.orchestrator.config import OrchestratorConfig
@@ -24,6 +24,15 @@ class SignalType(str, Enum):
     FAILED = "FAILED"
 
 
+class ActivityType(str, Enum):
+    LOG = "LOG"
+    THOUGHT = "THOUGHT"
+    MEMORY = "MEMORY"
+    ACTION = "ACTION"
+    READY = "READY"
+    USER_CHAT = "USER_CHAT"
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -31,6 +40,7 @@ def utc_now_iso() -> str:
 class SignalMessage(BaseModel):
     task_id: str
     signal_type: SignalType
+    activity_type: ActivityType = ActivityType.LOG
     worker_pid: Optional[int] = None
     progress_percent: float = Field(default=0.0, ge=0.0, le=100.0)
     message: str = ""
@@ -38,6 +48,7 @@ class SignalMessage(BaseModel):
     loc_modified: int = 0
     tokens_used: int = 0
     credits_used: float = 0.0
+    injected_memory_titles: List[str] = Field(default_factory=list)
     timestamp: str = Field(default_factory=utc_now_iso)
 
 
@@ -49,6 +60,7 @@ class SubTask(BaseModel):
     dependencies: List[str] = Field(default_factory=list)
     assigned_tier: str = "SILVER"
     state: TaskState = TaskState.PENDING
+    presence: str = "READY"
     worker_pid: Optional[int] = None
     worktree_path: Optional[str] = None
     turns_completed: int = 0
@@ -56,6 +68,7 @@ class SubTask(BaseModel):
     loc_modified: int = 0
     tokens_used: int = 0
     credits_used: float = 0.0
+    injected_memories: List[Dict[str, Any]] = Field(default_factory=list)
     error_message: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None

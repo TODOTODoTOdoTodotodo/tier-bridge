@@ -93,24 +93,115 @@ def cmd_status(args):
             return
         data = resp.json()
         print("=" * 80)
-        print(f"🧩 태스크 상세 정보: {data['dag_id']} [{data['state']}]")
-        print(f"제목: {data['title']}")
+        print(f"🌳 [Tree-of-Thought DAG] {data['dag_id']} [{data['state']}]")
+        print(f"목표: {data['title']}")
         print(f"생성 일시: {data['created_at']}")
         if data.get("completed_at"):
             print(f"완료 일시: {data['completed_at']}")
         print("-" * 80)
-        for sid, s in data.get("subtasks", {}).items():
-            print(f"• 서브태스크 [{s['state']}] {sid} (티어: {s['assigned_tier']})")
-            print(f"  지시: {s['instruction']}")
-            if s.get("worker_pid"):
-                print(f"  워커 PID: {s['worker_pid']} | 격리 경로: {s.get('worktree_path')}")
-            if s.get("loc_modified"):
-                print(f"  생성 코드: +{s['loc_modified']} lines | 소모 크레딧: {s.get('credits_used', 0.0):.4f} Cr")
+        subtasks = list(data.get("subtasks", {}).items())
+        for idx, (sid, s) in enumerate(subtasks):
+            is_last = (idx == len(subtasks) - 1)
+            branch = "└──" if is_last else "├──"
+            pipe = "   " if is_last else "│  "
+            presence = s.get("presence") or s.get("state") or "READY"
+            icon = "🟢" if presence == "READY" else ("🔵" if presence == "THINKING" else ("🟡" if presence in ("CODING", "RUNNING") else ("⚪" if presence == "COMPLETED" else "🔴")))
+            
+            print(f"{branch} 🌿 [{sid}] {s.get('title', sid)} (티어: {s['assigned_tier']}) [{icon} {presence}]")
+            print(f"{pipe} ├── 📋 지시: {s['instruction']}")
+            
+            # 주입된 사내 장기기억 표시
+            mems = s.get("injected_memories") or []
+            if mems:
+                for m in mems:
+                    print(f"{pipe} ├── 🧠 주입된 기억: 📌 {m.get('title')} ({int(m.get('score', 0.85) * 100)}%)")
+            
+            pid_str = f"PID: {s['worker_pid']}" if s.get("worker_pid") else "PID: N/A"
+            loc_str = f"+{s.get('loc_modified', 0)} lines"
+            cr_str = f"{s.get('credits_used', 0.0):.4f} Cr"
+            print(f"{pipe} └── 💳 {pid_str} | 코드: {loc_str} | 소모: {cr_str}")
             if s.get("error_message"):
-                print(f"  ⚠️ 오류 메시지: {s['error_message']}")
+                print(f"{pipe}     ⚠️ 오류 메시지: {s['error_message']}")
         print("=" * 80)
     except Exception as e:
         print(f"❌ 상태 조회 실패: {e}")
+
+
+def cmd_watch(args):
+    dag_id = args.dag_id
+    url = f"{get_base_url()}/tasks/{dag_id}/events"
+    print("=" * 80)
+    print(f"🔭 [Harnex Watcher] TaskDAG '{dag_id}' 실시간 에이전트 관제 스트림 시작 (종료: Ctrl+C)")
+    print("=" * 80)
+
+    seen_ids = set()
+    import time
+    try:
+        while True:
+            try:
+                resp = httpx.get(url, timeout=4.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    activities = data.get("activities", [])
+                    for act in activities:
+                        aid = act.get("id")
+                        if aid not in seen_ids:
+                            seen_ids.add(aid)
+                            ts = (act.get("timestamp") or "")[11:19]
+                            act_type = act.get("activity_type", "LOG")
+                            sub = act.get("subtask_id", "DAG")
+                            tier = act.get("tier", "SILVER")
+                            msg = act.get("message", "")
+                            
+                            badge_color = "\033[36m" # cyan
+                            if act_type == "MEMORY":
+                                badge_color = "\033[35m" # purple
+                            elif act_type == "THOUGHT":
+                                badge_color = "\033[34m" # blue
+                            elif act_type == "USER_CHAT":
+                                badge_color = "\033[32m" # green
+                            elif act_type == "ACTION":
+                                badge_color = "\033[33m" # yellow
+                            
+                            reset_color = "\033[0m"
+                            print(f"[{ts}] {badge_color}[{act_type}]{reset_color} \033[1m{sub} ({tier})\033[0m: {msg}")
+            except Exception:
+                pass
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        print("\n👋 관제 스트림을 종료합니다.")
+
+
+def cmd_chat(args):
+    dag_id = args.dag_id
+    url = f"{get_base_url()}/tasks/{dag_id}/chat"
+    print("=" * 80)
+    print(f"💬 [Harnex Interactive Mission Control] TaskDAG '{dag_id}' 에이전트 대화형 콘솔")
+    print("특정 워커 멘션 가능: '@sub_1 Lombok 어노테이션 유지해줘' (종료: exit / quit)")
+    print("=" * 80)
+
+    while True:
+        try:
+            line = input(f"({dag_id}) ❯ ").strip()
+            if not line:
+                continue
+            if line.lower() in ("exit", "quit", "q"):
+                print("👋 대화형 콘솔을 종료합니다.")
+                break
+
+            payload = {"message": line}
+            resp = httpx.post(url, json=payload, timeout=5.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                target = data.get("target_subtask_id") or "ALL"
+                print(f"   ↳ ✅ [전달 완료] ➔ 대상: {target} | 메시지: {data.get('message')}")
+            else:
+                print(f"   ↳ ❌ 전달 실패 ({resp.status_code}): {resp.text}")
+        except KeyboardInterrupt:
+            print("\n👋 대화형 콘솔을 종료합니다.")
+            break
+        except Exception as e:
+            print(f"   ↳ ❌ 통신 오류: {e}")
 
 
 def main():
@@ -130,6 +221,14 @@ def main():
     p_stat = subparsers.add_parser("status", help="Get status of a specific task DAG")
     p_stat.add_argument("dag_id", help="DAG ID")
 
+    # watch
+    p_watch = subparsers.add_parser("watch", help="Watch live agent stream for a task DAG")
+    p_watch.add_argument("dag_id", help="DAG ID")
+
+    # chat
+    p_chat = subparsers.add_parser("chat", help="Interactive chat / instruction injection for a task DAG")
+    p_chat.add_argument("dag_id", help="DAG ID")
+
     args = parser.parse_args()
     if args.command == "list":
         cmd_list(args)
@@ -137,6 +236,10 @@ def main():
         cmd_dispatch(args)
     elif args.command == "status":
         cmd_status(args)
+    elif args.command == "watch":
+        cmd_watch(args)
+    elif args.command == "chat":
+        cmd_chat(args)
     else:
         parser.print_help()
 

@@ -1601,9 +1601,49 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
         </div>
 
-        <!-- Task DAG & Subtasks List Container -->
-        <div id="tasksContainer" class="hidden space-y-6">
-            <!-- Dynamically populated via renderTasksView() -->
+        <!-- Task DAG & Subtasks List Container (Split 2-Column Mission Control) -->
+        <div id="tasksContainer" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <!-- Left: Task DAG & Subtasks Tree (7 cols) -->
+            <div id="tasksListCol" class="lg:col-span-7 space-y-6">
+                <!-- Dynamically populated via renderTasksView() -->
+            </div>
+
+            <!-- Right: Real-time Mission Control Activity & Chat Feed (5 cols) -->
+            <div id="missionControlCol" class="lg:col-span-5 glass-card p-5 rounded-2xl border border-slate-200 dark:border-white/10 sticky top-4 flex flex-col h-[750px]">
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-200 dark:border-white/10">
+                    <div class="flex items-center gap-2">
+                        <span class="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+                            <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+                        </span>
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">에이전트 실시간 관제실</h4>
+                            <p class="text-[10px] text-slate-400">생각나무 사고 추론 &amp; 지시 개입</p>
+                        </div>
+                    </div>
+                    <span id="sseStatusBadge" class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-bold">🟢 Live Feed</span>
+                </div>
+
+                <!-- Feed Stream Container -->
+                <div id="agentMissionControlFeed" class="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
+                    <!-- Populated dynamically via renderMissionControlFeed() -->
+                </div>
+
+                <!-- Human Intervention Input Bar -->
+                <div class="pt-3 border-t border-slate-200 dark:border-white/10 mt-2">
+                    <form id="agentChatForm" onsubmit="event.preventDefault(); sendAgentChat();" class="flex items-center gap-2">
+                        <input type="text" id="agentChatInput" placeholder="에이전트 지시 입력 (예: @sub_1 Lombok 유지)..."
+                               class="flex-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500">
+                        <button type="submit" class="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-paper-plane text-[10px]"></i>
+                            <span>전송</span>
+                        </button>
+                    </form>
+                    <div class="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+                        <span>특정 워커 지정: <code class="font-mono text-blue-400">@sub_1</code></span>
+                        <span>Non-blocking Hint Injection</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div><!-- end #tabContent-tasks -->
 
@@ -3305,7 +3345,42 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     const elapsed = s.elapsed_seconds || 0;
                     const turns = s.turns || s.turns_completed || 0;
                     const loc = s.loc || s.loc_modified || 0;
+                    const cr = parseFloat(s.credits || s.credits_used || 0).toFixed(4);
                     const pid = s.worker_pid ? `PID: ${{s.worker_pid}}` : 'PID: N/A';
+
+                    const pres = (s.presence || s.state || 'READY').toUpperCase();
+                    let presBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">🟢 READY</span>';
+                    if (pres === 'THINKING') {{
+                        presBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 animate-pulse">🔵 THINKING</span>';
+                    }} else if (pres === 'CODING' || pres === 'RUNNING') {{
+                        presBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">🟡 CODING</span>';
+                    }} else if (pres === 'TESTING') {{
+                        presBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">🟣 TESTING</span>';
+                    }} else if (pres === 'COMPLETED') {{
+                        presBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-400/20 text-slate-300 border border-slate-400/30">⚪ DONE</span>';
+                    }} else if (pres === 'FAILED') {{
+                        presBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">🔴 FAILED</span>';
+                    }}
+
+                    let memHtml = '';
+                    const mems = s.injected_memories || [];
+                    if (Array.isArray(mems) && mems.length > 0) {{
+                        memHtml = `
+                            <div class="mt-2.5 p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-300">
+                                <div class="font-bold mb-1 flex items-center gap-1.5 text-purple-400">
+                                    <i class="fa-solid fa-brain"></i>
+                                    <span>사내 장기기억 선행 주입:</span>
+                                </div>
+                                ${{mems.map(m => `
+                                    <div class="truncate text-slate-300 flex items-center gap-1.5 py-0.5">
+                                        <span class="text-purple-400">📌</span>
+                                        <span class="font-medium truncate">${{escapeHtml(m.title)}}</span>
+                                        <span class="text-purple-400/80 font-mono text-[9px] bg-purple-500/20 px-1 rounded">${{Math.round((m.score || 0.85) * 100)}}%</span>
+                                    </div>
+                                `).join('')}}
+                            </div>
+                        `;
+                    }}
 
                     html += `
                         <div class="p-4 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-slate-900/40 hover:border-blue-500/30 transition-all flex flex-col justify-between gap-3">
@@ -3314,17 +3389,18 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                                     <div class="flex items-center gap-1.5 flex-wrap">
                                         <span class="text-[10px] font-mono text-slate-400">${{escapeHtml(s.subtask_id)}}</span>
                                         <span class="${{sTierClass}}">${{s.tier || s.assigned_tier || 'SILVER'}}</span>
-                                        <span class="${{sStateClass}}">${{s.state}}</span>
+                                        ${{presBadge}}
                                     </div>
                                     <span class="text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-200/50 dark:bg-slate-800/60 px-2 py-0.5 rounded">${{pid}}</span>
                                 </div>
                                 <h5 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${{escapeHtml(s.title || s.instruction || s.subtask_id)}}</h5>
+                                ${{memHtml}}
                             </div>
 
                             <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 dark:border-white/5 text-[11px] font-mono">
                                 <div><span class="text-slate-400">턴:</span> <strong class="text-slate-700 dark:text-slate-200">${{turns}}회</strong></div>
                                 <div><span class="text-slate-400">LOC:</span> <strong class="text-cyan-600 dark:text-cyan-400">+${{loc}}</strong></div>
-                                <div><span class="text-slate-400">소요:</span> <strong class="text-slate-700 dark:text-slate-200">${{elapsed}}s</strong></div>
+                                <div><span class="text-slate-400">소모:</span> <strong class="text-amber-500">${{cr}} Cr</strong></div>
                             </div>
 
                             ${{s.worktree ? `
@@ -3350,7 +3426,134 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 `;
             }});
 
-            tasksContainer.innerHTML = html;
+            const targetCol = document.getElementById('tasksListCol') || tasksContainer;
+            targetCol.innerHTML = html;
+            renderMissionControlFeed(orch.recent_activities || []);
+            initAgentEventSource();
+        }}
+
+        let agentEventSource = null;
+        let seenActivityIds = new Set();
+
+        function renderMissionControlFeed(activities) {{
+            const feedContainer = document.getElementById('agentMissionControlFeed');
+            if (!feedContainer) return;
+
+            const list = Array.isArray(activities) ? activities : [];
+            if (list.length === 0) {{
+                if (feedContainer.children.length === 0) {{
+                    feedContainer.innerHTML = '<div class="text-center py-10 text-slate-500 text-xs">수집된 에이전트 실시간 발화/사고 활동이 없습니다.</div>';
+                }}
+                return;
+            }}
+
+            if (feedContainer.innerHTML.includes('text-slate-500 text-xs')) {{
+                feedContainer.innerHTML = '';
+            }}
+
+            list.forEach(act => {{
+                const aid = act.id || (act.timestamp + '_' + act.subtask_id);
+                if (seenActivityIds.has(aid)) return;
+                seenActivityIds.add(aid);
+
+                const div = document.createElement('div');
+                div.className = 'p-3 rounded-xl border border-slate-200 dark:border-white/5 bg-slate-50/60 dark:bg-slate-900/40 text-xs space-y-1.5 transition-all';
+
+                const ts = (act.timestamp || '').slice(11, 19);
+                const sub = act.subtask_id || 'DAG';
+                const actType = act.activity_type || 'LOG';
+                const tier = act.tier || 'SILVER';
+
+                let typeBadge = '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300 font-mono">LOG</span>';
+                if (actType === 'MEMORY') {{
+                    typeBadge = '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 font-mono">🧠 MEMORY</span>';
+                }} else if (actType === 'THOUGHT') {{
+                    typeBadge = '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-300 font-mono">💡 THOUGHT</span>';
+                }} else if (actType === 'ACTION') {{
+                    typeBadge = '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 font-mono">⚡ ACTION</span>';
+                }} else if (actType === 'USER_CHAT') {{
+                    typeBadge = '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 font-mono">👤 USER</span>';
+                }}
+
+                div.innerHTML = `
+                    <div class="flex items-center justify-between text-[10px] text-slate-400 pb-1 border-b border-slate-200/40 dark:border-white/5">
+                        <div class="flex items-center gap-1.5">
+                            ${{typeBadge}}
+                            <span class="font-bold text-slate-700 dark:text-slate-300 font-mono">${{escapeHtml(sub)}}</span>
+                            <span class="text-slate-500 font-mono">(${{tier}})</span>
+                        </div>
+                        <span class="font-mono text-slate-500">${{ts}}</span>
+                    </div>
+                    <div class="text-slate-700 dark:text-slate-200 whitespace-pre-wrap">${{escapeHtml(act.message || '')}}</div>
+                    ${{act.diff_patch ? `
+                    <details class="mt-1 pt-1 border-t border-slate-200/40 dark:border-white/5">
+                        <summary class="cursor-pointer text-[10px] text-cyan-400 hover:underline">Diff 패치 미리보기</summary>
+                        <pre class="mt-1 p-2 rounded bg-slate-950 font-mono text-[10px] overflow-x-auto text-emerald-400 max-h-40">${{escapeHtml(act.diff_patch)}}</pre>
+                    </details>
+                    ` : ''}}
+                `;
+
+                feedContainer.appendChild(div);
+            }});
+
+            feedContainer.scrollTop = feedContainer.scrollHeight;
+        }}
+
+        async function sendAgentChat() {{
+            const input = document.getElementById('agentChatInput');
+            if (!input || !input.value.trim()) return;
+
+            const text = input.value.trim();
+            const activeDagId = (orchestratorData.tasks && orchestratorData.tasks.length > 0) ? orchestratorData.tasks[0].task_id : 'dag_active';
+
+            input.value = '';
+            try {{
+                const res = await fetch(`/v1/orchestrator/tasks/${{activeDagId}}/chat`, {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ message: text }})
+                }});
+                const data = await res.json();
+                if (data.activity) {{
+                    renderMissionControlFeed([data.activity]);
+                }}
+            }} catch (e) {{
+                console.error('Failed to send agent chat:', e);
+            }}
+        }}
+
+        function initAgentEventSource() {{
+            if (agentEventSource) return;
+            try {{
+                agentEventSource = new EventSource('/v1/orchestrator/events');
+                agentEventSource.onopen = function() {{
+                    const badge = document.getElementById('sseStatusBadge');
+                    if (badge) badge.innerHTML = '🟢 Live Feed';
+                }};
+                agentEventSource.onmessage = function(event) {{
+                    try {{
+                        const signal = JSON.parse(event.data);
+                        const activity = {{
+                            id: 'sse_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            dag_id: 'active',
+                            subtask_id: signal.task_id,
+                            tier: 'SILVER',
+                            presence: signal.signal_type === 'COMPLETED' ? 'COMPLETED' : (signal.signal_type === 'STARTED' ? 'THINKING' : 'CODING'),
+                            activity_type: signal.activity_type || (signal.signal_type === 'COMPLETED' ? 'ACTION' : 'THOUGHT'),
+                            message: signal.message || signal.signal_type,
+                            loc_modified: signal.loc_modified || 0,
+                            credits_used: signal.credits_used || 0.0,
+                            diff_patch: signal.diff_patch,
+                            timestamp: signal.timestamp || new Date().toISOString()
+                        }};
+                        renderMissionControlFeed([activity]);
+                    }} catch (pe) {{ }}
+                }};
+                agentEventSource.onerror = function() {{
+                    const badge = document.getElementById('sseStatusBadge');
+                    if (badge) badge.innerHTML = '🟡 5s Fallback';
+                }};
+            }} catch (e) {{ }}
         }}
 
         function switchDashboardTab(tab) {{
@@ -3402,6 +3605,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         window.switchDashboardTab = switchDashboardTab;
         window.switchTab = switchTab;
         window.renderTasksView = renderTasksView;
+        window.sendAgentChat = sendAgentChat;
+        window.renderMissionControlFeed = renderMissionControlFeed;
+        window.initAgentEventSource = initAgentEventSource;
 
         let memoryMiniNetwork = null;
         let memoryExpandedNetwork = null;

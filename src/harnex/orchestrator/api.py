@@ -11,12 +11,16 @@ from harnex.orchestrator.signal_bus import SignalBus
 from harnex.orchestrator.sandbox import WorktreeSandboxManager
 from harnex.orchestrator.worker_pool import SubprocessWorkerPool
 from harnex.orchestrator.scheduler import DAGScheduler
+from harnex.orchestrator.activity_tracker import ActivityTracker
+from harnex.orchestrator.chat_manager import ChatManager
 
 orchestrator_router = APIRouter(tags=["orchestrator"])
 
 # Global in-process singletons for orchestrator state
 _config = load_orchestrator_config()
-_signal_bus = SignalBus(_config)
+_activity_tracker = ActivityTracker(_config)
+_signal_bus = SignalBus(_config, activity_tracker=_activity_tracker)
+_chat_manager = ChatManager(_activity_tracker, _signal_bus)
 _sandbox_mgr = WorktreeSandboxManager(base_repo_dir=".", config=_config)
 _worker_pool = SubprocessWorkerPool(_config)
 _dag_registry: Dict[str, TaskDAG] = {}
@@ -37,12 +41,14 @@ def get_orchestrator_summary() -> Dict[str, Any]:
                 "title": s.title,
                 "tier": s.assigned_tier,
                 "state": s.state.value,
+                "presence": getattr(s, "presence", "READY"),
                 "worker_pid": s.worker_pid,
                 "worktree": s.worktree_path,
                 "turns": s.turns_completed,
                 "loc": s.loc_modified,
                 "credits": s.credits_used,
-                "elapsed_seconds": 0
+                "elapsed_seconds": 0,
+                "injected_memories": getattr(s, "injected_memories", [])
             })
         task_list.append({
             "task_id": d.dag_id,
@@ -60,7 +66,8 @@ def get_orchestrator_summary() -> Dict[str, Any]:
         "active_tasks_count": active_count,
         "completed_tasks_count": completed_count,
         "failed_tasks_count": failed_count,
-        "tasks": task_list
+        "tasks": task_list,
+        "recent_activities": _activity_tracker.get_recent_global_activities(limit=30)
     }
 
 
@@ -107,6 +114,25 @@ async def get_task_detail(dag_id: str):
     if not dag:
         raise HTTPException(status_code=404, detail=f"TaskDAG '{dag_id}' not found.")
     return dag
+
+
+@orchestrator_router.get("/tasks/{dag_id}/events")
+async def get_dag_events(dag_id: str, limit: int = 50):
+    """ Retrieves chronological activity events for a specific TaskDAG """
+    return {
+        "dag_id": dag_id,
+        "activities": _activity_tracker.get_dag_activities(dag_id, limit=limit)
+    }
+
+
+@orchestrator_router.post("/tasks/{dag_id}/chat")
+async def post_dag_chat(dag_id: str, payload: Dict[str, Any]):
+    """ Injects human intervention message into DAG/SubTask and broadcasts """
+    msg = payload.get("message", "").strip()
+    if not msg:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+    result = await _chat_manager.handle_user_message(dag_id, msg)
+    return result
 
 
 @orchestrator_router.post("/tasks/{subtask_id}/signal")
