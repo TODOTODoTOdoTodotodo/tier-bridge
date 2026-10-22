@@ -3652,9 +3652,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 return;
             }}
 
-            // 2. 워커 힌트 주입 (@sub_1 ...) 또는 활성 태스크 지침 주입
+            // 2. 워커 힌트 주입 (@sub_1 ...) 또는 상태 질의 또는 활성 태스크 지침 주입
             const isSubtaskMention = text.startsWith('@');
-            if (isSubtaskMention || hasActiveDag) {{
+            const isStatusQuery = /^(상태|뭐해|뭐하고|보고|진행\s*상황|status|ping|alive)/i.test(text.replace(/^@[\w-]+\s*/, '')) || /상태\s*(알려|보고|어때)/i.test(text);
+            if (isSubtaskMention || isStatusQuery || hasActiveDag) {{
                 try {{
                     const res = await fetch(`${{baseApiUrl}}/v1/orchestrator/tasks/${{activeDagId}}/chat`, {{
                         method: 'POST',

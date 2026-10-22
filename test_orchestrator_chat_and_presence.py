@@ -91,6 +91,10 @@ class TestOrchestratorChatAndPresence(unittest.TestCase):
         self.assertEqual(len(user_chat_items), 1)
         self.assertEqual(user_chat_items[0]["tier"], "OPERATOR ➔ sub_auth_01")
 
+        # Status query when no active DAG
+        status_result = asyncio.run(self.chat_mgr.handle_user_message("dag_none", "@sub_auth_01 상태 알려줘"))
+        self.assertIn("현재 실행 중인 에이전트 작업(Task)이 없습니다", status_result["ack"]["message"])
+
     def test_api_chat_and_events_endpoints(self):
         """ Test /v1/orchestrator/tasks/{dag_id}/chat and /v1/orchestrator/tasks/{dag_id}/events """
         dag_id = "dag_api_test"
@@ -117,16 +121,23 @@ class TestOrchestratorChatAndPresence(unittest.TestCase):
         chat_data = chat_resp.json()
         self.assertEqual(chat_data["target_subtask_id"], "sub_1")
 
+        # 2-1. Post status query to active subtask
+        query_resp = self.client.post(f"/v1/orchestrator/tasks/{dag_id}/chat", json={"message": "@sub_1 상태 알려줘"})
+        self.assertEqual(query_resp.status_code, 200)
+        query_data = query_resp.json()
+        self.assertIn("sub_1 상태 보고", query_data["ack"]["message"])
+
         # 3. Get events history for DAG
         events_resp = self.client.get(f"/v1/orchestrator/tasks/{dag_id}/events")
         self.assertEqual(events_resp.status_code, 200)
         events_data = events_resp.json()
         self.assertEqual(events_data["dag_id"], dag_id)
         self.assertTrue(len(events_data["activities"]) >= 1)
-        # Ensure USER_CHAT is not duplicated
+        # Ensure USER_CHAT is not duplicated (2 user chats sent: hint + status query)
         chat_acts = [a for a in events_data["activities"] if a["activity_type"] == "USER_CHAT"]
-        self.assertEqual(len(chat_acts), 1)
+        self.assertEqual(len(chat_acts), 2)
         self.assertEqual(chat_acts[0]["tier"], "OPERATOR ➔ sub_1")
+        self.assertEqual(chat_acts[1]["tier"], "OPERATOR ➔ sub_1")
 
         # 4. Cancel DAG task
         cancel_resp = self.client.post(f"/v1/orchestrator/tasks/{dag_id}/cancel")

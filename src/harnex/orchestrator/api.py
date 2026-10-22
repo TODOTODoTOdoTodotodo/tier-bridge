@@ -23,10 +23,10 @@ _config = load_orchestrator_config()
 _workspace_mgr = WorkspaceManager(_config)
 _activity_tracker = ActivityTracker(_config)
 _signal_bus = SignalBus(_config, activity_tracker=_activity_tracker)
-_chat_manager = ChatManager(_activity_tracker, _signal_bus)
+_dag_registry: Dict[str, TaskDAG] = {}
+_chat_manager = ChatManager(_activity_tracker, _signal_bus, dag_registry=_dag_registry)
 _sandbox_mgr = WorktreeSandboxManager(base_repo_dir=".", config=_config)
 _worker_pool = SubprocessWorkerPool(_config)
-_dag_registry: Dict[str, TaskDAG] = {}
 
 
 def get_orchestrator_summary() -> Dict[str, Any]:
