@@ -1,12 +1,13 @@
 # src/harnex/orchestrator/api.py
 import asyncio
 import json
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 
 from harnex.orchestrator.config import load_orchestrator_config
-from harnex.orchestrator.models import TaskDAG, SignalMessage, TaskState, validate_dag
+from harnex.orchestrator.models import TaskDAG, SignalMessage, TaskState, SignalType, ActivityType, validate_dag
 from harnex.orchestrator.signal_bus import SignalBus
 from harnex.orchestrator.sandbox import WorktreeSandboxManager
 from harnex.orchestrator.worker_pool import SubprocessWorkerPool
@@ -133,6 +134,56 @@ async def post_dag_chat(dag_id: str, payload: Dict[str, Any]):
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
     result = await _chat_manager.handle_user_message(dag_id, msg)
     return result
+
+
+@orchestrator_router.post("/tasks/{dag_id}/cancel")
+async def cancel_dag_task(dag_id: str):
+    """
+    Cancels an active TaskDAG and terminates all running worker subprocesses.
+    """
+    dag = _dag_registry.get(dag_id)
+    if not dag:
+        running_dags = [d for d in _dag_registry.values() if d.state == TaskState.RUNNING]
+        if running_dags:
+            dag = running_dags[0]
+        else:
+            return {"status": "NO_ACTIVE_TASK", "message": "중지할 활성 태스크가 없습니다."}
+
+    dag.state = TaskState.CANCELLED
+    dag.completed_at = datetime.now(timezone.utc).isoformat()
+
+    terminated = []
+    for sid, s in dag.subtasks.items():
+        if s.state in (TaskState.PENDING, TaskState.READY, TaskState.RUNNING):
+            s.state = TaskState.CANCELLED
+            s.presence = "CANCELLED"
+            await _worker_pool.terminate_worker(sid)
+            terminated.append(sid)
+
+    msg = f"🛑 TaskDAG '{dag.dag_id}' 작업이 사용자에 의해 중지되었습니다. (워커 {len(terminated)}개 종료)"
+    act = _activity_tracker.record_activity(
+        dag_id=dag.dag_id,
+        subtask_id="ALL",
+        subtask_title="System Operator",
+        tier="SYSTEM",
+        presence="CANCELLED",
+        activity_type=ActivityType.ACTION,
+        message=msg
+    )
+
+    await _signal_bus.emit_signal(SignalMessage(
+        task_id=dag.dag_id,
+        signal_type=SignalType.FAILED,
+        activity_type=ActivityType.ACTION,
+        message=msg
+    ))
+
+    return {
+        "status": "CANCELLED",
+        "dag_id": dag.dag_id,
+        "terminated_subtasks": terminated,
+        "activity": act
+    }
 
 
 @orchestrator_router.post("/tasks/{subtask_id}/signal")

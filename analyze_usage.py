@@ -1584,28 +1584,26 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
         </div>
 
-        <!-- Empty State Card -->
-        <div id="tasksEmptyState" class="glass-card p-12 rounded-2xl border border-slate-200 dark:border-white/10 text-center flex flex-col items-center justify-center">
-            <div class="fractal-icon-circle lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 mb-4 text-2xl">
-                <i class="fa-solid fa-diagram-project"></i>
-            </div>
-            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">
-                현재 실행 중인 비동기 오케스트레이터 태스크가 없습니다.
-            </h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4 max-w-md">
-                <code class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-emerald-600 dark:text-emerald-400 font-bold">harnex-task dispatch</code> 명령어로 병렬 태스크를 시작하세요.
-            </p>
-            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                <i class="fa-solid fa-terminal text-emerald-400"></i>
-                <span>harnex-task dispatch --plan &lt;dag_spec.json&gt;</span>
-            </div>
-        </div>
-
         <!-- Task DAG & Subtasks List Container (Split 2-Column Mission Control) -->
-        <div id="tasksContainer" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div id="tasksContainer" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             <!-- Left: Task DAG & Subtasks Tree (7 cols) -->
             <div id="tasksListCol" class="lg:col-span-7 space-y-6">
-                <!-- Dynamically populated via renderTasksView() -->
+                <!-- Empty State Card (Default before tasks loaded) -->
+                <div id="tasksEmptyState" class="glass-card p-12 rounded-2xl border border-slate-200 dark:border-white/10 text-center flex flex-col items-center justify-center">
+                    <div class="fractal-icon-circle lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 mb-4 text-2xl">
+                        <i class="fa-solid fa-diagram-project"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">
+                        현재 실행 중인 비동기 오케스트레이터 태스크가 없습니다.
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mb-4 max-w-md">
+                        우측 <strong>에이전트 실시간 관제실</strong> 입력창에 작업 목표를 입력하거나, 터미널에서 <code class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-emerald-600 dark:text-emerald-400 font-bold">harnex-task dispatch</code> 명령어로 병렬 태스크를 시작하세요.
+                    </p>
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                        <i class="fa-solid fa-terminal text-emerald-400"></i>
+                        <span>harnex-task dispatch "작업 목표"</span>
+                    </div>
+                </div>
             </div>
 
             <!-- Right: Real-time Mission Control Activity & Chat Feed (5 cols) -->
@@ -1628,19 +1626,19 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     <!-- Populated dynamically via renderMissionControlFeed() -->
                 </div>
 
-                <!-- Human Intervention Input Bar -->
+                <!-- Human Intervention & Goal Dispatch Input Bar -->
                 <div class="pt-3 border-t border-slate-200 dark:border-white/10 mt-2">
                     <form id="agentChatForm" onsubmit="event.preventDefault(); sendAgentChat();" class="flex items-center gap-2">
-                        <input type="text" id="agentChatInput" placeholder="에이전트 지시 입력 (예: @sub_1 Lombok 유지)..."
+                        <input type="text" id="agentChatInput" placeholder="작업 목표 입력(엔터 시 자동 발주) 또는 지시(@sub_1)..."
                                class="flex-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500">
                         <button type="submit" class="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer">
                             <i class="fa-solid fa-paper-plane text-[10px]"></i>
                             <span>전송</span>
                         </button>
                     </form>
-                    <div class="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
-                        <span>특정 워커 지정: <code class="font-mono text-blue-400">@sub_1</code></span>
-                        <span>Non-blocking Hint Injection</span>
+                    <div class="text-[10px] text-slate-400 mt-1.5 flex items-center justify-between">
+                        <span>💡 자연어 입력: 자동 발주 | 힌트: <code class="font-mono text-blue-400">@sub_1</code></span>
+                        <span>중지: <code class="font-mono text-rose-400">/stop</code></span>
                     </div>
                 </div>
             </div>
@@ -3283,21 +3281,33 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 }}
             }}
 
-            const emptyState = document.getElementById('tasksEmptyState');
+            const tasksListCol = document.getElementById('tasksListCol');
             const tasksContainer = document.getElementById('tasksContainer');
 
-            if (!emptyState || !tasksContainer) return;
+            if (!tasksListCol || !tasksContainer) return;
 
             if (tasks.length === 0) {{
-                emptyState.classList.remove('hidden');
-                tasksContainer.classList.add('hidden');
-                const targetCol = document.getElementById('tasksListCol');
-                if (targetCol) targetCol.innerHTML = '';
+                tasksListCol.innerHTML = `
+                <div id="tasksEmptyState" class="glass-card p-12 rounded-2xl border border-slate-200 dark:border-white/10 text-center flex flex-col items-center justify-center">
+                    <div class="fractal-icon-circle lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 mb-4 text-2xl">
+                        <i class="fa-solid fa-diagram-project"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1">
+                        현재 실행 중인 비동기 오케스트레이터 태스크가 없습니다.
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mb-4 max-w-md">
+                        우측 <strong>에이전트 실시간 관제실</strong> 입력창에 작업 목표를 입력하거나, 터미널에서 <code class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-mono text-emerald-600 dark:text-emerald-400 font-bold">harnex-task dispatch</code> 명령어로 병렬 태스크를 시작하세요.
+                    </p>
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                        <i class="fa-solid fa-terminal text-emerald-400"></i>
+                        <span>harnex-task dispatch "작업 목표"</span>
+                    </div>
+                </div>
+                `;
+                renderMissionControlFeed(orch.recent_activities || []);
+                initAgentEventSource();
                 return;
             }}
-
-            emptyState.classList.add('hidden');
-            tasksContainer.classList.remove('hidden');
 
             let html = '';
             tasks.forEach(task => {{
@@ -3500,27 +3510,137 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             feedContainer.scrollTop = feedContainer.scrollHeight;
         }}
 
+        async function refreshOrchestratorTasks() {{
+            const baseApiUrl = (window.location.protocol === 'file:' || !window.location.port) ? 'http://127.0.0.1:18080' : '';
+            try {{
+                const res = await fetch(`${{baseApiUrl}}/v1/orchestrator/tasks`);
+                if (res.ok) {{
+                    const data = await res.json();
+                    orchestratorData = data;
+                    renderTasksView(data);
+                }}
+            }} catch (e) {{ }}
+        }}
+
         async function sendAgentChat() {{
             const input = document.getElementById('agentChatInput');
             if (!input || !input.value.trim()) return;
 
             const text = input.value.trim();
-            const activeDagId = (orchestratorData.tasks && orchestratorData.tasks.length > 0) ? orchestratorData.tasks[0].task_id : 'dag_active';
             const baseApiUrl = (window.location.protocol === 'file:' || !window.location.port) ? 'http://127.0.0.1:18080' : '';
+            const activeTasks = (orchestratorData.tasks || []).filter(t => t.state === 'RUNNING');
+            const hasActiveDag = activeTasks.length > 0;
+            const activeDagId = hasActiveDag ? activeTasks[0].task_id : ((orchestratorData.tasks && orchestratorData.tasks.length > 0) ? orchestratorData.tasks[0].task_id : 'dag_active');
 
             input.value = '';
+
+            // 1. 작업 중지 / 취소 제어 명령 처리
+            if (/^(중지|취소|\/stop|\/cancel|stop|cancel)$/i.test(text)) {{
+                try {{
+                    const cancelDag = hasActiveDag ? activeTasks[0].task_id : activeDagId;
+                    const res = await fetch(`${{baseApiUrl}}/v1/orchestrator/tasks/${{cancelDag}}/cancel`, {{
+                        method: 'POST'
+                    }});
+                    const data = await res.json();
+                    if (data.activity) {{
+                        renderMissionControlFeed([data.activity]);
+                    }}
+                    await refreshOrchestratorTasks();
+                }} catch (e) {{
+                    console.error('Failed to cancel task:', e);
+                }}
+                return;
+            }}
+
+            // 2. 워커 힌트 주입 (@sub_1 ...) 또는 활성 태스크 지침 주입
+            const isSubtaskMention = text.startsWith('@');
+            if (isSubtaskMention || hasActiveDag) {{
+                try {{
+                    const res = await fetch(`${{baseApiUrl}}/v1/orchestrator/tasks/${{activeDagId}}/chat`, {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ message: text }})
+                    }});
+                    const data = await res.json();
+                    if (data.activity) {{
+                        renderMissionControlFeed([data.activity]);
+                    }}
+                    if (data.ack) {{
+                        renderMissionControlFeed([data.ack]);
+                    }}
+                }} catch (e) {{
+                    console.error('Failed to send agent chat:', e);
+                }}
+                return;
+            }}
+
+            // 3. 신규 자연어 목표 디스패치 (새 작업 자동 생성 및 백그라운드 발주)
             try {{
-                const res = await fetch(`${{baseApiUrl}}/v1/orchestrator/tasks/${{activeDagId}}/chat`, {{
+                const cleanTitle = text.replace(/^\/dispatch\s*/i, '');
+                const newDagId = 'dag_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+                const payload = {{
+                    dag_id: newDagId,
+                    title: cleanTitle,
+                    subtasks: {{
+                        "sub_1": {{
+                            subtask_id: "sub_1",
+                            parent_task_id: newDagId,
+                            title: cleanTitle + " (분석 및 구현)",
+                            instruction: cleanTitle,
+                            assigned_tier: "SILVER",
+                            dependencies: []
+                        }},
+                        "sub_2": {{
+                            subtask_id: "sub_2",
+                            parent_task_id: newDagId,
+                            title: "단위 테스트 및 정적 분석 검증",
+                            instruction: cleanTitle + " 작업물에 대한 빌드 및 테스트 검증",
+                            assigned_tier: "BRONZE",
+                            dependencies: ["sub_1"]
+                        }}
+                    }}
+                }};
+
+                const userAct = {{
+                    id: 'act_' + Date.now(),
+                    dag_id: newDagId,
+                    subtask_id: 'ALL',
+                    subtask_title: 'User Operator',
+                    tier: 'OPERATOR',
+                    presence: 'INTERVENTION',
+                    activity_type: 'USER_CHAT',
+                    message: `🚀 신규 목표 발주: ${{cleanTitle}}`,
+                    loc_modified: 0,
+                    credits_used: 0.0,
+                    timestamp: new Date().toISOString()
+                }};
+                renderMissionControlFeed([userAct]);
+
+                const res = await fetch(`${{baseApiUrl}}/v1/orchestrator/dispatch`, {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{ message: text }})
+                    body: JSON.stringify(payload)
                 }});
-                const data = await res.json();
-                if (data.activity) {{
-                    renderMissionControlFeed([data.activity]);
-                }}
+                const result = await res.json();
+
+                const sysAct = {{
+                    id: 'act_sys_' + Date.now(),
+                    dag_id: newDagId,
+                    subtask_id: 'ALL',
+                    subtask_title: 'Orchestrator',
+                    tier: 'SYSTEM',
+                    presence: 'READY',
+                    activity_type: 'ACTION',
+                    message: `✅ 작업 DAG '${{newDagId}}' 등록 완료 (2개 워커 할당). 백그라운드 실행을 시작합니다.`,
+                    loc_modified: 0,
+                    credits_used: 0.0,
+                    timestamp: new Date().toISOString()
+                }};
+                renderMissionControlFeed([sysAct]);
+
+                await refreshOrchestratorTasks();
             }} catch (e) {{
-                console.error('Failed to send agent chat:', e);
+                console.error('Failed to dispatch new task:', e);
             }}
         }}
 
@@ -3609,6 +3729,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         window.switchTab = switchTab;
         window.renderTasksView = renderTasksView;
         window.sendAgentChat = sendAgentChat;
+        window.refreshOrchestratorTasks = refreshOrchestratorTasks;
         window.renderMissionControlFeed = renderMissionControlFeed;
         window.initAgentEventSource = initAgentEventSource;
 

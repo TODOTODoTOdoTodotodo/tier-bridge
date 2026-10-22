@@ -53,12 +53,32 @@ class ChatManager:
         )
         await self.signal_bus.emit_signal(signal)
 
+        # 시스템 확인 응답(ACK) 자동 생성 및 피드 브로드캐스트
+        ack_msg = f"🤖 [오케스트레이터] '{target_subtask or '전체'}' 워커에 사용자 지시가 반영되었습니다: \"{clean_msg}\""
+        ack_item = self.activity_tracker.record_activity(
+            dag_id=dag_id,
+            subtask_id=target_subtask or "ALL",
+            subtask_title="Orchestrator ACK",
+            tier="SYSTEM",
+            presence="READY",
+            activity_type=ActivityType.ACTION,
+            message=ack_msg
+        )
+        ack_signal = SignalMessage(
+            task_id=target_subtask or dag_id,
+            signal_type=SignalType.PROGRESS,
+            activity_type=ActivityType.ACTION,
+            message=ack_msg
+        )
+        await self.signal_bus.emit_signal(ack_signal)
+
         return {
             "status": "SENT",
             "dag_id": dag_id,
             "target_subtask_id": target_subtask,
             "message": clean_msg,
-            "activity": activity_item
+            "activity": activity_item,
+            "ack": ack_item
         }
 
     def get_and_clear_hints_for_subtask(self, subtask_id: str) -> list[str]:

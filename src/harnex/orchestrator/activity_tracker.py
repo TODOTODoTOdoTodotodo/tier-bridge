@@ -145,6 +145,46 @@ class ActivityTracker:
         buf.append(item)
         return item
 
+    def record_activity(
+        self,
+        dag_id: str,
+        subtask_id: str,
+        subtask_title: str,
+        tier: str,
+        presence: str,
+        activity_type: ActivityType,
+        message: str,
+        loc_modified: int = 0,
+        credits_used: float = 0.0,
+        worker_pid: Optional[int] = None,
+        diff_patch: Optional[str] = None,
+        injected_memory_titles: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        임의의 활동(시스템 ACK, 중지 신호 등)을 링버퍼에 직접 기록합니다.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        act_val = activity_type.value if hasattr(activity_type, "value") else str(activity_type)
+        item = {
+            "id": f"act_{uuid.uuid4().hex[:8]}",
+            "dag_id": dag_id,
+            "subtask_id": subtask_id,
+            "subtask_title": subtask_title,
+            "tier": tier,
+            "presence": presence,
+            "activity_type": act_val,
+            "message": message,
+            "loc_modified": loc_modified,
+            "credits_used": credits_used,
+            "worker_pid": worker_pid,
+            "diff_patch": diff_patch,
+            "injected_memory_titles": injected_memory_titles or [],
+            "timestamp": now_iso
+        }
+        buf = self._get_buffer(dag_id)
+        buf.append(item)
+        return item
+
     def get_dag_activities(self, dag_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """
         특정 DAG의 최근 활동 목록 반환 (시간순 정렬)

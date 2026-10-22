@@ -117,6 +117,12 @@ class TestOrchestratorChatAndPresence(unittest.TestCase):
         self.assertEqual(events_data["dag_id"], dag_id)
         self.assertTrue(len(events_data["activities"]) >= 1)
 
+        # 4. Cancel DAG task
+        cancel_resp = self.client.post(f"/v1/orchestrator/tasks/{dag_id}/cancel")
+        self.assertEqual(cancel_resp.status_code, 200)
+        cancel_data = cancel_resp.json()
+        self.assertEqual(cancel_data["status"], "CANCELLED")
+
 
 if __name__ == "__main__":
     unittest.main()
