@@ -73,6 +73,7 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
 - **프로세스 레벨 격리 (Process vs Thread)**:
   - 파이썬 스레드(Thread)는 프로세스 작업 디렉토리(`cwd`) 및 프로세스 환경변수를 공유하므로, 한 스레드가 Git 명령을 내릴 때 다른 스레드의 워크트리를 오염시킵니다.
   - 따라서 모든 워커는 **독립된 OS 서브프로세스(Subprocess)**로 구동되며, 각자 전용 PID, 독립된 CWD(`~/.harnex/worktrees/{task_id}`), 전용 세션 환경 변수를 가집니다.
+  - **가상환경 인터프리터 및 PYTHONPATH 계승 불변식**: 워커 서브프로세스 기동 시 시스템 전역 `python3`가 아닌 현재 하네스 데몬의 가상환경 인터프리터(`sys.executable`)를 계승하고, `build_worker_env`에서 소스 루트(`src`)를 `PYTHONPATH`에 주입하여 라이브러리(`pydantic`, `httpx` 등) 누락(`ModuleNotFoundError`)을 원천 방지합니다.
 - **워커별 자율 멀티턴(롱텀) 실행 (Multi-Turn Long-Running ReAct Loop)**:
   - 워커는 단순 1회성(One-shot) 호출이 아니라, 독립된 세션 컨텍스트 내에서 **자체적인 멀티턴 루프**를 완주할 때까지 지속 가동됩니다:
     1. 코드 탐색 및 작성 (Turn 1)

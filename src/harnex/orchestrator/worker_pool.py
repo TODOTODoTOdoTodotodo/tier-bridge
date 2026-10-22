@@ -2,6 +2,7 @@
 import asyncio
 import os
 import signal
+import sys
 from typing import Dict, Optional, List
 
 from harnex.orchestrator.config import OrchestratorConfig
@@ -34,6 +35,11 @@ class SubprocessWorkerPool:
 
     def build_worker_env(self, subtask: SubTask) -> Dict[str, str]:
         env = dict(os.environ)
+        # Ensure PYTHONPATH includes src directory so worker runner and dependencies succeed
+        src_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        existing_pp = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = f"{src_dir}:{existing_pp}" if existing_pp else src_dir
+
         env["OLLAMA_HOST"] = f"http://127.0.0.1:{self.proxy_port}"
         env["OPENAI_BASE_URL"] = f"http://127.0.0.1:{self.proxy_port}/v1"
         env["CODEX_API_BASE"] = f"http://127.0.0.1:{self.proxy_port}/v1"
@@ -55,9 +61,9 @@ class SubprocessWorkerPool:
         """
         env = self.build_worker_env(subtask)
 
-        # Default worker command if not provided: run python agent worker module
+        # Default worker command if not provided: run python agent worker module with current python runtime
         if not cmd:
-            cmd = ["python3", "-m", "harnex.orchestrator.worker_runner", subtask.subtask_id]
+            cmd = [sys.executable, "-m", "harnex.orchestrator.worker_runner", subtask.subtask_id]
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
