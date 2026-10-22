@@ -3291,7 +3291,8 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             if (tasks.length === 0) {{
                 emptyState.classList.remove('hidden');
                 tasksContainer.classList.add('hidden');
-                tasksContainer.innerHTML = '';
+                const targetCol = document.getElementById('tasksListCol');
+                if (targetCol) targetCol.innerHTML = '';
                 return;
             }}
 
@@ -3505,10 +3506,11 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
             const text = input.value.trim();
             const activeDagId = (orchestratorData.tasks && orchestratorData.tasks.length > 0) ? orchestratorData.tasks[0].task_id : 'dag_active';
+            const baseApiUrl = (window.location.protocol === 'file:' || !window.location.port) ? 'http://127.0.0.1:18080' : '';
 
             input.value = '';
             try {{
-                const res = await fetch(`/v1/orchestrator/tasks/${{activeDagId}}/chat`, {{
+                const res = await fetch(`${{baseApiUrl}}/v1/orchestrator/tasks/${{activeDagId}}/chat`, {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
                     body: JSON.stringify({{ message: text }})
@@ -3524,8 +3526,9 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
         function initAgentEventSource() {{
             if (agentEventSource) return;
+            const baseApiUrl = (window.location.protocol === 'file:' || !window.location.port) ? 'http://127.0.0.1:18080' : '';
             try {{
-                agentEventSource = new EventSource('/v1/orchestrator/events');
+                agentEventSource = new EventSource(`${{baseApiUrl}}/v1/orchestrator/events`);
                 agentEventSource.onopen = function() {{
                     const badge = document.getElementById('sseStatusBadge');
                     if (badge) badge.innerHTML = '🟢 Live Feed';
