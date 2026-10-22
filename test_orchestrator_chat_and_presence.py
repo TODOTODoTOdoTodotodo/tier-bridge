@@ -78,11 +78,18 @@ class TestOrchestratorChatAndPresence(unittest.TestCase):
         result = asyncio.run(self.chat_mgr.handle_user_message("dag_chat_test", "@sub_auth_01 트랜잭션 롤백 테스트 작성"))
         self.assertEqual(result["status"], "SENT")
         self.assertEqual(result["target_subtask_id"], "sub_auth_01")
+        self.assertEqual(result["activity"]["tier"], "OPERATOR ➔ sub_auth_01")
 
         # Check pending hints
         hints = self.chat_mgr.get_and_clear_hints_for_subtask("sub_auth_01")
         self.assertEqual(hints, ["트랜잭션 롤백 테스트 작성"])
         self.assertEqual(self.chat_mgr.get_and_clear_hints_for_subtask("sub_auth_01"), [])
+
+        # Verify no duplicate activity in ActivityTracker
+        feed = self.tracker.get_dag_activities("dag_chat_test")
+        user_chat_items = [item for item in feed if item["activity_type"] == "USER_CHAT"]
+        self.assertEqual(len(user_chat_items), 1)
+        self.assertEqual(user_chat_items[0]["tier"], "OPERATOR ➔ sub_auth_01")
 
     def test_api_chat_and_events_endpoints(self):
         """ Test /v1/orchestrator/tasks/{dag_id}/chat and /v1/orchestrator/tasks/{dag_id}/events """
@@ -116,6 +123,10 @@ class TestOrchestratorChatAndPresence(unittest.TestCase):
         events_data = events_resp.json()
         self.assertEqual(events_data["dag_id"], dag_id)
         self.assertTrue(len(events_data["activities"]) >= 1)
+        # Ensure USER_CHAT is not duplicated
+        chat_acts = [a for a in events_data["activities"] if a["activity_type"] == "USER_CHAT"]
+        self.assertEqual(len(chat_acts), 1)
+        self.assertEqual(chat_acts[0]["tier"], "OPERATOR ➔ sub_1")
 
         # 4. Cancel DAG task
         cancel_resp = self.client.post(f"/v1/orchestrator/tasks/{dag_id}/cancel")

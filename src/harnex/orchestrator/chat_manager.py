@@ -49,7 +49,9 @@ class ChatManager:
             task_id=target_subtask or dag_id,
             signal_type=SignalType.PROGRESS,
             activity_type=ActivityType.USER_CHAT,
-            message=clean_msg
+            activity_id=activity_item.get("id"),
+            message=clean_msg,
+            skip_activity_tracking=True
         )
         await self.signal_bus.emit_signal(signal)
 
@@ -68,7 +70,9 @@ class ChatManager:
             task_id=target_subtask or dag_id,
             signal_type=SignalType.PROGRESS,
             activity_type=ActivityType.ACTION,
-            message=ack_msg
+            activity_id=ack_item.get("id"),
+            message=ack_msg,
+            skip_activity_tracking=True
         )
         await self.signal_bus.emit_signal(ack_signal)
 

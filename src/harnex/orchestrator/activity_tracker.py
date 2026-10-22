@@ -145,12 +145,14 @@ class ActivityTracker:
         사용자가 에이전트 관제실에서 전달한 지시(Human Intervention) 기록
         """
         now_iso = datetime.now(timezone.utc).isoformat()
+        target_label = target_subtask_id or "ALL"
+        tier_label = f"OPERATOR ➔ {target_label}"
         item = {
             "id": f"act_{uuid.uuid4().hex[:8]}",
             "dag_id": dag_id,
-            "subtask_id": target_subtask_id or "ALL",
-            "subtask_title": "Human Operator (사용자 개입)",
-            "tier": "OPERATOR",
+            "subtask_id": target_label,
+            "subtask_title": f"Human Operator ➔ {target_label}",
+            "tier": tier_label,
             "presence": "INTERVENTION",
             "activity_type": ActivityType.USER_CHAT.value,
             "message": message,

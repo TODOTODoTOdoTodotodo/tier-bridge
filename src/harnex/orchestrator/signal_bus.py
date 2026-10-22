@@ -104,7 +104,9 @@ class SignalBus:
                 subtask.error_message = signal.message
 
             dag_id = subtask.parent_task_id if subtask else "global"
-            self.activity_tracker.record_signal_activity(dag_id, subtask, signal)
+            act_type_val = signal.activity_type.value if hasattr(signal.activity_type, "value") else str(signal.activity_type)
+            if not signal.skip_activity_tracking and act_type_val != "USER_CHAT":
+                self.activity_tracker.record_signal_activity(dag_id, subtask, signal)
             await self._broadcast(signal)
             return True
 

@@ -3759,11 +3759,15 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                 agentEventSource.onmessage = function(event) {{
                     try {{
                         const signal = JSON.parse(event.data);
+                        const aid = signal.activity_id || ('sse_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+                        if (seenActivityIds.has(aid)) return;
+                        const sub = signal.task_id || 'DAG';
+                        const tier = signal.activity_type === 'USER_CHAT' ? `OPERATOR ➔ ${{sub}}` : (signal.activity_type === 'ACTION' && (signal.message || '').includes('오케스트레이터') ? 'SYSTEM' : 'SILVER');
                         const activity = {{
-                            id: 'sse_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                            id: aid,
                             dag_id: 'active',
-                            subtask_id: signal.task_id,
-                            tier: 'SILVER',
+                            subtask_id: sub,
+                            tier: tier,
                             presence: signal.signal_type === 'COMPLETED' ? 'COMPLETED' : (signal.signal_type === 'STARTED' ? 'THINKING' : 'CODING'),
                             activity_type: signal.activity_type || (signal.signal_type === 'COMPLETED' ? 'ACTION' : 'THOUGHT'),
                             message: signal.message || signal.signal_type,

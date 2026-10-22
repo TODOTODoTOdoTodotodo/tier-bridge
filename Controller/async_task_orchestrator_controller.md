@@ -125,6 +125,9 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
    - 사용자가 터미널에서 `harnex-log`(`tail -f`)를 실행할 때, 기존의 1:1 리버스 프록시 로그(`➔ [USAGE: ...]`, `➔ [DECISION: ...]`, `➔ [MEMORY: ...]`)와 멀티에이전트 오케스트레이터 이벤트가 완벽히 통합되어 시간 순서대로 스트리밍됩니다.
 3. **무간섭 원칙 (Zero Interference)**:
    - 로그 포맷에 접두어 `[ORCHESTRATOR: ...]`를 명시하여 기존 `analyze_usage.py`의 토큰 및 크레딧 파싱 정규식(Regex)과 충돌하지 않도록 안전하게 분리합니다.
+4. **유저 챗 및 시스템 ACK 중복 기록 방지 및 주체-대상 명확화 규격**:
+   - `ChatManager`에서 선행 기록된 유저 개입 메시지(`USER_CHAT`) 및 시스템 응답(`ACTION`)은 `SignalBus`로 SSE 브로드캐스트 시 `skip_activity_tracking=True`를 명시하여 `SignalBus`가 서브태스크 티어(`SILVER`)로 2중 적재/출력하는 현상을 방지합니다.
+   - 유저 챗의 로그 및 피드 라벨은 `OPERATOR ➔ {target_subtask}` (예: `OPERATOR ➔ sub_1` 또는 `OPERATOR ➔ ALL`) 형태로 단 1회 명확히 출력하여 발신 주체와 수신 대상 워커를 동시에 식별합니다.
 
 ### 3.9 단일책임원칙(SRP) 기반 컴포넌트 아키텍처
 각 기능의 독립적인 유지보수와 향후 기능 확장을 위해 책임을 명확히 단일화하여 분리:

@@ -41,6 +41,7 @@ class SignalMessage(BaseModel):
     task_id: str
     signal_type: SignalType
     activity_type: ActivityType = ActivityType.LOG
+    activity_id: Optional[str] = None
     worker_pid: Optional[int] = None
     progress_percent: float = Field(default=0.0, ge=0.0, le=100.0)
     message: str = ""
@@ -50,6 +51,7 @@ class SignalMessage(BaseModel):
     credits_used: float = 0.0
     injected_memory_titles: List[str] = Field(default_factory=list)
     timestamp: str = Field(default_factory=utc_now_iso)
+    skip_activity_tracking: bool = False
 
 
 class SubTask(BaseModel):
