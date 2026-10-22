@@ -97,7 +97,18 @@ class DAGScheduler:
 
         try:
             # Create isolated Git worktree sandbox
-            worktree_path = await self.sandbox_mgr.create_sandbox(subtask_id)
+            target_repo = getattr(self.dag, "target_repo", None)
+            if target_repo:
+                try:
+                    worktree_path = await self.sandbox_mgr.create_sandbox(
+                        subtask_id=subtask_id,
+                        target_repo=target_repo
+                    )
+                except TypeError:
+                    worktree_path = await self.sandbox_mgr.create_sandbox(subtask_id)
+            else:
+                worktree_path = await self.sandbox_mgr.create_sandbox(subtask_id)
+
             # Spawn worker subprocess inside sandbox
             await self.worker_pool.spawn_worker(
                 subtask=subtask,

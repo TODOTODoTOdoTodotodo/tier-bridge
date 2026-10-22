@@ -47,14 +47,16 @@ class WorktreeSandboxManager:
         stdout, stderr = await proc.communicate()
         return proc.returncode, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
 
-    async def create_sandbox(self, subtask_id: str, base_commit: str = "HEAD") -> str:
+    async def create_sandbox(self, subtask_id: str, base_commit: str = "HEAD", target_repo: Optional[str] = None) -> str:
         """
         Creates an isolated Git worktree for subtask_id at worktree_root/subtask_id
         on a dedicated branch 'task/{subtask_id}'.
+        If target_repo is specified and valid, branches from target_repo; otherwise defaults to base_repo_dir.
         Guards against disk exhaustion and git lock contention.
         """
         self._validate_subtask_id(subtask_id)
         worktree_path = self.get_worktree_path(subtask_id)
+        repo_dir = os.path.abspath(target_repo) if target_repo and os.path.isdir(target_repo) else self.base_repo_dir
 
         # 1. Disk space check
         total, used, free = shutil.disk_usage(self.worktree_root)
@@ -67,20 +69,20 @@ class WorktreeSandboxManager:
         async with self._lock:
             if os.path.exists(worktree_path):
                 # Clean up preexisting worktree if any
-                await self.cleanup_sandbox(subtask_id)
+                await self.cleanup_sandbox(subtask_id, target_repo=repo_dir)
 
             attempts = self.config.git_lock_retry_attempts
             backoff_base = self.config.git_lock_retry_backoff_base_ms / 1000.0
 
             for attempt in range(attempts):
                 # git worktree add <path> -b <branch> <base_commit>
-                code, out, err = await self._run_git(["worktree", "add", worktree_path, "-b", branch_name, base_commit])
+                code, out, err = await self._run_git(["worktree", "add", worktree_path, "-b", branch_name, base_commit], cwd=repo_dir)
                 if code == 0:
                     return worktree_path
 
                 if "already exists" in err:
                     # branch might exist from previous run, try without -b
-                    code2, out2, err2 = await self._run_git(["worktree", "add", worktree_path, branch_name])
+                    code2, out2, err2 = await self._run_git(["worktree", "add", worktree_path, branch_name], cwd=repo_dir)
                     if code2 == 0:
                         return worktree_path
 
@@ -92,24 +94,25 @@ class WorktreeSandboxManager:
 
             raise RuntimeError(f"Failed to create git worktree after {attempts} attempts due to lock contention: {err}")
 
-    async def cleanup_sandbox(self, subtask_id: str, delete_branch: bool = True) -> None:
+    async def cleanup_sandbox(self, subtask_id: str, delete_branch: bool = True, target_repo: Optional[str] = None) -> None:
         """
         Safely removes a worktree and deletes its temporary task branch.
         """
         self._validate_subtask_id(subtask_id)
         worktree_path = self.get_worktree_path(subtask_id)
         branch_name = f"task/{subtask_id}"
+        repo_dir = os.path.abspath(target_repo) if target_repo and os.path.isdir(target_repo) else self.base_repo_dir
 
         async with self._lock:
             if os.path.exists(worktree_path):
-                await self._run_git(["worktree", "remove", "--force", worktree_path])
+                await self._run_git(["worktree", "remove", "--force", worktree_path], cwd=repo_dir)
                 if os.path.exists(worktree_path):
                     shutil.rmtree(worktree_path, ignore_errors=True)
 
-            await self._run_git(["worktree", "prune"])
+            await self._run_git(["worktree", "prune"], cwd=repo_dir)
 
             if delete_branch:
-                await self._run_git(["branch", "-D", branch_name])
+                await self._run_git(["branch", "-D", branch_name], cwd=repo_dir)
 
     async def sweep_stale_worktrees(self) -> int:
         """

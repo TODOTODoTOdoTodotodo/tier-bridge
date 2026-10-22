@@ -1533,6 +1533,28 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
     <!-- Tab 3: Asynchronous Multi-Agent Tasks View -->
     <div id="tabContent-tasks" class="hidden">
+        <!-- Target Repository Header Bar -->
+        <div id="targetRepoBar" class="glass-card p-4 rounded-2xl border border-slate-200 dark:border-white/10 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="fractal-icon-circle sm bg-indigo-500/15 border border-indigo-500/30 text-indigo-500 shrink-0">
+                    <i class="fa-solid fa-folder-tree"></i>
+                </div>
+                <div class="min-w-0">
+                    <div class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">대상 프로젝트 저장소 (Target Repository)</div>
+                    <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span id="activeRepoPath" class="font-mono text-xs font-bold text-slate-800 dark:text-slate-100 truncate max-w-xs md:max-w-md">/Users/HH191_1/Documents/agent-cli</span>
+                        <span id="activeRepoBranchBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 dark:text-emerald-400 border border-emerald-500/25 font-mono font-bold">🌿 git</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <button type="button" onclick="openRepoSelectModal()" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer border border-slate-300 dark:border-white/10 shadow-sm">
+                    <i class="fa-solid fa-folder-open text-[11px] text-indigo-500"></i>
+                    <span>프로젝트 변경</span>
+                </button>
+            </div>
+        </div>
+
         <!-- 4-Card Header Summary -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <!-- Card 1: 총 태스크 -->
@@ -1644,6 +1666,64 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             </div>
         </div>
     </div><!-- end #tabContent-tasks -->
+
+    <!-- Target Repository Directory Explorer Modal -->
+    <div id="repoSelectModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-card w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-white/10">
+                <div class="flex items-center gap-2.5">
+                    <div class="fractal-icon-circle sm bg-indigo-500/15 text-indigo-500">
+                        <i class="fa-solid fa-folder-tree"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">타겟 프로젝트 저장소 선택</h3>
+                        <p class="text-[10px] text-slate-400">에이전트가 Git Worktree를 분기하여 작업할 프로젝트 폴더를 지정합니다.</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeRepoSelectModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-base"></i>
+                </button>
+            </div>
+
+            <!-- Recent Repos Chips -->
+            <div class="px-4 py-2.5 bg-slate-50 dark:bg-slate-950/40 border-b border-slate-200 dark:border-white/5 flex items-center gap-2 overflow-x-auto text-xs">
+                <span class="text-[10px] text-slate-400 font-semibold uppercase whitespace-nowrap">최근 저장소:</span>
+                <div id="modalRecentRepos" class="flex items-center gap-1.5 flex-nowrap">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Path Navigation & Search Bar -->
+            <div class="p-3 border-b border-slate-200 dark:border-white/10 flex items-center gap-2 bg-slate-50/50 dark:bg-slate-900/50">
+                <button type="button" onclick="navigateParentDirectory()" id="btnNavParent" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300 cursor-pointer" title="상위 폴더">
+                    <i class="fa-solid fa-arrow-up"></i>
+                </button>
+                <div id="modalBreadcrumbPath" class="flex-1 font-mono text-xs px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 overflow-x-auto whitespace-nowrap">
+                    /Users/...
+                </div>
+                <input type="text" id="modalSearchFilter" oninput="filterDirectoryList()" placeholder="폴더명 검색..." class="w-36 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-200 focus:outline-none">
+            </div>
+
+            <!-- Directory List (Tree Rows) -->
+            <div id="modalDirList" class="flex-1 overflow-y-auto p-2 space-y-1 min-h-[300px]">
+                <!-- Populated dynamically via renderDirectoryBrowser() -->
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-3 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950/60 flex items-center justify-between">
+                <div class="text-[11px] text-slate-400">
+                    <span class="text-emerald-500 font-bold">🌿 Git 저장소</span>인 폴더만 활성 작업 대상으로 선택할 수 있습니다.
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="btnSelectCurrentDir" onclick="selectWorkspaceFromModal(currentBrowsingPath)" class="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                        <i class="fa-solid fa-check text-[10px]"></i>
+                        <span>이 폴더 선택</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Fullscreen Expanded Dual Viewport Modal -->
     <div id="expandedGraphModal" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col p-4 md:p-6">
@@ -3286,6 +3366,25 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
 
             if (!tasksListCol || !tasksContainer) return;
 
+            // Target Workspace update
+            if (orch.active_workspace) {{
+                activeWorkspaceRepo = orch.active_workspace.path;
+                const pathEl = document.getElementById('activeRepoPath');
+                if (pathEl) {{
+                    pathEl.innerText = orch.active_workspace.path;
+                    pathEl.title = orch.active_workspace.path;
+                }}
+                const badgeEl = document.getElementById('activeRepoBranchBadge');
+                if (badgeEl) {{
+                    if (orch.active_workspace.is_git_repo && orch.active_workspace.git_branch) {{
+                        badgeEl.innerHTML = `🌿 ${{escapeHtml(orch.active_workspace.git_branch)}}`;
+                        badgeEl.classList.remove('hidden');
+                    }} else {{
+                        badgeEl.classList.add('hidden');
+                    }}
+                }}
+            }}
+
             if (tasks.length === 0) {{
                 tasksListCol.innerHTML = `
                 <div id="tasksEmptyState" class="glass-card p-12 rounded-2xl border border-slate-200 dark:border-white/10 text-center flex flex-col items-center justify-center">
@@ -3325,9 +3424,10 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                                 <i class="fa-solid fa-diagram-project"></i>
                             </div>
                             <div>
-                                <div class="flex items-center gap-2 mb-0.5">
+                                <div class="flex items-center gap-2 mb-0.5 flex-wrap">
                                     <span class="font-mono text-xs font-bold text-slate-400">${{escapeHtml(task.task_id)}}</span>
                                     <span class="${{stateClass}}">${{task.state}}</span>
+                                    ${{task.target_repo ? `<span class="font-mono text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10 truncate max-w-[220px]" title="${{escapeHtml(task.target_repo)}}"><i class="fa-solid fa-folder text-indigo-400 mr-1"></i>${{escapeHtml(task.target_repo.split('/').pop() || task.target_repo)}}</span>` : ''}}
                                 </div>
                                 <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">${{escapeHtml(task.title || task.task_id)}}</h3>
                             </div>
@@ -3577,10 +3677,13 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             // 3. 신규 자연어 목표 디스패치 (새 작업 자동 생성 및 백그라운드 발주)
             try {{
                 const cleanTitle = text.replace(/^\/dispatch\s*/i, '');
+                const targetRepoPath = activeWorkspaceRepo || ((orchestratorData && orchestratorData.active_workspace) ? orchestratorData.active_workspace.path : '');
+                const repoName = targetRepoPath ? (targetRepoPath.split('/').pop() || targetRepoPath) : '기본 프로젝트';
                 const newDagId = 'dag_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
                 const payload = {{
                     dag_id: newDagId,
                     title: cleanTitle,
+                    target_repo: targetRepoPath,
                     subtasks: {{
                         "sub_1": {{
                             subtask_id: "sub_1",
@@ -3609,7 +3712,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     tier: 'OPERATOR',
                     presence: 'INTERVENTION',
                     activity_type: 'USER_CHAT',
-                    message: `🚀 신규 목표 발주: ${{cleanTitle}}`,
+                    message: `🚀 [${{repoName}}] 신규 목표 발주: ${{cleanTitle}}`,
                     loc_modified: 0,
                     credits_used: 0.0,
                     timestamp: new Date().toISOString()
@@ -3631,7 +3734,7 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
                     tier: 'SYSTEM',
                     presence: 'READY',
                     activity_type: 'ACTION',
-                    message: `✅ 작업 DAG '${{newDagId}}' 등록 완료 (2개 워커 할당). 백그라운드 실행을 시작합니다.`,
+                    message: `✅ 작업 DAG '${{newDagId}}' 등록 완료 (2개 워커 할당, 대상: ${{repoName}}). 백그라운드 실행을 시작합니다.`,
                     loc_modified: 0,
                     credits_used: 0.0,
                     timestamp: new Date().toISOString()
@@ -3722,6 +3825,162 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
             }}
         }}
 
+        let currentBrowsingPath = '';
+        let currentBrowsingData = null;
+        let activeWorkspaceRepo = '';
+
+        async function openRepoSelectModal() {{
+            const modal = document.getElementById('repoSelectModal');
+            if (modal) modal.classList.remove('hidden');
+            await browseToPath(activeWorkspaceRepo || '');
+        }}
+
+        function closeRepoSelectModal() {{
+            const modal = document.getElementById('repoSelectModal');
+            if (modal) modal.classList.add('hidden');
+        }}
+
+        async function browseToPath(path) {{
+            const baseApiUrl = (window.location.protocol === 'file:' || !window.location.port) ? 'http://127.0.0.1:18080' : '';
+            try {{
+                const url = path ? `${{baseApiUrl}}/v1/orchestrator/fs/browse?path=${{encodeURIComponent(path)}}` : `${{baseApiUrl}}/v1/orchestrator/fs/browse`;
+                const res = await fetch(url);
+                if (res.ok) {{
+                    const data = await res.json();
+                    currentBrowsingData = data;
+                    currentBrowsingPath = data.current_path;
+                    renderDirectoryBrowser(data);
+                }}
+            }} catch (e) {{
+                console.error('Failed to browse path:', e);
+            }}
+        }}
+
+        function navigateParentDirectory() {{
+            if (currentBrowsingData && currentBrowsingData.parent_path) {{
+                browseToPath(currentBrowsingData.parent_path);
+            }}
+        }}
+
+        async function selectWorkspaceFromModal(path) {{
+            if (!path) return;
+            const baseApiUrl = (window.location.protocol === 'file:' || !window.location.port) ? 'http://127.0.0.1:18080' : '';
+            try {{
+                const res = await fetch(`${{baseApiUrl}}/v1/orchestrator/workspace/select`, {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ repo_path: path }})
+                }});
+                if (res.ok) {{
+                    const data = await res.json();
+                    activeWorkspaceRepo = data.active_repo;
+                    const pathEl = document.getElementById('activeRepoPath');
+                    if (pathEl) {{
+                        pathEl.innerText = data.active_repo;
+                        pathEl.title = data.active_repo;
+                    }}
+                    const badgeEl = document.getElementById('activeRepoBranchBadge');
+                    if (badgeEl) {{
+                        if (data.is_git_repo && data.git_branch) {{
+                            badgeEl.innerHTML = `🌿 ${{escapeHtml(data.git_branch)}}`;
+                            badgeEl.classList.remove('hidden');
+                        }} else {{
+                            badgeEl.classList.add('hidden');
+                        }}
+                    }}
+                    closeRepoSelectModal();
+                    await refreshOrchestratorTasks();
+                }}
+            }} catch (e) {{
+                console.error('Failed to select workspace:', e);
+            }}
+        }}
+
+        function renderDirectoryBrowser(data) {{
+            const breadcrumbEl = document.getElementById('modalBreadcrumbPath');
+            if (breadcrumbEl) breadcrumbEl.innerText = data.current_path;
+
+            const btnParent = document.getElementById('btnNavParent');
+            if (btnParent) {{
+                btnParent.disabled = !data.parent_path;
+                btnParent.style.opacity = data.parent_path ? '1' : '0.4';
+            }}
+
+            const btnSelectCurrent = document.getElementById('btnSelectCurrentDir');
+            if (btnSelectCurrent) {{
+                btnSelectCurrent.disabled = !data.is_git_repo;
+            }}
+
+            // Render Recent Repos
+            const recentContainer = document.getElementById('modalRecentRepos');
+            if (recentContainer) {{
+                let rHtml = '';
+                (data.recent_repositories || []).forEach(rPath => {{
+                    const rName = rPath.split('/').pop() || rPath;
+                    const isCur = (rPath === activeWorkspaceRepo);
+                    rHtml += `
+                    <button type="button" onclick="selectWorkspaceFromModal('${{escapeHtml(rPath)}}')" class="px-2 py-0.5 rounded text-[11px] font-mono transition-all flex items-center gap-1 cursor-pointer ${{isCur ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'}}" title="${{escapeHtml(rPath)}}">
+                        <i class="fa-solid fa-folder text-[10px]"></i>
+                        <span>${{escapeHtml(rName)}}</span>
+                    </button>
+                    `;
+                }});
+                recentContainer.innerHTML = rHtml || '<span class="text-[10px] text-slate-400">없음</span>';
+            }}
+
+            // Render Directory Rows
+            const listEl = document.getElementById('modalDirList');
+            if (!listEl) return;
+
+            let html = '';
+            data.directories.forEach(dir => {{
+                html += `
+                <div class="dir-item flex items-center justify-between p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-all group" data-name="${{escapeHtml(dir.name.toLowerCase())}}">
+                    <div class="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0" onclick="browseToPath('${{escapeHtml(dir.path)}}')">
+                        <span class="p-1.5 rounded-lg ${{dir.is_git ? 'bg-indigo-500/15 text-indigo-500' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}} text-xs shrink-0">
+                            <i class="fa-solid ${{dir.is_git ? 'fa-code-branch' : 'fa-folder'}}"></i>
+                        </span>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-xs text-slate-800 dark:text-slate-200 truncate group-hover:text-indigo-500 transition-colors">${{escapeHtml(dir.name)}}</span>
+                                ${{dir.is_git ? `<span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 font-mono font-bold">🌿 ${{escapeHtml(dir.git_branch || 'git')}}</span>` : ''}}
+                            </div>
+                            <span class="text-[10px] text-slate-400 font-mono block truncate">${{escapeHtml(dir.path)}}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 pl-2 shrink-0">
+                        ${{dir.is_git ? `
+                        <button type="button" onclick="selectWorkspaceFromModal('${{escapeHtml(dir.path)}}')" class="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-600 hover:text-white text-indigo-600 dark:text-indigo-400 text-[11px] font-bold border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer">
+                            선택
+                        </button>
+                        ` : `
+                        <button type="button" onclick="browseToPath('${{escapeHtml(dir.path)}}')" class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-white text-[11px] font-semibold transition-all cursor-pointer">
+                            진입 <i class="fa-solid fa-chevron-right text-[9px] ml-0.5"></i>
+                        </button>
+                        `}}
+                    </div>
+                </div>
+                `;
+            }});
+
+            if (data.directories.length === 0) {{
+                html = `<div class="p-8 text-center text-xs text-slate-400">하위 디렉토리가 없습니다.</div>`;
+            }}
+
+            listEl.innerHTML = html;
+        }}
+
+        function filterDirectoryList() {{
+            const input = document.getElementById('modalSearchFilter');
+            if (!input) return;
+            const q = input.value.trim().toLowerCase();
+            const items = document.querySelectorAll('#modalDirList .dir-item');
+            items.forEach(el => {{
+                const name = el.getAttribute('data-name') || '';
+                el.style.display = name.includes(q) ? 'flex' : 'none';
+            }});
+        }}
+
         function switchTab(tabName) {{
             switchDashboardTab(tabName);
         }}
@@ -3732,6 +3991,12 @@ def generate_html_dashboard(all_raw_records, records, daily_stats, monthly_stats
         window.refreshOrchestratorTasks = refreshOrchestratorTasks;
         window.renderMissionControlFeed = renderMissionControlFeed;
         window.initAgentEventSource = initAgentEventSource;
+        window.openRepoSelectModal = openRepoSelectModal;
+        window.closeRepoSelectModal = closeRepoSelectModal;
+        window.browseToPath = browseToPath;
+        window.navigateParentDirectory = navigateParentDirectory;
+        window.selectWorkspaceFromModal = selectWorkspaceFromModal;
+        window.filterDirectoryList = filterDirectoryList;
 
         let memoryMiniNetwork = null;
         let memoryExpandedNetwork = null;

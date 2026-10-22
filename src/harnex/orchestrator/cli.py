@@ -1,6 +1,7 @@
 # src/harnex/orchestrator/cli.py
 import argparse
 import json
+import os
 import sys
 import uuid
 import httpx
@@ -63,9 +64,12 @@ def cmd_dispatch(args):
             assigned_tier=args.tier or "SILVER"
         )
 
+    target_repo = getattr(args, "repo", None) or os.getcwd()
+
     dag = TaskDAG(
         dag_id=dag_id,
         title=args.title,
+        target_repo=target_repo,
         subtasks=subtasks
     )
 
@@ -216,6 +220,7 @@ def main():
     p_disp.add_argument("title", help="Overall task title or main instruction")
     p_disp.add_argument("-s", "--subtasks", action="append", help="Subtask format: 'Title: Instruction'")
     p_disp.add_argument("-t", "--tier", default="SILVER", help="Default model tier (BRONZE, SILVER, GOLD, PLATINUM)")
+    p_disp.add_argument("-r", "--repo", default=None, help="Target repository directory (default: current working directory)")
 
     # status
     p_stat = subparsers.add_parser("status", help="Get status of a specific task DAG")

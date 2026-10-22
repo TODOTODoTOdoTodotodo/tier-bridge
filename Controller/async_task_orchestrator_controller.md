@@ -99,14 +99,26 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
 - **충돌 중재기 (Conflict Mediator)**: 충돌 발생 시 고난도 랭크(`GOLD`/`PLATINUM`) 모델이 3-way diff를 분석하여 자동 충돌 해소.
 
 ### 3.5 신규 REST API 규격
-- `POST /v1/orchestrator/dispatch`: 신규 태스크 그래프 등록 및 실행 트리거.
+- `POST /v1/orchestrator/dispatch`: 신규 태스크 그래프 등록 및 실행 트리거 (`target_repo` 메타데이터 지원).
 - `GET /v1/orchestrator/tasks/{task_id}`: 태스크 진행 상태, 워커 현황, 로그 조회.
 - `POST /v1/orchestrator/tasks/{task_id}/signal`: 워커가 하네스로 완료/진행 신호 전송.
 - `GET /v1/orchestrator/tasks/{dag_id}/events`: DAG별 과거 활동 이벤트/대화 히스토리 조회.
 - `POST /v1/orchestrator/tasks/{dag_id}/chat`: 휴먼-인-더-루프(Human-in-the-Loop) 사용자 지시 주입.
+- `POST /v1/orchestrator/tasks/{dag_id}/cancel`: 활성 DAG 및 워커 안전 강제 종료.
+- `GET /v1/orchestrator/fs/browse`: 로컬 디렉토리 및 Git 저장소 목록 경량 탐색 (타겟 레포 선택용).
+- `POST /v1/orchestrator/workspace/select`: 대시보드 기본 작업 대상 레포지토리 지정 및 최근 목록 갱신.
 - `GET /v1/orchestrator/events`: SSE 기반 실시간 태스크 상태 스트리밍.
 
-### 3.6 단일책임원칙(SRP) 기반 컴포넌트 아키텍처
+### 3.6 Codex CLI 및 기존 터미널 워크플로우 100% 하위 호환성 불변식
+1. **1:1 리버스 프록시 격리 보존**:
+   - 기존 Codex CLI가 호출하는 `/v1/responses`, `/v1/chat/completions` 등 모든 엔드포인트는 타겟 레포 선택 기능의 영향을 전혀 받지 않으며, 기존의 6단계 모델 다운스케일링, 장기 기억 주입(Giyeok), 크레딧 차감 로직은 100% 동일하게 동작합니다.
+2. **호출자 CWD 우선 원칙 (Caller CWD Priority)**:
+   - CLI(`harnex-task dispatch`)에서 실행 시, 별도의 `--repo` 지정이 없으면 호출자가 현재 위치한 터미널 디렉토리(`cwd="."`)를 100% 기본 작업 레포로 사용합니다.
+   - 대시보드에서 타겟 레포를 변경하더라도, 터미널 세션의 작업 위치나 환경변수를 오염시키지 않습니다.
+3. **선택적 타겟 레포 바인딩 (`target_repo`)**:
+   - `TaskDAG.target_repo` (또는 `metadata["target_repo"]`)가 명시된 경우에만 `WorktreeSandboxManager`가 해당 지정 레포지토리 경로에서 워크트리를 생성하고, 지정되지 않은 경우 기존 기본 레포지토리 경로(`base_repo_dir`)로 자동 폴백합니다.
+
+### 3.7 단일책임원칙(SRP) 기반 컴포넌트 아키텍처
 각 기능의 독립적인 유지보수와 향후 기능 확장을 위해 책임을 명확히 단일화하여 분리:
 1. **기억 선행 주입 및 회수 (`TaskMemoryBridge`, `src/harnex/orchestrator/memory_bridge.py`)**:
    - **단일 책임**: 서브태스크 지시를 분석하여 `MemoryHandler`에서 연관된 사내 지식 노드를 선행 검색(Pre-fetch)하고 주입하며, 작업 완료 후 새 지식을 환원(Ingestion).

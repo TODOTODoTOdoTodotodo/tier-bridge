@@ -11,11 +11,11 @@ class MockSandboxManager:
     def __init__(self):
         self.created = []
 
-    async def create_sandbox(self, subtask_id: str, base_commit: str = "HEAD") -> str:
+    async def create_sandbox(self, subtask_id: str, base_commit: str = "HEAD", *args, **kwargs) -> str:
         self.created.append(subtask_id)
         return f"/tmp/mock_worktrees/{subtask_id}"
 
-    async def cleanup_sandbox(self, subtask_id: str) -> None:
+    async def cleanup_sandbox(self, subtask_id: str, *args, **kwargs) -> None:
         pass
 
 

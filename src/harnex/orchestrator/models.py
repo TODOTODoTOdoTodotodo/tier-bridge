@@ -78,6 +78,7 @@ class SubTask(BaseModel):
 class TaskDAG(BaseModel):
     dag_id: str
     title: str
+    target_repo: Optional[str] = None
     subtasks: Dict[str, SubTask] = Field(default_factory=dict)
     state: TaskState = TaskState.PENDING
     created_at: str = Field(default_factory=utc_now_iso)

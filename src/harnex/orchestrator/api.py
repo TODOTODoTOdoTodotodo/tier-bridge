@@ -14,11 +14,13 @@ from harnex.orchestrator.worker_pool import SubprocessWorkerPool
 from harnex.orchestrator.scheduler import DAGScheduler
 from harnex.orchestrator.activity_tracker import ActivityTracker
 from harnex.orchestrator.chat_manager import ChatManager
+from harnex.orchestrator.workspace_manager import WorkspaceManager
 
 orchestrator_router = APIRouter(tags=["orchestrator"])
 
 # Global in-process singletons for orchestrator state
 _config = load_orchestrator_config()
+_workspace_mgr = WorkspaceManager(_config)
 _activity_tracker = ActivityTracker(_config)
 _signal_bus = SignalBus(_config, activity_tracker=_activity_tracker)
 _chat_manager = ChatManager(_activity_tracker, _signal_bus)
@@ -55,6 +57,7 @@ def get_orchestrator_summary() -> Dict[str, Any]:
             "task_id": d.dag_id,
             "title": d.title,
             "state": d.state.value,
+            "target_repo": getattr(d, "target_repo", None),
             "created_at": d.created_at,
             "completed_at": d.completed_at,
             "total_subtasks": len(d.subtasks),
@@ -64,6 +67,7 @@ def get_orchestrator_summary() -> Dict[str, Any]:
 
     return {
         "enabled": True,
+        "active_workspace": _workspace_mgr.get_active_workspace(),
         "active_tasks_count": active_count,
         "completed_tasks_count": completed_count,
         "failed_tasks_count": failed_count,
@@ -83,6 +87,9 @@ async def dispatch_dag(dag: TaskDAG):
     Submits and dispatches a new TaskDAG.
     Validates circular dependencies, registers DAG, and begins async execution.
     """
+    if not getattr(dag, "target_repo", None):
+        dag.target_repo = _workspace_mgr.active_repo
+
     try:
         validate_dag(dag, _config)
     except ValueError as e:
@@ -98,8 +105,30 @@ async def dispatch_dag(dag: TaskDAG):
         "status": "DISPATCHED",
         "dag_id": dag.dag_id,
         "title": dag.title,
+        "target_repo": dag.target_repo,
         "total_subtasks": len(dag.subtasks)
     }
+
+
+@orchestrator_router.get("/fs/browse")
+async def browse_filesystem(path: Optional[str] = None):
+    """ Lightweight local directory browsing for target repo selection """
+    try:
+        return _workspace_mgr.browse_directory(path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@orchestrator_router.post("/workspace/select")
+async def select_workspace_repo(payload: Dict[str, Any]):
+    """ Sets active target repo for future dashboard operations """
+    repo_path = payload.get("repo_path", "").strip()
+    if not repo_path:
+        raise HTTPException(status_code=400, detail="repo_path cannot be empty.")
+    try:
+        return _workspace_mgr.select_workspace(repo_path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @orchestrator_router.get("/tasks")
