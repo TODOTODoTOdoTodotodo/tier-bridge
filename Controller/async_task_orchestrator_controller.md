@@ -74,6 +74,9 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
   - 파이썬 스레드(Thread)는 프로세스 작업 디렉토리(`cwd`) 및 프로세스 환경변수를 공유하므로, 한 스레드가 Git 명령을 내릴 때 다른 스레드의 워크트리를 오염시킵니다.
   - 따라서 모든 워커는 **독립된 OS 서브프로세스(Subprocess)**로 구동되며, 각자 전용 PID, 독립된 CWD(`~/.harnex/worktrees/{task_id}`), 전용 세션 환경 변수를 가집니다.
   - **가상환경 인터프리터 및 PYTHONPATH 계승 불변식**: 워커 서브프로세스 기동 시 시스템 전역 `python3`가 아닌 현재 하네스 데몬의 가상환경 인터프리터(`sys.executable`)를 계승하고, `build_worker_env`에서 소스 루트(`src`)를 `PYTHONPATH`에 주입하여 라이브러리(`pydantic`, `httpx` 등) 누락(`ModuleNotFoundError`)을 원천 방지합니다.
+- **워크트리 샌드박스 내 활성 작업 공간 문서 컨텍스트 동기화 (Active Documentation Context Sync)**:
+  - 개발자가 활성 작업 공간에서 실시간으로 작성 중인 문서(`.md` 및 `docs/`)는 아직 `git commit` 되지 않은 미추적(Untracked) 상태일 수 있습니다.
+  - `WorktreeSandboxManager.create_sandbox()`는 격리 워크트리 생성 직후, 부모 작업 공간의 최신 문서 컨텍스트(`.md` 및 `docs/`)를 안전하게 워크트리로 복제 투영하여 워커가 최근 작성된 아키텍처 명세 및 가이드를 온전히 읽고 분석할 수 있도록 보장합니다.
 - **워커별 자율 멀티턴(롱텀) 실행 (Multi-Turn Long-Running ReAct Loop)**:
   - 워커는 단순 1회성(One-shot) 호출이 아니라, 독립된 세션 컨텍스트 내에서 **자체적인 멀티턴 루프**를 완주할 때까지 지속 가동됩니다:
     1. 코드 탐색 및 작성 (Turn 1)
@@ -82,6 +85,14 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
     4. 단위 테스트 실행 및 통과 검증 (Turn 4)
     5. 최종 diff 생성 및 `SIGNAL_COMPLETED` 발행 (Turn 5)
   - 이 동안 상위 오케스트레이터는 폴링하지 않고 `SIGNAL_PROGRESS`와 `HEARTBEAT`만 수신하며 비동기 대기(Join Barrier)합니다.
+  - **경량 ReAct 워커 실행기 (`worker_runner.py`) 규격**:
+    - **환경변수 수신**: `HARNEX_SUBTASK_INSTRUCTION`, `HARNEX_INJECTED_MEMORIES`, `HARNEX_ASSIGNED_MODEL`, `HARNEX_ORCHESTRATOR_URL`.
+    - **격리 파일 도구(Worktree-Scoped Tools)**:
+      - `glob_files(pattern)`: 워크트리 내 파일/문서 탐색 (`.git`, `node_modules`, `build` 등 제외).
+      - `read_file(path)`: 안전한 샌드박스 내부 파일 내용 읽기 (상위 디렉토리 탈출 방어).
+      - `write_file(path, content)`: 분석/수정 결과 파일 작성 및 생성.
+    - **하네스 로컬 프록시 연계**: `http://127.0.0.1:18080/v1/chat/completions` (OpenAI 스트리밍) 호출을 통해 할당된 모델 티어(Luna, Terra 등)를 온전히 활용하며, 토큰/비용 추적 및 캐싱 파이프라인을 100% 공유.
+    - **무간섭 원칙**: 워커는 프록시의 일반 클라이언트로서만 동작하며, 프록시 내부 코드나 터미널 세션의 환경변수를 일체 오염시키지 않음.
 - **Git Worktree 활용**:
   1. 각 워커 실행 시 `git worktree add ~/.harnex/worktrees/{task_id} -b task/{task_id}` 실행.
   2. 워커는 독립된 폴더에서 코드 작성, 컴파일, 단위 테스트 수행.

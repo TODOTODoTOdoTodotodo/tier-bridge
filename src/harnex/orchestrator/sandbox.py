@@ -47,6 +47,26 @@ class WorktreeSandboxManager:
         stdout, stderr = await proc.communicate()
         return proc.returncode, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
 
+    def _sync_active_documentation(self, repo_dir: str, worktree_path: str) -> None:
+        """
+        Safely copies untracked documentation files (.md, docs/) from the active repo
+        into the isolated worktree sandbox so workers can reference latest specs.
+        """
+        try:
+            ignore_dirs = {".git", ".harnex-sandboxes", "node_modules", "build", ".gradle", "target", ".venv", "__pycache__", ".idea"}
+            for root, dirs, files in os.walk(repo_dir):
+                dirs[:] = [d for d in dirs if d not in ignore_dirs and not d.startswith(".git")]
+                for f in files:
+                    if f.endswith(".md") or "/docs/" in root or root.endswith("/docs"):
+                        src_file = os.path.join(root, f)
+                        rel_path = os.path.relpath(src_file, repo_dir)
+                        dest_file = os.path.join(worktree_path, rel_path)
+                        if not os.path.exists(dest_file):
+                            os.makedirs(os.path.dirname(dest_file), exist_ok=True)
+                            shutil.copy2(src_file, dest_file)
+        except Exception:
+            pass
+
     async def create_sandbox(self, subtask_id: str, base_commit: str = "HEAD", target_repo: Optional[str] = None) -> str:
         """
         Creates an isolated Git worktree for subtask_id at worktree_root/subtask_id
@@ -78,6 +98,7 @@ class WorktreeSandboxManager:
                 # git worktree add <path> -b <branch> <base_commit>
                 code, out, err = await self._run_git(["worktree", "add", worktree_path, "-b", branch_name, base_commit], cwd=repo_dir)
                 if code == 0:
+                    self._sync_active_documentation(repo_dir, worktree_path)
                     return worktree_path
 
                 if "already exists" in err or "이미 있습니다" in err:
@@ -86,6 +107,7 @@ class WorktreeSandboxManager:
                         shutil.rmtree(worktree_path, ignore_errors=True)
                     code2, out2, err2 = await self._run_git(["worktree", "add", worktree_path, branch_name], cwd=repo_dir)
                     if code2 == 0:
+                        self._sync_active_documentation(repo_dir, worktree_path)
                         return worktree_path
 
                 if "index.lock" in err or "Unable to create" in err:

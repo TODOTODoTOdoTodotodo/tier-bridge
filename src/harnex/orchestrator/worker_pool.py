@@ -1,5 +1,6 @@
 # src/harnex/orchestrator/worker_pool.py
 import asyncio
+import json
 import os
 import signal
 import sys
@@ -45,6 +46,14 @@ class SubprocessWorkerPool:
         env["CODEX_API_BASE"] = f"http://127.0.0.1:{self.proxy_port}/v1"
         env["HARNEX_TASK_ID"] = subtask.subtask_id
         env["HARNEX_PARENT_DAG_ID"] = subtask.parent_task_id
+        env["HARNEX_SUBTASK_TITLE"] = subtask.title or ""
+        env["HARNEX_SUBTASK_INSTRUCTION"] = subtask.instruction or ""
+        # Injected memories serialized as JSON
+        try:
+            mems = [m.model_dump() if hasattr(m, "model_dump") else (m.dict() if hasattr(m, "dict") else dict(m)) for m in (subtask.injected_memories or [])]
+        except Exception:
+            mems = subtask.injected_memories or []
+        env["HARNEX_INJECTED_MEMORIES"] = json.dumps(mems)
         env["HARNEX_ORCHESTRATOR_URL"] = f"http://127.0.0.1:{self.proxy_port}/v1/orchestrator"
         env["HARNEX_ASSIGNED_MODEL"] = self.get_model_for_tier(subtask.assigned_tier)
         return env
