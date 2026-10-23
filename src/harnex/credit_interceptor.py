@@ -28,6 +28,7 @@ class CreditInterceptor:
         self.reset_at: Optional[int] = None
         self._lock = asyncio.Lock()
         self._client: Optional[httpx.AsyncClient] = None
+        self.session_usage: Dict[str, Dict[str, Any]] = {}
 
     def get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -144,6 +145,26 @@ class CreditInterceptor:
                 self.last_known_used = curr_used
                 self.last_known_remaining = curr_remaining
 
+                # 세션별 누적 소모량 인메모리 갱신
+                if session_id:
+                    if session_id not in self.session_usage:
+                        self.session_usage[session_id] = {
+                            "session_id": session_id,
+                            "turns": 0,
+                            "input_tokens": 0,
+                            "output_tokens": 0,
+                            "total_tokens": 0,
+                            "real_credits": 0.0,
+                            "loc": 0
+                        }
+                    e = self.session_usage[session_id]
+                    e["turns"] += 1
+                    e["input_tokens"] += in_tok
+                    e["output_tokens"] += out_tok
+                    e["total_tokens"] += (in_tok + out_tok)
+                    e["real_credits"] = round(e["real_credits"] + delta_credit, 4)
+                    e["loc"] += loc
+
                 # 실제 크레딧 델타 및 실시간 잔여량 태그를 포함한 불변 물리량 USAGE 로그 출력 (가변적 USD 생략)
                 print(
                     f"[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | "
@@ -155,11 +176,114 @@ class CreditInterceptor:
                 return
 
         # 백엔드 조회 실패 시 안전 폴백(Fallback) 로깅
+        fallback_credit = round(est_cost / 0.20, 4)
+        if session_id:
+            if session_id not in self.session_usage:
+                self.session_usage[session_id] = {
+                    "session_id": session_id,
+                    "turns": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "real_credits": 0.0,
+                    "loc": 0
+                }
+            e = self.session_usage[session_id]
+            e["turns"] += 1
+            e["input_tokens"] += in_tok
+            e["output_tokens"] += out_tok
+            e["total_tokens"] += (in_tok + out_tok)
+            e["real_credits"] = round(e["real_credits"] + fallback_credit, 4)
+            e["loc"] += loc
+
         print(
             f"[{now_str}]{sid_tag} ➔ [USAGE: {decision}] ({model}) | "
             f"input={in_tok} output={out_tok} tokens | "
             f"loc={loc} lines",
             flush=True
         )
+
+    def get_session_usage(self, session_id: str, since_timestamp: Optional[str] = None) -> Dict[str, Any]:
+        """
+        특정 session_id에 대해 인메모리 추적된 사용량을 반환하며,
+        인메모리 기록이 없거나 0인 경우 harness.log에서 실제 차감 크레딧을 스캔하여 반환 (하이브리드 캐시)
+        """
+        if session_id in self.session_usage and self.session_usage[session_id].get("real_credits", 0) > 0:
+            return dict(self.session_usage[session_id])
+
+        return self._scan_log_for_session_usage(session_id, since_timestamp=since_timestamp)
+
+    def _scan_log_for_session_usage(self, session_id: str, since_timestamp: Optional[str] = None) -> Dict[str, Any]:
+        import re
+        usage_pat = re.compile(
+            r"^\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]\s*\[sid:\s*(?P<sid>[^\]]+)\]\s*➔ \[USAGE[^\]]*\]\s*\((?P<model>[^)]+)\) \| input=(?P<in_tok>\d+) output=(?P<out_tok>\d+) tokens(?: \| real_credit=(?P<real_credit>[\d\.]+))?(?: \| balance=(?P<balance>[\d\.]+))?(?: \| loc=(?P<loc>\d+) lines)?"
+        )
+        candidates = [
+            os.path.expanduser("~/.harnex/live/harness.log"),
+            os.path.expanduser("~/.tierbridge/live/harness.log"),
+            "harness.log"
+        ]
+        log_file = None
+        for p in candidates:
+            if os.path.exists(p):
+                log_file = p
+                break
+
+        empty_res = {"session_id": session_id, "turns": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "real_credits": 0.0, "loc": 0}
+        if not log_file:
+            return empty_res
+
+        since_str = ""
+        if since_timestamp:
+            try:
+                dt = datetime.fromisoformat(since_timestamp)
+                if dt.tzinfo is not None:
+                    dt = dt.astimezone()
+                since_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                since_str = str(since_timestamp)[:19].replace("T", " ")
+
+        turns = 0
+        in_tok = 0
+        out_tok = 0
+        credits = 0.0
+        loc = 0
+
+        try:
+            with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    m = usage_pat.search(line)
+                    if not m:
+                        continue
+                    sid = m.group("sid")
+                    if sid != session_id:
+                        continue
+                    ts = m.group("timestamp")
+                    if since_str and ts and ts < since_str:
+                        continue
+                    turns += 1
+                    in_tok += int(m.group("in_tok"))
+                    out_tok += int(m.group("out_tok"))
+                    cr_str = m.group("real_credit")
+                    if cr_str:
+                        credits += float(cr_str)
+                    loc_str = m.group("loc")
+                    if loc_str:
+                        loc += int(loc_str)
+        except Exception:
+            pass
+
+        result = {
+            "session_id": session_id,
+            "turns": turns,
+            "input_tokens": in_tok,
+            "output_tokens": out_tok,
+            "total_tokens": in_tok + out_tok,
+            "real_credits": round(credits, 4),
+            "loc": loc
+        }
+        if turns > 0:
+            self.session_usage[session_id] = dict(result)
+        return result
 
 interceptor = CreditInterceptor()

@@ -72,6 +72,7 @@ def send_signal(
     loc: int = 0,
     tokens: int = 0,
     credits: float = 0.0,
+    turns: int = 0,
     activity_type: Optional[str] = None
 ) -> None:
     """ Emits lifecycle signal back to Orchestrator API """
@@ -85,7 +86,8 @@ def send_signal(
         "diff_patch": diff_patch,
         "loc_modified": loc,
         "tokens_used": tokens,
-        "credits_used": credits
+        "credits_used": credits,
+        "turns_completed": turns
     }
     try:
         httpx.post(url, json=payload, timeout=5.0)
@@ -331,10 +333,33 @@ def main():
 
         max_turns = 15
         final_answer = ""
+        cumulative_tokens = 0
+        cumulative_credits = 0.0
+
+        def estimate_turn_usage(prompt_msgs: list, response_str: str, model_name: str) -> Tuple[int, float]:
+            p_len = sum(len(str(m.get("content", ""))) for m in prompt_msgs)
+            in_tok = max(100, int(p_len * 0.35))
+            out_tok = max(20, int(len(response_str) * 0.35))
+            m_lower = model_name.lower()
+            if "sol" in m_lower or "terra" in m_lower or "gold" in m_lower or "platinum" in m_lower:
+                in_p, out_p = 2.0, 10.0
+            elif "luna" in m_lower or "silver" in m_lower:
+                in_p, out_p = 1.0, 3.0
+            elif "bronze" in m_lower:
+                in_p, out_p = 0.1, 0.5
+            else:
+                in_p, out_p = 1.0, 3.0
+            cost_usd = (in_tok / 1_000_000.0) * in_p + (out_tok / 1_000_000.0) * out_p
+            cr = cost_usd / 0.20
+            return (in_tok + out_tok), cr
 
         # 2. ReAct Multi-turn Execution Loop
         for turn in range(1, max_turns + 1):
             llm_response = call_llm_stream(proxy_url, assigned_model, messages)
+            turn_tokens, turn_cr = estimate_turn_usage(messages, llm_response, assigned_model)
+            cumulative_tokens += turn_tokens
+            cumulative_credits += turn_cr
+
             if not llm_response.strip():
                 # Direct fallback completion if model gave empty output
                 final_answer = "Subtask completed."
@@ -361,11 +386,20 @@ def main():
                 })
                 continue
 
-            # Send PROGRESS signal to Orchestrator Activity Stream
+            # Send PROGRESS signal to Orchestrator Activity Stream with cumulative metrics
             action_desc = f"{action_name}({', '.join(f'{k}={v}' for k, v in action_args.items() if k != 'content')})"
             progress_msg = f"{thought} ➔ {action_desc}" if thought else f"Executing {action_desc}"
             current_loc, _ = get_git_diff_stat()
-            send_signal(orch_url, task_id, "PROGRESS", message=progress_msg, loc=current_loc)
+            send_signal(
+                orch_url=orch_url,
+                task_id=task_id,
+                signal_type="PROGRESS",
+                message=progress_msg,
+                loc=current_loc,
+                tokens=cumulative_tokens,
+                credits=round(cumulative_credits, 4),
+                turns=turn
+            )
 
             # Execute tool safely
             observation = execute_tool(action_name, action_args)
@@ -383,8 +417,9 @@ def main():
             message=summary_msg,
             diff_patch=diff_patch,
             loc=loc_modified,
-            tokens=turn * 350,
-            credits=turn * 0.005
+            tokens=cumulative_tokens,
+            credits=round(cumulative_credits, 4),
+            turns=turn
         )
         sys.exit(0)
 

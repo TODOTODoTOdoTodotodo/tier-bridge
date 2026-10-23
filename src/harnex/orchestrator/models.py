@@ -49,6 +49,7 @@ class SignalMessage(BaseModel):
     loc_modified: int = 0
     tokens_used: int = 0
     credits_used: float = 0.0
+    turns_completed: int = 0
     injected_memory_titles: List[str] = Field(default_factory=list)
     timestamp: str = Field(default_factory=utc_now_iso)
     skip_activity_tracking: bool = False

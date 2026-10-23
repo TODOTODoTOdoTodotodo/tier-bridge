@@ -12,18 +12,47 @@ from harnex.orchestrator.signal_bus import SignalBus
 from harnex.orchestrator.sandbox import WorktreeSandboxManager
 from harnex.orchestrator.worker_pool import SubprocessWorkerPool
 from harnex.orchestrator.scheduler import DAGScheduler
+import os
 from harnex.orchestrator.activity_tracker import ActivityTracker
 from harnex.orchestrator.chat_manager import ChatManager
 from harnex.orchestrator.workspace_manager import WorkspaceManager
 
 orchestrator_router = APIRouter(tags=["orchestrator"])
 
+_DAG_REGISTRY_PATH = os.path.expanduser("~/.harnex/dag_registry.json")
+
+
+def _load_dag_registry() -> Dict[str, TaskDAG]:
+    reg = {}
+    if os.path.exists(_DAG_REGISTRY_PATH):
+        try:
+            with open(_DAG_REGISTRY_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for did, ddict in data.items():
+                    reg[did] = TaskDAG.model_validate(ddict) if hasattr(TaskDAG, "model_validate") else TaskDAG.parse_obj(ddict)
+        except Exception as e:
+            print(f"[Warning] Failed to load dag_registry: {e}")
+    return reg
+
+
+def _save_dag_registry() -> None:
+    try:
+        data = {}
+        for did, d in _dag_registry.items():
+            data[did] = d.model_dump() if hasattr(d, "model_dump") else d.dict()
+        os.makedirs(os.path.dirname(_DAG_REGISTRY_PATH), exist_ok=True)
+        with open(_DAG_REGISTRY_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[Warning] Failed to save dag_registry: {e}")
+
+
 # Global in-process singletons for orchestrator state
 _config = load_orchestrator_config()
 _workspace_mgr = WorkspaceManager(_config)
 _activity_tracker = ActivityTracker(_config)
 _signal_bus = SignalBus(_config, activity_tracker=_activity_tracker)
-_dag_registry: Dict[str, TaskDAG] = {}
+_dag_registry: Dict[str, TaskDAG] = _load_dag_registry()
 _chat_manager = ChatManager(_activity_tracker, _signal_bus, dag_registry=_dag_registry)
 _sandbox_mgr = WorktreeSandboxManager(base_repo_dir=".", config=_config)
 _worker_pool = SubprocessWorkerPool(_config)
@@ -39,6 +68,22 @@ def get_orchestrator_summary() -> Dict[str, Any]:
     for d in _dag_registry.values():
         subtask_list = []
         for s in d.subtasks.values():
+            try:
+                try:
+                    from harnex.credit_interceptor import interceptor
+                except ImportError:
+                    from src.harnex.credit_interceptor import interceptor
+                usage = interceptor.get_session_usage(f"task_{s.subtask_id}", since_timestamp=s.started_at)
+                if not usage or usage.get("real_credits", 0) <= 0:
+                    usage = interceptor.get_session_usage(f"task_{d.dag_id}_{s.subtask_id}", since_timestamp=s.started_at)
+                if usage and usage.get("real_credits", 0) > 0:
+                    s.credits_used = usage["real_credits"]
+                    s.tokens_used = usage["total_tokens"]
+                    if usage.get("turns", 0) > 0:
+                        s.turns_completed = usage["turns"]
+            except Exception:
+                pass
+
             subtask_list.append({
                 "subtask_id": s.subtask_id,
                 "title": s.title,
@@ -96,6 +141,7 @@ async def dispatch_dag(dag: TaskDAG):
         raise HTTPException(status_code=400, detail=str(e))
 
     _dag_registry[dag.dag_id] = dag
+    _save_dag_registry()
     for s in dag.subtasks.values():
         _signal_bus.register_subtask(s)
 
@@ -147,6 +193,22 @@ async def get_task_detail(dag_id: str):
     dag = _dag_registry.get(dag_id)
     if not dag:
         raise HTTPException(status_code=404, detail=f"TaskDAG '{dag_id}' not found.")
+    for s in dag.subtasks.values():
+        try:
+            try:
+                from harnex.credit_interceptor import interceptor
+            except ImportError:
+                from src.harnex.credit_interceptor import interceptor
+            usage = interceptor.get_session_usage(f"task_{s.subtask_id}", since_timestamp=s.started_at)
+            if not usage or usage.get("real_credits", 0) <= 0:
+                usage = interceptor.get_session_usage(f"task_{dag.dag_id}_{s.subtask_id}", since_timestamp=s.started_at)
+            if usage and usage.get("real_credits", 0) > 0:
+                s.credits_used = usage["real_credits"]
+                s.tokens_used = usage["total_tokens"]
+                if usage.get("turns", 0) > 0:
+                    s.turns_completed = usage["turns"]
+        except Exception:
+            pass
     return dag
 
 
@@ -184,6 +246,7 @@ async def cancel_dag_task(dag_id: str):
 
     dag.state = TaskState.CANCELLED
     dag.completed_at = datetime.now(timezone.utc).isoformat()
+    _save_dag_registry()
 
     terminated = []
     for sid, s in dag.subtasks.items():
@@ -225,7 +288,24 @@ async def post_worker_signal(subtask_id: str, signal: SignalMessage):
     Webhook endpoint for worker agents to report status signals (STARTED, PROGRESS, COMPLETED, FAILED).
     """
     signal.task_id = subtask_id
+
+    # 실시간 Enterprise 실제 차감 크레딧과 오차 0% 동기화
+    try:
+        try:
+            from harnex.credit_interceptor import interceptor
+        except ImportError:
+            from src.harnex.credit_interceptor import interceptor
+        usage = interceptor.get_session_usage(f"task_{subtask_id}")
+        if usage and usage.get("real_credits", 0) > 0:
+            signal.credits_used = usage["real_credits"]
+            signal.tokens_used = usage["total_tokens"]
+            if usage.get("turns", 0) > 0:
+                signal.turns_completed = usage["turns"]
+    except Exception:
+        pass
+
     accepted = await _signal_bus.emit_signal(signal)
+    _save_dag_registry()
     return {"accepted": accepted, "task_id": subtask_id, "state": signal.signal_type.value}
 
 

@@ -85,6 +85,8 @@ class SignalBus:
                     subtask.tokens_used = signal.tokens_used
                 if signal.credits_used > 0:
                     subtask.credits_used = signal.credits_used
+                if signal.turns_completed > 0:
+                    subtask.turns_completed = signal.turns_completed
 
             elif signal.signal_type == SignalType.COMPLETED:
                 subtask.state = TaskState.COMPLETED
@@ -97,6 +99,8 @@ class SignalBus:
                     subtask.tokens_used = signal.tokens_used
                 if signal.credits_used > 0:
                     subtask.credits_used = signal.credits_used
+                if signal.turns_completed > 0:
+                    subtask.turns_completed = signal.turns_completed
 
             elif signal.signal_type == SignalType.FAILED:
                 subtask.state = TaskState.FAILED

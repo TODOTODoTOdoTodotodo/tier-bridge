@@ -96,8 +96,10 @@ def cmd_status(args):
             print(f"❌ TaskDAG '{args.dag_id}'를 찾을 수 없습니다.")
             return
         data = resp.json()
+        total_dag_cr = sum(s.get("credits_used", 0.0) for s in data.get("subtasks", {}).values())
+        total_dag_loc = sum(s.get("loc_modified", 0) for s in data.get("subtasks", {}).values())
         print("=" * 80)
-        print(f"🌳 [Tree-of-Thought DAG] {data['dag_id']} [{data['state']}]")
+        print(f"🌳 [Tree-of-Thought DAG] {data['dag_id']} [{data['state']}] (총 소모: {total_dag_cr:.4f} Cr, LOC: +{total_dag_loc})")
         print(f"목표: {data['title']}")
         print(f"생성 일시: {data['created_at']}")
         if data.get("completed_at"):
@@ -123,7 +125,9 @@ def cmd_status(args):
             pid_str = f"PID: {s['worker_pid']}" if s.get("worker_pid") else "PID: N/A"
             loc_str = f"+{s.get('loc_modified', 0)} lines"
             cr_str = f"{s.get('credits_used', 0.0):.4f} Cr"
-            print(f"{pipe} └── 💳 {pid_str} | 코드: {loc_str} | 소모: {cr_str}")
+            turns_val = s.get("turns_completed") or 0
+            turns_part = f" | {turns_val}턴" if turns_val > 0 else ""
+            print(f"{pipe} └── 💳 {pid_str} | 코드: {loc_str} | 소모: {cr_str}{turns_part}")
             if s.get("error_message"):
                 print(f"{pipe}     ⚠️ 오류 메시지: {s['error_message']}")
         print("=" * 80)

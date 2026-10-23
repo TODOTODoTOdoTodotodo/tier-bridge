@@ -100,12 +100,18 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
   2. 워커는 독립된 폴더에서 코드 작성, 컴파일, 단위 테스트 수행.
   3. 완료 시 변경 diff 패치(`git diff main`)를 생성하여 신호와 함께 전송하고 worktree 안전 제거.
 
-### 3.3 신호 프로토콜 (`SignalBus` & State Machine)
+### 3.3 신호 프로토콜 및 실시간 비용/크레딧 집계 엔진 (`SignalBus` & Ground Truth Credit Tracking)
 - **비대화형(Silent) 신호 규격**: 에이전트 간 불필요한 말(Chatter)을 없애고 오직 4대 상태 시그널만 발행:
   1. `SIGNAL_STARTED`: 워커 구동 및 대상 브랜치 격리 완료 알림.
-  2. `SIGNAL_PROGRESS`: 진행 단계(예: "파일 분석 완료", "테스트 5/5 통과") 및 중간 LOC 보고.
-  3. `SIGNAL_COMPLETED`: 작업 완료 신호 + 결과 요약(Markdown) + Diff Patch + 소모 토큰/크레딧.
+  2. `SIGNAL_PROGRESS`: 진행 단계(예: "파일 분석 완료", "테스트 5/5 통과") 및 중간 LOC/토큰/크레딧 보고.
+  3. `SIGNAL_COMPLETED`: 작업 완료 신호 + 결과 요약(Markdown) + Diff Patch + 실측 소모 토큰/크레딧.
   4. `SIGNAL_FAILED`: 오류 원인(Traceback, 테스트 실패 로그) 및 재시도 요청 신호.
+- **실시간 정밀 크레딧/토큰 집계 파이프라인 (Ground Truth Credit & Token Tracking)**:
+  - **하드코딩 더미 배제**: 과거 프로토타입 단계의 고정 배수(`turn * 0.005 Cr`, `turn * 350 tok`)를 전면 배제하고 실제 LLM 호출 물리량을 산출합니다.
+  - **2단계 하이브리드 집계 아키텍처**:
+    1. **워커 로컬 추정기 (`worker_runner.py`)**: 매 ReAct 턴마다 프롬프트 및 응답 텍스트를 실시간 측정하여 모델 가격표(Sol/Luna/Terra) 기반 누적 토큰 및 크레딧을 산출하여 시그널로 전달합니다.
+    2. **서버 사이드 실측 바인딩 (`CreditInterceptor` & `api.py`)**: 오케스트레이터 Webhook 수신 시, 하네스 백엔드 `CreditInterceptor`가 ChatGPT Enterprise 실제 차감 델타(`real_credit`, 예: 1.7351 Cr)를 조회하여 오차 0%의 실측값으로 자동 동기화합니다.
+  - **상태 영속화 (`~/.harnex/dag_registry.json`)**: 데몬 재기동 또는 프로세스 종료 후에도 기수행된 TaskDAG 및 서브태스크별 실측 크레딧/LOC/턴수 이력이 온전히 보존됩니다.
 
 ### 3.4 합류 장벽 및 패치 병합기 (`JoinBarrier` & `PatchMerger`)
 - **장벽 동기화 (Barrier Synchronization)**: 선행 의존 태스크들이 모두 `SIGNAL_COMPLETED`를 보고할 때까지 후속 태스크 대기.
