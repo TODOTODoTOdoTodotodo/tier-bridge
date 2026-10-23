@@ -77,6 +77,8 @@ Client / User ──[ 대형 목표 지시 ]──► Harnex Task Orchestrator (
 - **워크트리 샌드박스 내 활성 작업 공간 문서 컨텍스트 동기화 (Active Documentation Context Sync)**:
   - 개발자가 활성 작업 공간에서 실시간으로 작성 중인 문서(`.md` 및 `docs/`)는 아직 `git commit` 되지 않은 미추적(Untracked) 상태일 수 있습니다.
   - `WorktreeSandboxManager.create_sandbox()`는 격리 워크트리 생성 직후, 부모 작업 공간의 최신 문서 컨텍스트(`.md` 및 `docs/`)를 안전하게 워크트리로 복제 투영하여 워커가 최근 작성된 아키텍처 명세 및 가이드를 온전히 읽고 분석할 수 있도록 보장합니다.
+- **자율 워커의 진행 강제 가드 (Autonomous Progress Enforcement Guard)**:
+  - 워커가 직접 파일을 읽거나 수정하지 않고 "파일 내용을 전달해 달라"거나 중간 설명만 출력하는 경우, 러너는 루프를 조기 종료하지 않고 `read_file` 및 `write_file` 도구를 직접 호출하여 작업을 완수하도록 피드백 가이던스를 재촉(Re-prompt)하여 최종 산출물 생성을 완결합니다.
 - **워커별 자율 멀티턴(롱텀) 실행 (Multi-Turn Long-Running ReAct Loop)**:
   - 워커는 단순 1회성(One-shot) 호출이 아니라, 독립된 세션 컨텍스트 내에서 **자체적인 멀티턴 루프**를 완주할 때까지 지속 가동됩니다:
     1. 코드 탐색 및 작성 (Turn 1)

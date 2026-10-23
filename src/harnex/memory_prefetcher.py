@@ -92,6 +92,10 @@ class MemoryPrefetcher:
         if p_clean.startswith("[Substep]") or "[이전 대화 요약" in p_clean:
             return None
 
+        # Agent 내부 루프 메시지(OBSERVATION / THOUGHT / ACTION 등)는 회수 트리거 제외 (오염 방어)
+        if any(p_clean.startswith(prefix) for prefix in ("OBSERVATION:", "THOUGHT:", "ACTION:", "FINAL_ANSWER:")):
+            return None
+
         # 단순 명령어 / 상태 확인 질의는 기억 회수 제외 (Bypass)
         p_lower = p_clean.lower()
         if any(p_lower.startswith(cmd) for cmd in ["git ", "npm ", "yarn ", "pnpm ", "mvn ", "gradle ", "docker ", "kubectl ", "ls", "pwd", "clear", "echo "]):

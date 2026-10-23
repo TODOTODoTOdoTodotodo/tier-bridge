@@ -33,12 +33,24 @@ Your goal is to fulfill the subtask instructions accurately.
 To interact with the repository, you can use the following tools:
 1. glob_files(pattern="**/*"): Search for files matching pattern (e.g. pattern="**/*.md" or pattern="src/**/*.java").
 2. read_file(path="path/to/file"): Read the contents of a file.
-3. write_file(path="path/to/file", content="..."): Create or overwrite a file. (You can also provide content inside a markdown code block).
+3. write_file(path="path/to/file", content="..."): Create or overwrite a file.
+   To write clean multiline content, format as:
+   ACTION: write_file(path="path/to/file")
+   ```
+   <file content here>
+   ```
 
 [Execution Rules]
 - You have real tool execution access in this worktree environment.
+- In each turn, you MUST output EXACTLY ONE ACTION: or FINAL_ANSWER:.
+- Output ONLY ONE ACTION per turn. STOP immediately after writing your ACTION and wait for the real OBSERVATION from the system.
+- NEVER fabricate, pretend, or simulate OBSERVATIONs in your output.
 - NEVER apologize, refuse, or claim you lack tools or filesystem access.
-- Start immediately by exploring relevant files with ACTION: glob_files(...) or ACTION: read_file(...).
+- Start your first turn immediately with:
+  THOUGHT: Explore the repository structure
+  ACTION: glob_files(pattern="**/*.md")
+- You MUST inspect the source code and complete the requested task using ACTION: write_file(...) BEFORE you output FINAL_ANSWER.
+- In each turn, you MUST output either an ACTION: or a FINAL_ANSWER:. Do NOT output standalone conversational remarks without an ACTION.
 
 [Response Format]
 In each turn, provide your thought and your next action:
@@ -158,12 +170,30 @@ def parse_action(text: str) -> Tuple[str, Optional[str], Dict[str, Any]]:
     thought_match = re.search(r"THOUGHT:\s*(.*?)(?=(?:ACTION:|FINAL_ANSWER:|$))", text, re.DOTALL | re.IGNORECASE)
     thought = thought_match.group(1).strip() if thought_match else ""
 
-    if "FINAL_ANSWER:" in text:
-        final_match = re.search(r"FINAL_ANSWER:\s*(.*)", text, re.DOTALL | re.IGNORECASE)
-        final_ans = final_match.group(1).strip() if final_match else text
-        return thought, "FINAL_ANSWER", {"message": final_ans}
+    # 1. First check: Is there a tool ACTION?
+    action_match = re.search(r"ACTION:\s*([a-zA-Z_]+)\((.*?)\)", text, re.DOTALL)
+    if action_match:
+        act_name = action_match.group(1).strip()
+        arg_str = action_match.group(2).strip()
+        args = {}
+        kwarg_matches = re.findall(r"(\w+)\s*=\s*(?:\"(.*?)\"|\'(.*?)\')", arg_str, re.DOTALL)
+        for k, v1, v2 in kwarg_matches:
+            args[k] = v1 if v1 != "" else v2
 
-    # 1. Try JSON block
+        if "path" not in args and "file" not in args and "file_path" not in args:
+            pos_match = re.search(r'["\']([^"\']+)["\']', arg_str)
+            if pos_match:
+                args["path"] = pos_match.group(1)
+
+        if act_name in ("write_file", "write", "create_file"):
+            code_block = re.search(r"```(?:\w+)?\s*\n(.*?)\n```(?:\s*(?:THOUGHT:|ACTION:|FINAL_ANSWER:|$))", text, re.DOTALL)
+            if not code_block:
+                code_block = re.search(r"```(?:\w+)?\s*\n(.*?)\n```", text, re.DOTALL)
+            if code_block:
+                args["content"] = code_block.group(1)
+        return thought, act_name, args
+
+    # 2. Try JSON block
     json_blocks = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     for block in json_blocks:
         try:
@@ -175,21 +205,11 @@ def parse_action(text: str) -> Tuple[str, Optional[str], Dict[str, Any]]:
         except Exception:
             pass
 
-    # 2. Try ACTION: tool_name(...)
-    action_match = re.search(r"ACTION:\s*([a-zA-Z_]+)\((.*?)\)", text, re.DOTALL)
-    if action_match:
-        act_name = action_match.group(1).strip()
-        arg_str = action_match.group(2).strip()
-        args = {}
-        kwarg_matches = re.findall(r"(\w+)\s*=\s*(?:\"(.*?)\"|\'(.*?)\')", arg_str, re.DOTALL)
-        for k, v1, v2 in kwarg_matches:
-            args[k] = v1 if v1 != "" else v2
-
-        if act_name == "write_file" and "content" not in args:
-            code_block = re.search(r"```(?:\w+)?\s*\n(.*?)\n```", text, re.DOTALL)
-            if code_block:
-                args["content"] = code_block.group(1)
-        return thought, act_name, args
+    # 3. Only if no tool action was found, check FINAL_ANSWER:
+    if "FINAL_ANSWER:" in text:
+        final_match = re.search(r"FINAL_ANSWER:\s*(.*)", text, re.DOTALL | re.IGNORECASE)
+        final_ans = final_match.group(1).strip() if final_match else text
+        return thought, "FINAL_ANSWER", {"message": final_ans}
 
     return thought, None, {}
 
@@ -197,9 +217,12 @@ def parse_action(text: str) -> Tuple[str, Optional[str], Dict[str, Any]]:
 def call_llm_stream(proxy_url: str, model: str, messages: list) -> str:
     """ Calls Harnex local proxy (/v1/chat/completions) via HTTP SSE streaming """
     url = f"{proxy_url}/chat/completions"
+    task_id = os.environ.get("HARNEX_TASK_ID", "sub_worker")
+    session_id = f"task_{task_id}"
     headers = {
         "Content-Type": "application/json",
-        "X-Harnex-Task-Id": os.environ.get("HARNEX_TASK_ID", "sub_worker")
+        "X-Harnex-Task-Id": task_id,
+        "X-Session-Id": session_id
     }
     payload = {
         "model": model,
@@ -306,7 +329,7 @@ def main():
             {"role": "user", "content": f"Please execute the following instruction in the worktree:\n\n{instruction}\n\nStart immediately by exploring the repository using `ACTION: glob_files(pattern=\"**/*.md\")` or relevant tools."}
         ]
 
-        max_turns = 10
+        max_turns = 15
         final_answer = ""
 
         # 2. ReAct Multi-turn Execution Loop
@@ -324,14 +347,19 @@ def main():
                 break
 
             if not action_name:
-                if turn == 1:
-                    # Model gave text without tool call on turn 1; enforce tool execution
-                    messages.append({"role": "assistant", "content": llm_response})
-                    messages.append({"role": "user", "content": "You must inspect or modify files using tools. Please call `ACTION: glob_files(pattern=\"**/*.md\")` or `ACTION: read_file(...)`."})
-                    continue
-                else:
-                    final_answer = llm_response
-                    break
+                # If model didn't provide ACTION or FINAL_ANSWER, guide it to proceed
+                messages.append({"role": "assistant", "content": llm_response})
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "OBSERVATION: You did not execute an ACTION or provide a FINAL_ANSWER. "
+                        "You must read the necessary files using `ACTION: read_file(path=\"...\")` "
+                        "and write or create files using `ACTION: write_file(path=\"...\", content=\"...\")`. "
+                        "Do not wait or ask questions; take direct action now. "
+                        "If you have completely fulfilled the task, output `FINAL_ANSWER: <summary>`."
+                    )
+                })
+                continue
 
             # Send PROGRESS signal to Orchestrator Activity Stream
             action_desc = f"{action_name}({', '.join(f'{k}={v}' for k, v in action_args.items() if k != 'content')})"

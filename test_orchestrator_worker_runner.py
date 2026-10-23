@@ -67,6 +67,20 @@ class TestWorkerRunnerToolsAndParser(unittest.TestCase):
         self.assertEqual(act, "FINAL_ANSWER")
         self.assertIn("Analysis complete", args.get("message", ""))
 
+        # 4. Positional path in write_file
+        text4 = 'THOUGHT: Saving doc\nACTION: write_file("docs/api.md")\n```\n# API Spec\n```'
+        thought, act, args = parse_action(text4)
+        self.assertEqual(act, "write_file")
+        self.assertEqual(args.get("path"), "docs/api.md")
+        self.assertIn("# API Spec", args.get("content", ""))
+
+        # 5. write_file prioritized when both write_file and FINAL_ANSWER are present
+        text5 = 'THOUGHT: Writing doc\nACTION: write_file(path="docs/spec.md")\n```markdown\n# Spec\n```\nFINAL_ANSWER: Done writing doc.'
+        thought, act, args = parse_action(text5)
+        self.assertEqual(act, "write_file")
+        self.assertEqual(args.get("path"), "docs/spec.md")
+        self.assertIn("# Spec", args.get("content", ""))
+
     def test_execute_tool(self):
         tool_write_file("test.txt", "12345")
         res = execute_tool("read_file", {"path": "test.txt"})

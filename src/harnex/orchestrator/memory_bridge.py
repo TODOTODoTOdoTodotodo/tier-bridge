@@ -39,9 +39,21 @@ class TaskMemoryBridge:
                 from src.harnex.memory_handler import MemoryHandler
 
             top_k = self.config.memory_injection_top_k
-            results = MemoryHandler.search_associated_memories(query, limit=top_k)
+            results = MemoryHandler.search_associated_memories(query, limit=top_k * 2)
             injected = []
             for r in results:
+                raw = str(r.get("raw_content", ""))
+                prob = str(r.get("problem", ""))
+                sol = str(r.get("solution", ""))
+                # 내부 워커 실행 지시문 및 자기참조 실패 루프 필터링
+                if any(bad in raw or bad in prob or bad in sol for bad in [
+                    "Please execute the following instruction in the worktree",
+                    "도구가 제공되지 않아",
+                    "내용을 제공해 주세요",
+                    "파일의 내용을 제공"
+                ]):
+                    continue
+
                 title = r.get("problem") or r.get("id") or "사내 컨벤션/이슈"
                 if len(title) > 60:
                     title = title[:57] + "..."
@@ -54,6 +66,8 @@ class TaskMemoryBridge:
                     "summary": summary,
                     "score": round(float(r.get("score", 0.85)), 2)
                 })
+                if len(injected) >= top_k:
+                    break
             return injected
         except Exception as e:
             logger.debug(f"Memory pre-fetch failed for subtask {subtask.subtask_id}: {e}")

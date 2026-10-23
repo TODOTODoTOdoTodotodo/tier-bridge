@@ -639,15 +639,21 @@ async def route_harness(request: Request):
     if not session_id:
         session_id = "sess_main"
 
+    # 오케스트레이터 백그라운드 태스크 워커 요청 식별
+    is_task_worker = bool(
+        (orig_headers and any(str(k).lower() == "x-harnex-task-id" for k in orig_headers.keys()))
+        or (session_id and session_id.startswith("task_"))
+    )
+
     # 5. 프롬프트 텍스트 및 분류기를 이용한 난이도/라우터 선택
     user_prompt, is_new_user_turn, substep_prompt = Router.extract_user_prompt_and_turn_status(unified_req)
     if not user_prompt:
         user_prompt = str(raw_body.get("instructions", "")) + str(raw_body.get("input", ""))
 
     # Step 2: 사전 기억 회수 (Pre-fetch Recall, 50ms Strict Timeout Sandbox)
-    # 사용자의 신규 턴(is_new_user_turn == True) 인입 시에만 1회 회수하여 내부 서브스텝 중복 주입 및 토큰 낭비 방지
+    # 사용자의 신규 턴(is_new_user_turn == True) 인입 시에만 1회 회수하여 내부 서브스텝 중복 주입 및 토큰 낭비 방지 (태스크 워커는 독립 주입)
     recalled_context = None
-    if is_new_user_turn:
+    if is_new_user_turn and not is_task_worker:
         try:
             recalled_context = await MemoryPrefetcher.fetch_associated_context(user_prompt, current_session_id=session_id)
             if recalled_context:
@@ -664,14 +670,19 @@ async def route_harness(request: Request):
         except Exception as e:
             log.debug(f"[RecallHook] Memory prefetch bypassed: {e}")
 
-    decision, target_model, effort = await Router.classify_request(
-        unified_request=unified_req,
-        auth_token=enterprise_token,
-        enterprise_api_url=ENTERPRISE_API_URL,
-        account_id=get_latest_enterprise_account_id(),
-        requested_model=requested_model,
-        session_id=session_id
-    )
+    if is_task_worker and requested_model:
+        target_model = requested_model.split(":")[0]
+        effort = requested_model.split(":")[1] if ":" in requested_model else "medium"
+        decision = "TASK_WORKER"
+    else:
+        decision, target_model, effort = await Router.classify_request(
+            unified_request=unified_req,
+            auth_token=enterprise_token,
+            enterprise_api_url=ENTERPRISE_API_URL,
+            account_id=get_latest_enterprise_account_id(),
+            requested_model=requested_model,
+            session_id=session_id
+        )
 
     # 6. 타겟 백엔드 벤더 매핑
     req_model_lower = str(requested_model or "").lower()
@@ -726,8 +737,9 @@ async def route_harness(request: Request):
     # 3-Tier에 기반한 모델 정보 및 추론 수준(reasoning_effort) 적용
     unified_req.model = target_model
     
-    # 최종 답변을 3단 마크다운 보고서 규격으로 출력하도록 시스템 가이드라인 투명 주입
-    unified_req = SystemDirective.inject_into_unified_request(unified_req)
+    # 최종 답변을 3단 마크다운 보고서 규격으로 출력하도록 시스템 가이드라인 투명 주입 (태스크 워커 제외)
+    if not is_task_worker:
+        unified_req = SystemDirective.inject_into_unified_request(unified_req)
 
     final_payload = target_adapter.from_unified_request(unified_req)
     
@@ -781,8 +793,9 @@ async def route_harness(request: Request):
                 if recalled_context not in curr_inst:
                     final_payload["instructions"] = f"{recalled_context}\n\n{curr_inst}".strip()
 
-            # /responses 규격의 instructions 영역에도 표준 보고서 가이드라인 투명 주입
-            final_payload = SystemDirective.inject_into_payload(final_payload)
+            # /responses 규격의 instructions 영역에도 표준 보고서 가이드라인 투명 주입 (태스크 워커 제외)
+            if not is_task_worker:
+                final_payload = SystemDirective.inject_into_payload(final_payload)
 
         # /responses API로 향하는 요청의 규격 정화 (변환 여부와 상관없이 항상 적용)
         if not MOCK_MODE or "responses" in incoming_path:
